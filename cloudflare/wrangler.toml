@@ -1,0 +1,62 @@
+name               = "turndesk"
+main               = "worker.js"
+compatibility_date = "2024-11-20"
+
+# ── Observability ──────────────────────────────────────────────────────────────
+# Persist console.* output so errors are queryable in the Cloudflare dashboard
+# (Workers & Pages → turndesk → Logs) instead of being ephemeral. Free tier
+# included; also viewable live with `wrangler tail`. head_sampling_rate=1 = keep all.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# ── Cron Trigger ───────────────────────────────────────────────────────────────
+# Fires at 10:30 UTC = 2:30 AM PST (winter) / 3:30 AM PDT (summer) — always BEFORE
+# the client's 4 AM day-reset, so the queue is still intact. Exports yesterday's
+# turns/queue/transactions one-way to Google Sheets (write-only backup) + emails
+# the daily summary. The app never reads from the sheet.
+[triggers]
+crons = ["30 10 * * *"]
+
+# ── R2 bucket binding ─────────────────────────────────────────────────────────
+# Create the bucket first:  wrangler r2 bucket create turndesk-photos
+[[r2_buckets]]
+binding     = "PHOTOS_BUCKET"
+bucket_name = "turndesk-photos"
+
+# ── Durable Object binding ─────────────────────────────────────────────────────
+# Enables real-time WebSocket sync. Migrations run automatically on deploy.
+[[durable_objects.bindings]]
+name       = "SALON_DO"
+class_name = "TurnDeskDO"
+
+[[migrations]]
+tag                = "v1"
+new_sqlite_classes = ["TurnDeskDO"]
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Set each secret once via the CLI — never commit secret values to this file:
+#
+#   wrangler secret put SHEETS_URL
+#   wrangler secret put SQUARE_TOKEN
+#
+# SHEETS_URL          — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
+# SQUARE_TOKEN        — Square access token (sandbox or production)
+# RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /backup/run
+# VAPID_PRIVATE_KEY   — Web Push signing key (JWK JSON string). Set once:
+#                         wrangler secret put VAPID_PRIVATE_KEY
+#                       (matching public key is VAPID_PUBLIC_KEY below + js/app/config.js)
+# ORIGIN_GATE_ENABLED — (optional) "true" enables the Origin allow-list gate; unset/"false" = off (default).
+#                       Flip live with `wrangler secret put ORIGIN_GATE_ENABLED` — no redeploy. Built-in
+#                       allowed origin: https://musenail.github.io. Add more via ALLOWED_ORIGINS.
+# ALLOWED_ORIGINS     — (optional) extra comma-separated origins to allow (e.g. a future custom domain)
+
+# ── Environment variables ──────────────────────────────────────────────────────
+[vars]
+# Web Push: non-secret VAPID public key (matches js/app/config.js VAPID_PUBLIC_KEY)
+# + the contact subject sent in the VAPID JWT. The PRIVATE key is a secret (above).
+VAPID_PUBLIC_KEY = "BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30VYBq7Xzvf5Xl5DqsuqUchNE7xnfcaCrvgUvfJ2uKk"
+VAPID_SUBJECT    = "mailto:admin@turndesk.app"
+# SQUARE_BASE_URL = "https://connect.squareup.com"
+# Uncomment and set to the sandbox URL during testing:
+# SQUARE_BASE_URL = "https://connect.squareupsandbox.com"

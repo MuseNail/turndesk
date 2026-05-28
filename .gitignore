@@ -1,0 +1,15 @@
+# Dependencies (none committed — the app has no build step)
+node_modules/
+
+# Cloudflare Wrangler local state & secrets
+cloudflare/.wrangler/
+.wrangler/
+.dev.vars
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# Local scratch
+mockups/

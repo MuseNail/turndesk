@@ -1,0 +1,451 @@
+﻿  /* ── Theme tokens ──────────────────────────────────────────────────────────
+     Default = the original light palette. The Tailwind classes (bg-primary,
+     text-on-surface, …) read these vars. A per-login theme overrides --primary*
+     (accent) inline on <html>; the Light/Dark base is set via [data-appearance].
+     Only the chrome is themed — semantic status colors (waiting/in-service/
+     complete) stay fixed in JS since they carry meaning. */
+  :root {
+    --primary: #1a5252; --primary-dim: #0f3d3d; --primary-container: #8fd4d3;
+    --on-primary: #ffffff; --on-primary-container: #0a2e2e;
+    --secondary: #5c4010; --secondary-container: #f5c870; --on-secondary-container: #3a2800;
+    --surface: #e8ecee; --surface-container-lowest: #f5f7f8; --surface-container-low: #dde2e5;
+    --surface-container: #d0d6da; --surface-container-high: #c2cacd; --surface-container-highest: #b4bec2;
+    --on-surface: #000000; --on-surface-variant: #1a1a1a;
+    --outline: #4a5258; --outline-variant: #7a858a;
+    --error: #8b1c1a; --error-container: #e85a57;
+  }
+  /* Dark base: recolor only the surface/text/outline family; the accent (--primary*)
+     is layered on top per-login. */
+  html[data-appearance="dark"] {
+    --surface: #10161a; --surface-container-lowest: #161d22; --surface-container-low: #1c252b;
+    --surface-container: #222d33; --surface-container-high: #2b373e; --surface-container-highest: #36454d;
+    --on-surface: #f1f5f7; --on-surface-variant: #c3ccd1;
+    --outline: #8c979d; --outline-variant: #4a565c;
+    --secondary-container: #5c4010; --on-secondary-container: #f5c870;
+  }
+  html[data-appearance="dark"] body { background: var(--surface); }
+
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+  h1,h2,h3,.font-headline { font-family: 'Manrope', sans-serif; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+
+  /* Screen transitions */
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* Clock */
+  #clock-display { font-variant-numeric: tabular-nums; }
+
+  /* Service button selected state */
+  .service-btn.selected {
+    background-color: #2a6868 !important;
+    color: #e0fffe !important;
+    border-color: #2a6868 !important;
+  }
+
+  /* Scrollbar hide */
+  .no-scroll::-webkit-scrollbar { display: none; }
+  .no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Queue badge pulse */
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(42,104,104,0.35); }
+    70% { box-shadow: 0 0 0 8px rgba(42,104,104,0); }
+    100% { box-shadow: 0 0 0 0 rgba(42,104,104,0); }
+  }
+  .pulse { animation: pulse-ring 2s infinite; }
+
+  /* Fade in */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp 0.4s ease forwards; }
+
+  /* Status badges */
+  .badge-waiting { background: #f5c870; color: #3a2800; }
+  .badge-inservice { background: #8fd4d3; color: #0a2e2e; }
+  .badge-complete { background: #cfe3ef; color: #0a3a52; }
+  .badge-done { background: #b4bec2; color: #000000; }
+  .badge-appointment { background: #1a5252; color: #ffffff; }
+  .badge-refund { background: rgba(139,28,26,0.12); color: #8b1c1a; }
+
+  /* Dashboard top nav tabs */
+  .dash-tab { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:10px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13px; font-weight:600; color:#1a1a1a; transition:background 0.15s; border:none; background:transparent; white-space:nowrap; }
+  .dash-tab:hover { background:#d0d6da; }
+  .dash-tab.active { background:#1a5252; color:#ffffff; }
+  .dash-tab.active .material-symbols-outlined { color:#ffffff; }
+
+  /* Report range buttons */
+  .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
+
+  /* Tablet / iPad responsive scaling */
+  @media (max-width: 1024px) {
+    #panel-turns .flex-shrink-0[style*="width:380px"] { width: 300px !important; }
+    .turns-slot-row .flex-shrink-0 { width: 130px !important; }
+    #turns-tech-grid .w-\[155px\] { width: 130px !important; }
+  }
+
+  /* ── iPad / tablet (≤1180px) ─────────────────────
+     13" iPad Pro portrait = 1024px, landscape = 1366px.
+     At ≤1180px we hide nav tab text labels (keep icons)
+     to prevent the header from overflowing.              */
+  @media (max-width: 1180px) {
+    /* Nav tabs: icon only, no text */
+    .dash-tab span:not(.material-symbols-outlined) { display: none !important; }
+    .dash-tab { padding: 8px 10px !important; gap: 0 !important; }
+    /* Hide "Square synced" text, keep dot */
+    #sync-label { display: none !important; }
+    /* Shrink action icon buttons slightly */
+    .dash-tab .material-symbols-outlined { font-size: 20px !important; }
+    /* Logged-in user: hide name, keep avatar */
+    #logged-in-name { display: none !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤820px) ──
+     Tab S9 portrait CSS viewport ≈ 753px
+     iPad 11" portrait CSS viewport = 820px
+     Customer screen needs bigger touch targets & readable text.
+     Dashboard header gets tighter.                            */
+  @media (max-width: 820px) {
+    /* Customer welcome screen — larger buttons */
+    #screen-welcome .text-2xl { font-size: 1.35rem !important; }
+    #screen-welcome .py-7 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
+    /* Check-in form — full width, bigger service grid */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* Dashboard turns grid tighter */
+    #panel-turns .flex-shrink-0[style*="width:300px"] { width: 220px !important; }
+    /* Modals: full width on small screens */
+    .fixed.inset-0 > div[class*="max-w-"] { margin: 0.5rem !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait specifically (≤760px) ──
+     Slightly narrower than iPad 11" — push a bit further */
+  @media (max-width: 760px) {
+    /* Service buttons in check-in: 3-col → 2-col */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    /* Sync indicators: hide both text labels */
+    #sheets-sync-text { display: none !important; }
+  }
+  @media (max-width: 768px) {
+    #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }
+    .w-\[165px\] { width: 130px !important; }
+    .dash-tab { font-size: 11px !important; padding: 6px 10px !important; }
+    .dash-tab .material-symbols-outlined { font-size: 15px !important; }
+  }
+  /* Turns drag-drop — smooth feel */
+  .turns-draggable { cursor: grab; }
+  .turns-draggable:active { cursor: grabbing; }
+  .turns-filled-slot { cursor: grab; transition: opacity 0.15s; }
+  .turns-filled-slot:active { cursor: grabbing; }
+  .turns-drag-ghost { 
+    border-radius: 12px; 
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25); 
+    transform: rotate(2deg) scale(1.02);
+    transition: none !important;
+  }
+  .turns-drop-highlight {
+    border-color: #1a5252 !important;
+    background: rgba(26,82,82,0.1) !important;
+    transform: scale(1.02);
+    transition: transform 0.1s, background 0.1s;
+  }
+  /* Reorder drop target: a clear "insert before here" bar on a filled slot */
+  .turns-reorder-target > button {
+    box-shadow: inset 5px 0 0 0 #1a5252, 0 0 0 2px rgba(26,82,82,0.45) !important;
+  }
+  /* Touch-friendly tap targets */
+  @media (pointer: coarse) {
+    .turns-empty-slot { min-height: 60px !important; }
+    .q-action-btn { min-width: 48px !important; min-height: 48px !important; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    input, select, textarea { touch-action: manipulation; }
+    /* Remove 300ms tap delay on all interactive elements */
+    a, button, label, select, input[type="checkbox"], input[type="radio"] {
+      touch-action: manipulation;
+    }
+    /* Larger tap targets for service/status buttons */
+    .numpad-key { min-height: 56px !important; }
+  }
+
+  /* Tap responsiveness — applies to ALL pointer types (incl. an iPad with a
+     trackpad/Magic Keyboard, where `pointer: coarse` does NOT match, so the
+     coarse-only rule above wouldn't apply). Crucially also covers clickable
+     [onclick] <div>s (sync pill, cards, rows, toggles), which were previously
+     uncovered and kept iOS's double-tap-zoom delay — the "have to tap twice" feel. */
+  a, button, label, select, input, textarea,
+  [onclick], [role="button"], .dash-tab, .q-action-btn, .tab-btn {
+    touch-action: manipulation;
+  }
+
+  /* Floor-plan editor property buttons */
+  .fp-step { min-width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--outline-variant, #c2cacd); background: transparent; font-size: 14px; font-weight: 700; color: inherit; touch-action: manipulation; }
+  .fp-step.fp-on { background: #1a5252; color: #fff; border-color: #1a5252; }
+
+  /* Floor-plan drag sources + the tech-reorder handle drag IMMEDIATELY on touch,
+     on a canvas with no scroll to preserve — touch-action:none so iOS doesn't claim
+     the gesture for scrolling (which fires pointercancel and aborts the pointer drag).
+     Must come AFTER the manipulation rule above to win; descendants included because
+     the touch lands on the inner button/text, not the wrapper. */
+  .floor-bubble, .floor-bubble *, .floor-station, .floor-station *,
+  .tech-drag-handle {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Turns bubbles drag via tap-and-hold (see initTurnsDrag), so they MUST still allow
+     native panning — otherwise a swipe can't scroll a tech's overflowing turn row or the
+     waiting list. The long-press arms the drag while the finger is still (no scroll has
+     started); a non-passive touchmove preventDefault then blocks scroll for the drag. */
+  .turns-filled-slot, .turns-filled-slot *,
+  #turns-waiting-list [data-entry-id], #turns-waiting-list [data-entry-id] *,
+  #turns-active-list [data-entry-id], #turns-active-list [data-entry-id] * {
+    touch-action: pan-x pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Queue action buttons — large touch targets */
+  .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
+  .q-action-btn:active { transform:scale(0.92); }
+
+  /* Dashboard panels */
+  .dash-panel { display:none; }
+  .dash-panel.active { display:block; }
+  /* Sticky tab header: pins a panel's title + controls row to the top of the shared
+     scroll area so it stays visible while the body scrolls. Opaque surface bg masks
+     content scrolling under it; the side padding of the scroll container is the same
+     surface colour, so the header reads as full-width. Headers using this drop their
+     own margin-bottom — the padding-bottom here provides the gap (and carries the bg). */
+  .dash-head { position: sticky; top: 62px; z-index: 9; background: var(--surface, #e8ecee); padding-top: 0.5rem; padding-bottom: 0.75rem; }
+
+  /* Autocomplete dropdown */
+  .autocomplete-list {
+    position: absolute; z-index: 200;
+    background: #f5f7f8; border: 1px solid #c2cacd;
+    border-radius: 0.75rem; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    max-height: 220px; overflow-y: auto;
+    width: 100%; top: calc(100% + 4px); left: 0;
+  }
+  .autocomplete-item {
+    padding: 10px 14px; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-size: 14px;
+    color: #000000; transition: background 0.1s;
+    border-bottom: 1px solid #dde2e5;
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.ac-highlighted { background: #dde2e5; }
+  .autocomplete-item .ac-name { font-weight: 600; font-family: 'Manrope', sans-serif; color:#000; }
+  .autocomplete-item .ac-phone { font-size: 11px; color: #4a5258; margin-top: 1px; }
+  .ac-input-wrap { position: relative; }
+
+  /* Square sync indicator */
+  .sync-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .sync-dot.ok { background:#2a6868; }
+  .sync-dot.pending { background:#f8cf83; }
+  .sync-dot.error { background:#a83836; }
+
+  /* iPad optimized touch targets */
+  button { min-height: 44px; }
+  /* …but the Tasks panel rows must stay compact: the 44px tap-target above was
+     forcing every task row (its checkbox + delete buttons) to ~54px even for a
+     single line of text. Scope it back to content height inside the task list. */
+  #tasks-list button { min-height: 0; }
+
+  /* Subtle noise texture on surface */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: -1;
+    background: #f8f9fa;
+    pointer-events: none;
+  }
+
+  /* Input focus */
+  input:focus { outline: none; border-color: #2a6868; }
+  
+  /* Guest card animation */
+  .guest-card { animation: fadeUp 0.3s ease forwards; }
+
+  /* Queue row hover */
+  .queue-row:hover { background: #f1f4f5; }
+  .queue-row { transition: background 0.15s; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     COSMETIC REFRESH (v2.57) — polish only, no layout/behavior change.
+     Tactile press, slick pill switches, one unified drag drop-marker,
+     softer depth, and a compact-density pass so long lists scroll less.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Tactile press feedback on interactive controls */
+  button, [onclick], [role="button"], .dash-tab {
+    transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
+  }
+  button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
+  /* …but NEVER a full-screen pop-up overlay. Every modal/menu backdrop carries an
+     onclick (tap-outside-to-close), so :active propagating up from a tapped button made
+     the whole overlay — and the panel inside it — scale/bounce on every tap (the same
+     bug the numpad had). Kill the transform on the overlay; buttons inside still scale. */
+  .fixed.inset-0:active { transform: none !important; }
+  /* Number inputs are type-only (e.g. the payroll Check field) — no up/down spinners. */
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  /* …but NOT the numpad keys. The cosmetic button transition above animated a
+     background/transform flash on every tap → "flicker + jump" on iPad during rapid
+     amount entry. Kill ALL motion on the keys: no transition, no transform, no shadow
+     change — just an instant (un-animated) :active background for crisp feedback.
+     touch-action:none + the onpointerdown handlers register taps on touch-down. */
+  .numpad-key { transition: none !important; transform: none !important; box-shadow: none !important; touch-action: none !important; }
+  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { transform: none !important; box-shadow: none !important; }
+  /* The whole numpad never scrolls — stops a stray touch from rubber-banding the page
+     behind the bottom sheet. Taps/clicks still work. */
+  #numpad-modal { touch-action: none; overscroll-behavior: contain; }
+  #numpad-modal, #numpad-modal * { transition: none !important; }
+  /* THE jump fix: the backdrop (#numpad-modal, onclick=closeNumpad) and panel
+     (onclick=stopPropagation) both match the cosmetic `[onclick]:active{scale(.975)}`,
+     and :active propagates up from the pressed key — so the whole numpad scaled/snapped
+     on every tap. Kill any transform on the numpad and its descendants while active. */
+  #numpad-modal, #numpad-modal *, #numpad-modal:active, #numpad-modal *:active { transform: none !important; }
+  /* Keep the amount on one line so a wide number can't reflow the panel. */
+  #numpad-display { white-space: nowrap; overflow: hidden; }
+
+  /* Slick pill switch — shared by services / active-staff / role-permission
+     toggles (identical markup: a track div + an absolutely-positioned knob div).
+     On-state keeps its bg-primary class → we layer a gradient + inset shadow;
+     the knob gets a lift + a springy slide. */
+  .mswitch { box-shadow: inset 0 1px 3px rgba(0,0,0,.18); }
+  .mswitch.bg-primary { background-image: linear-gradient(180deg, #237370, var(--primary)); }
+  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .22s cubic-bezier(.4,1.3,.5,1) !important; }
+
+  /* Unified drag drop-marker — a glowing teal insert-line, used everywhere a
+     reorder happens (turns slots, tech order, calendar selector, floor plan). */
+  .drop-line { position: relative; height: 0; }
+  .drop-line::before {
+    content:''; position:absolute; left:2px; right:2px; top:-1.5px; height:3px;
+    border-radius:999px; background: var(--primary); box-shadow: 0 0 0 3px rgba(26,82,82,.18);
+  }
+  .drop-line::after {
+    content:''; position:absolute; left:-2px; top:-4px; width:9px; height:9px;
+    border-radius:999px; background: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  /* Reusable Excel-style data table — for reports, payroll, and any future grid.
+     Dedicated columns, sticky first column (row labels) + sticky header, right-aligned
+     numeric cells, subtle striping. Theme-aware via the --md-* vars. */
+  /* NOTE: the --md-* vars were removed with the old theme system, so they resolve to
+     nothing — backgrounds fell back to transparent, which let scrolled data show through
+     the sticky label column. Use the app's real --surface vars with concrete fallbacks so
+     the sticky column (and section band) are OPAQUE and mask cells scrolling under them. */
+  .data-table { border-collapse: separate; border-spacing: 0; font-family: var(--font-body); font-size: 13px; color: var(--on-surface, #1c1b1f); width: max-content; min-width: 100%; }
+  .data-table th, .data-table td { padding: 5px 9px; border-bottom: 1px solid var(--outline-variant, #c8cfd2); white-space: nowrap; text-align: left; }
+  .data-table thead th { position: sticky; top: 0; z-index: 2; background: #1a5252; color: #fff; font-weight: 700; font-size: 12px; }
+  .data-table tbody tr:nth-child(even) td { background: var(--surface, #e8ecee); }
+  .data-table tbody tr:nth-child(odd) td { background: #eef1f3; }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table .num.last { color: var(--on-surface-variant, #5a6b70); font-size: 12px; }
+  .data-table .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--surface-container, #d0d6da); font-weight: 600; border-right: 2px solid #b9c1c4; }
+  .data-table tbody tr:nth-child(even) .sticky-col, .data-table tbody tr:nth-child(odd) .sticky-col { background: var(--surface-container, #d0d6da); }
+  .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
+  .data-table .section-row td { background: var(--surface-container, #d0d6da); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--on-surface-variant, #46555a); }
+  .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
+  /* Thick solid divider between staff column-groups; thin dashed divider between This and
+     Last. Both run up through the header — but the header is teal, so use a light border
+     there and a dark one in the body. */
+  .data-table .staff-sep { border-left: 3px solid #5b6e6e; }
+  .data-table thead .staff-sep { border-left-color: rgba(255,255,255,.7); }
+  .data-table .thislast-sep { border-left: 1px dashed #9aa6a6; }
+  .data-table thead .thislast-sep { border-left-color: rgba(255,255,255,.55); }
+  .data-table .arrow-col { text-align: center; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+
+  /* Lift the item being dragged (turns ghost is already styled; match the others) */
+  .tech-order-item.dragging, .floor-bubble.dragging {
+    box-shadow: 0 12px 30px rgba(0,0,0,.28) !important; transform: rotate(-1.5deg) scale(1.02);
+  }
+  /* Brighter, rounder turns reorder/drop targets */
+  .turns-reorder-target > button { box-shadow: inset 4px 0 0 0 var(--primary), 0 0 0 2px rgba(26,82,82,0.5) !important; }
+  .turns-drop-highlight { border-color: var(--primary) !important; background: rgba(26,82,82,0.12) !important; }
+
+  /* Reorder drop indicator for list rows (calendar selector + tech/staff order) —
+     a clear teal bar on the row the item will land before. */
+  .drop-above { box-shadow: inset 0 3px 0 0 var(--primary) !important; border-radius: 8px; }
+
+  /* Declutter: hide the chunky horizontal scrollbars on the turns slot rows */
+  .turns-slot-row::-webkit-scrollbar { display: none; }
+  .turns-slot-row { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Compact density — trim padding on shared list-row classes so more rows fit */
+  .autocomplete-item { padding: 7px 14px; }
+  .queue-row { padding-top: 8px !important; padding-bottom: 8px !important; }
+
+  /* Softer elevation on cards & modal panels (replaces hard hairline look) */
+  .fixed.inset-0 > div[class*="max-w-"] { box-shadow: 0 24px 60px -12px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.25) !important; }
+
+  /* ── Compact density (cosmetic pass 2) ────────────────────────────────────
+     id-scoped so it reliably overrides inline Tailwind padding/margin utilities.
+     Trims row padding + inter-row gaps so long lists show more without scrolling. */
+  #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id] { padding-top: 6px !important; padding-bottom: 6px !important; }
+  #services-merged-list > div, #staff-list > div, #customer-dir-list > div,
+  #items-list > div, #fees-list > div, #fdusers-list > div {
+    padding-top: 9px !important; padding-bottom: 9px !important; margin-bottom: 6px !important;
+  }
+  #queue-list > div { margin-bottom: 12px !important; }            /* tighten the gap between status groups */
+  #queue-list .space-y-2 > * + * { margin-top: 5px !important; }   /* tighten between cards in a group */
+  #cal-appts-list > div { padding-top: 6px !important; padding-bottom: 6px !important; }
+
+  /* ── Button restyle (cosmetic pass 2) ─────────────────────────────────────
+     Primary = subtle teal gradient + soft shadow (skip nav tabs + round action
+     buttons). Secondary outline picks up a faint tonal fill. UI only. */
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch) {
+    background-image: linear-gradient(180deg, #237370, var(--primary));
+    box-shadow: 0 4px 12px -3px rgba(26,82,82,.45);
+  }
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
+  button.border-2.border-primary.text-primary { background-color: rgba(26,82,82,0.08); }
+
+  /* ── Reports: comparison delta badges ─────────────────────────────────── */
+  .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }
+  .rpt-delta:empty { display:none; }
+  /* Summary cards: keep the delta badge on the same line as the dollar amount (shorter
+     cards). The amount is a block <div>; making it inline-block lets the delta sit beside
+     it, and the label <div> still drops to its own line below. */
+  /* Shorter summary cards: trim the p-4 down so the amount + label sit in a compact box. */
+  #panel-reports .rounded-xl.text-center { padding: 0.6rem 0.75rem; }
+  #panel-reports .rounded-xl.text-center > .font-headline { display:inline-block; vertical-align:middle; }
+  #panel-reports .rounded-xl.text-center > .rpt-delta { margin-top:0; margin-left:6px; vertical-align:middle; }
+  .rpt-delta.up   { color:#15803d; background:rgba(22,163,74,.12); }
+  .rpt-delta.down { color:#b91c1c; background:rgba(220,38,38,.12); }
+  .rpt-delta.na   { color:var(--md-on-surface-variant,#6b7280); background:rgba(0,0,0,.06); }
+
+  /* ── Reports: date-picker popup ───────────────────────────────────────── */
+  .dp-preset { display:block; width:100%; text-align:left; padding:9px 16px; font-size:13px; font-weight:600; color:var(--md-on-surface,#1c1b1f); background:transparent; border:none; cursor:pointer; }
+  .dp-preset:hover { background:var(--md-surface-container,#f1f1f4); }
+  .dp-preset.active { background:var(--primary,#1a5252); color:#fff; }
+  /* min-width:0 on the grid + cells lets the 7 equal columns shrink to fit any popup
+     width. Without it the aspect-ratio cells keep an intrinsic min size and the grid
+     overflows its container → a horizontal scrollbar (the calendar must never scroll). */
+  .dp-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; min-width:0; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .dp-dow { text-align:center; font-size:10px; font-weight:700; text-transform:uppercase; color:var(--md-on-surface-variant,#6b7280); padding:4px 0; min-width:0; }
+  .dp-day { aspect-ratio:1; min-width:0; display:flex; align-items:center; justify-content:center; border:none; background:transparent; border-radius:999px; font-size:13px; font-weight:600; color:var(--md-on-surface,#1c1b1f); cursor:pointer; touch-action:none; }
+  .dp-day:hover { background:var(--md-surface-container,#f1f1f4); }
+  .dp-day.dp-range { background:rgba(26,82,82,.14); border-radius:8px; }
+  .dp-day.today { box-shadow:inset 0 0 0 1.5px var(--primary,#1a5252); }
+  .dp-day.sel { background:var(--primary,#1a5252); color:#fff; }
+
+  /* ── Reports: performance-by-hour chart ───────────────────────────────── */
+  .perf-plot { display:flex; gap:8px; align-items:stretch; }
+  /* Vertical revenue axis: labels span the bar plotting area (chart height minus the
+     x-label row), so the bottom "$0" lines up with the bar baseline. */
+  .perf-yaxis { display:flex; flex-direction:column; justify-content:space-between; height:150px; box-sizing:border-box; padding:4px 0 20px; flex-shrink:0; text-align:right; font-size:9px; font-weight:600; line-height:1; color:var(--md-on-surface-variant,#6b7280); }
+  .perf-plot .perf-chart { flex:1; min-width:0; border-left:1.5px solid var(--md-surface-container-high,#d0d6da); padding-left:6px; }
+  .perf-chart { display:flex; align-items:flex-end; gap:6px; height:150px; padding-top:6px; }
+  .perf-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
+  .perf-bar { width:70%; max-width:36px; min-height:2px; background:linear-gradient(180deg,#2a8a87,var(--primary,#1a5252)); border-radius:6px 6px 0 0; transition:height .2s ease; }
+  .perf-col:hover .perf-bar { filter:brightness(1.1); }
+  .perf-x { font-size:12px; color:var(--md-on-surface-variant,#6b7280); margin-top:5px; white-space:nowrap; }
+
+  /* ── Reports: comparison menu ─────────────────────────────────────────── */
+  .cmp-opt { display:block; width:100%; text-align:left; padding:11px 16px; font-size:14px; font-weight:600; color:var(--md-on-surface,#1c1b1f); background:transparent; border:none; cursor:pointer; }
+  .cmp-opt:hover { background:var(--md-surface-container,#f1f1f4); }
+  .cmp-opt.active { color:var(--primary,#1a5252); }

@@ -1,0 +1,24 @@
+name: Tests
+
+# Runs the zero-dependency Node test suite + a syntax check of every app module
+# and the Worker on every push / PR, so a regression or parse error is caught
+# before it reaches the live app. No install step — there are no dependencies.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run unit tests
+        run: node --test "test/**/*.test.js"
+      - name: Syntax-check the Worker + app modules
+        run: |
+          node --check cloudflare/worker.js
+          for f in js/app/*.js js/app/features/*.js; do node --check "$f"; done

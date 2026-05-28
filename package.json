@@ -1,0 +1,11 @@
+{
+  "name": "turndesk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Salon management PWA — dev tooling only. The app itself has NO build step; this file just enables Node's built-in test runner (no dependencies).",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "check": "node --check cloudflare/worker.js"
+  }
+}

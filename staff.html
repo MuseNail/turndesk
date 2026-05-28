@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>TurnDesk Staff</title>
+
+<!-- PWA (separate installable app, shares the same origin + Durable Object) -->
+<link rel="manifest" href="/turndesk/manifest-staff.json">
+<meta name="theme-color" content="#1a5252">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TurnDesk Staff">
+<link rel="apple-touch-icon" href="/turndesk/icons/icon-192.png">
+
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        primary: "#1a5252",
+        "primary-dim": "#0f3d3d",
+        "primary-container": "#8fd4d3",
+        "on-primary": "#ffffff",
+        "on-primary-container": "#0a2e2e",
+        secondary: "#5c4010",
+        "secondary-container": "#f5c870",
+        "on-secondary-container": "#3a2800",
+        surface: "#e8ecee",
+        "surface-container-lowest": "#f5f7f8",
+        "surface-container-low": "#dde2e5",
+        "surface-container": "#d0d6da",
+        "surface-container-high": "#c2cacd",
+        "surface-container-highest": "#b4bec2",
+        "on-surface": "#000000",
+        "on-surface-variant": "#1a1a1a",
+        outline: "#4a5258",
+        "outline-variant": "#7a858a",
+        error: "#8b1c1a",
+        "error-container": "#e85a57",
+      },
+      fontFamily: { headline: ["Manrope"], body: ["Inter"] },
+      borderRadius: { xl: "0.75rem", "2xl": "1rem", full: "9999px" }
+    }
+  }
+}
+</script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-surface min-h-screen">
+
+  <!-- ── PIN login ───────────────────────────────── -->
+  <div id="staff-login" class="hidden fixed inset-0 flex items-center justify-center p-6">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl p-8 w-full max-w-xs text-center fade-up">
+      <div class="text-2xl font-headline font-extrabold text-primary mb-1">TurnDesk Staff</div>
+      <div class="text-sm font-body text-on-surface-variant mb-6">Enter your PIN to see your customers</div>
+      <input id="staff-pin-entry" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"
+        onkeydown="staffPinKey(event)" oninput="staffPinInput()" autofocus
+        class="w-full text-center tracking-[0.5em] text-2xl font-headline border-b-2 border-surface-container-high bg-transparent py-3 mb-2 focus:border-primary outline-none placeholder:text-outline-variant">
+      <div id="staff-login-status" class="text-sm font-body text-error h-5 mb-3"></div>
+      <button onclick="staffPinSubmit()"
+        class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3.5 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Enter</button>
+    </div>
+  </div>
+
+  <!-- ── My customers ────────────────────────────── -->
+  <div id="staff-main" class="hidden">
+    <header class="sticky top-0 z-10 bg-primary text-on-primary px-4 py-3 flex items-center justify-between shadow-md">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="staff-conn" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e8730a"></span>
+        <div class="min-w-0">
+          <div class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">TurnDesk Staff</div>
+          <div id="staff-tech-name" class="font-headline font-bold text-lg leading-tight truncate"></div>
+        </div>
+      </div>
+      <button onclick="staffSwitch()" class="flex items-center gap-1 text-sm font-body font-semibold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+        <span class="material-symbols-outlined" style="font-size:18px">logout</span> Log out
+      </button>
+    </header>
+    <main id="staff-list" class="p-3 max-w-md mx-auto"></main>
+  </div>
+
+  <!-- ── Toast (used by utils.showToast) ─────────── -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
+    <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
+  </div>
+
+  <script type="module" src="js/app/staff.js"></script>
+</body>
+</html>
