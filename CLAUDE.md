@@ -16,7 +16,8 @@ This repo was forked from `musedashboard` (a clean file copy, **no git history**
 
 The original `musedashboard` app is **live in a real salon and must never be touched** by TurnDesk work. TurnDesk is a completely separate:
 - **GitHub repo** — `github.com/MuseNail/turndesk` (served at `musenail.github.io/turndesk/`)
-- **Cloudflare account** — separate account under the same email login; its own Worker, per-tenant Durable Object, R2 bucket (`turndesk-photos`), KV, and secrets.
+- **Cloudflare resources** — its own Worker (`turndesk`), its own per-tenant Durable Object class (`TurnDeskDO` — a distinct storage namespace from the salon's `MuseSalonDO`), and its own R2 bucket (`turndesk-photos`). Live at `https://turndesk.musenailandspa.workers.dev`.
+  - **Note (2026-05-28):** these live *inside the existing `info@musenailandspa.com` Cloudflare account*, NOT a separate account. The original plan called for a separate account, but Cloudflare requires a unique email per account. Data is still fully isolated (separate Worker + DO class + bucket); only the billing login is shared. Splitting into a dedicated account later needs a different email (e.g. an `info+turndesk@…` alias) — see open follow-ups.
 
 ### Shared-origin gotcha (already handled — keep it this way)
 GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), and `localStorage` / the service-worker `CacheStorage` are scoped **per-origin, not per-path**. To stop the two apps colliding in a browser, every TurnDesk browser-storage key is namespaced **`turndesk_*`** (was `muse_*`), the Google token keys are `turndesk_gcal_*`, and the SW cache is `turndesk-vX.YZ`. **Never reintroduce a `muse_*` storage key.** (This collision disappears once TurnDesk moves to its own domain, but the namespacing is correct regardless.)
@@ -42,7 +43,7 @@ GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), a
 
 ## Build sequence (P0 → P5)
 
-- **P0 — Fork + isolate + blank twin** *(IN PROGRESS)*. Fresh repo, rebase paths `/musedashboard/` → `/turndesk/`, namespace storage keys, de-brand, rename Worker/DO/bucket. New Cloudflare account + Worker + per-tenant DO + R2/KV + secrets. Deploy an empty working twin and verify zero contact with the live salon.
+- **P0 — Fork + isolate + blank twin** *(DONE — Worker deployed & verified empty 2026-05-28; remaining: enable GitHub Pages)*. Fresh repo, rebased paths, namespaced storage keys, de-branded, renamed Worker/DO/bucket. Worker live at `https://turndesk.musenailandspa.workers.dev`; `/state/snapshot` confirmed empty (`seq:0`, no records/queue) → zero contact with the live salon.
 - **P1 — Payments adapter + Helcim.** Define a common adapter interface (`createCheckout / refund / handleWebhook / status`); move Square → `SquareAdapter`; build **`HelcimAdapter` FIRST** (Smart Terminal API: pair via device code, charge, refund, webhook); stub `StripeAdapter`.
 - **P2 — Choose-your-processor.** Per-tenant settings to pick + connect the active processor.
 - **P3 — Multi-tenancy + accounts.** Tenant id → DO routing; real auth/accounts (email/OAuth, roles, tokens — replaces PIN-only); signup auto-provisions a tenant DO + config; zero cross-tenant leakage.
@@ -51,11 +52,12 @@ GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), a
 
 ---
 
-## Open P0 follow-ups (placeholders to fill)
+## Open follow-ups
 
-- **Worker URL** — `js/app/config.js` (`ORIGIN`) and `js/app/sync.js` (`PROD_ORIGIN`) contain `https://turndesk.REPLACE-ME.workers.dev`. Replace `REPLACE-ME` with the new Cloudflare account's `workers.dev` subdomain after the first deploy.
-- **VAPID Web Push keypair** — `config.js` `VAPID_PUBLIC_KEY` + `wrangler.toml` `[vars]` still hold musedashboard's public key. Generate a fresh keypair for the new account and set `VAPID_PRIVATE_KEY` as a secret in the new Worker.
+- **Enable GitHub Pages** — repo Settings → Pages → deploy from `main` branch, so the twin serves at `musenail.github.io/turndesk/`. (Last P0 step.)
+- **VAPID Web Push keypair** — `config.js` `VAPID_PUBLIC_KEY` + `wrangler.toml` `[vars]` still hold musedashboard's public key, and no `VAPID_PRIVATE_KEY` secret is set on the turndesk Worker yet, so Web Push is inert. Generate a fresh keypair and `wrangler secret put VAPID_PRIVATE_KEY` before relying on push.
 - **Google OAuth client** — `js/app/features/calendar.js` `GCAL_CLIENT_ID` is musedashboard's. Create a TurnDesk Google Cloud OAuth client before the Calendar feature is used in production.
+- **Dedicated Cloudflare account (optional, later)** — currently runs in the shared `info@musenailandspa.com` account. To split billing/ownership, create a new account under a different email (e.g. `info+turndesk@…` alias) and re-deploy there.
 
 ---
 
