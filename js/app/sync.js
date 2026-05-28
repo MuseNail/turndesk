@@ -7,9 +7,7 @@
 
 import { hydrate, applyChange, setConnection, loadCache } from './store.js';
 
-// TODO(turndesk-P0): replace REPLACE-ME with the new Cloudflare workers.dev subdomain
-// (must match ORIGIN in config.js) once the new TurnDesk Worker is deployed.
-const PROD_ORIGIN = 'https://turndesk.REPLACE-ME.workers.dev';
+const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
 // When served from localhost (a static server in front of `wrangler dev`), talk to
 // the local Worker on :8787; otherwise the production Worker.
 const ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))

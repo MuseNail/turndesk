@@ -1,6 +1,7 @@
 name               = "turndesk"
 main               = "worker.js"
 compatibility_date = "2024-11-20"
+account_id         = "7e47fe5134a4b77582cf7746bff3fb62"
 
 # ── Observability ──────────────────────────────────────────────────────────────
 # Persist console.* output so errors are queryable in the Cloudflare dashboard

@@ -4,9 +4,7 @@ export const APP_NAME    = 'turndesk';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 
-// TODO(turndesk-P0): replace REPLACE-ME with the new Cloudflare account's workers.dev
-// subdomain once the new Worker is deployed (e.g. https://turndesk.<subdomain>.workers.dev).
-const ORIGIN = 'https://turndesk.REPLACE-ME.workers.dev';
+const ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
 export const SQUARE_PROXY = ORIGIN + '/square';
 export const PHOTOS_PROXY = ORIGIN + '/photos';
 export const STATE_PROXY  = ORIGIN + '/state';
