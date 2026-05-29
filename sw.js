@@ -1,7 +1,7 @@
 // ── Service Worker (v2.72 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'turndesk-v3.66';
+const CACHE_NAME = 'turndesk-v3.67';
 
 const PRECACHE_URLS = [
   '/turndesk/',

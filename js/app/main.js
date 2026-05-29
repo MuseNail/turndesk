@@ -378,8 +378,9 @@ function boot() {
     confirmScreen.addEventListener('touchend', e => { e.preventDefault(); reset(); });
   }
 
-  // First-time Square setup wizard
-  setTimeout(() => { if (!store.getState().config.square_config && !sessionStorage.getItem('turndesk_setup_skipped')) settings.showSetupWizard(); }, 1500);
+  // TurnDesk: no auto Square location-setup popup on launch. Each salon picks +
+  // connects its own payment processor later (P2); Square can still be connected
+  // manually from Settings via settings.showSetupWizard().
 
   wireKeyboard();
   scheduleMidnightReset();

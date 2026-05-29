@@ -476,7 +476,7 @@ export function calRenderGrid() {
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
         + (ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(phoneLine)}</div>`:'')
         + (ht>44?svcHtml:'')
-        + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${escHtml(notes.split('\n')[0])}</div>`:'')
+        + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:pre-wrap;overflow-wrap:anywhere;overflow:hidden;line-height:1.3">📝 ${escHtml(notes)}</div>`:'')
         + `</div>`;
     });
     body += '</div></div>';
