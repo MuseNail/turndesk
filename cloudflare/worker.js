@@ -231,7 +231,11 @@ async function appAuthOk(request, url, env, salonId) {
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
   if (!token) return false;
-  const hit = _sessCache.get(token);
+  // Cache key MUST include the salon: a token is only valid in the DO that minted
+  // it, so a token validated for salon A must NOT short-circuit to "ok" for salon
+  // B. Keying by token alone would leak cross-tenant within the cache window.
+  const cacheKey = salonId + ' ' + token;
+  const hit = _sessCache.get(cacheKey);
   if (hit && hit.exp > Date.now()) return hit.ok;
   let ok = false;
   try {
@@ -241,7 +245,7 @@ async function appAuthOk(request, url, env, salonId) {
     }));
     ok = r.ok && (await r.json()).ok === true;
   } catch { ok = false; }   // DO unreachable → fail closed; the client retries
-  _sessCache.set(token, { ok, exp: Date.now() + (ok ? 60000 : 10000) });
+  _sessCache.set(cacheKey, { ok, exp: Date.now() + (ok ? 60000 : 10000) });
   if (_sessCache.size > 2000) _sessCache.clear();
   return ok;
 }
