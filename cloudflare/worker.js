@@ -891,6 +891,19 @@ async function handleOperator(request, env, url, method, path) {
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
     return json({ ok: true, slug, entry });
   }
+  // POST /operator/salons/<slug>/register { name, ownerEmail, plan } → add an
+  // EXISTING (externally-seeded) salon to the registry without seeding or touching
+  // its owner credential. For adopting salons created outside the console (e.g. demo).
+  let mr = path.match(/^\/operator\/salons\/([a-z0-9-]+)\/register$/);
+  if (mr && method === 'POST') {
+    const v = validateSlug(mr[1]);
+    if (!v.ok) return json({ error: v.error }, 400);
+    let b = {}; try { b = await request.json(); } catch {}
+    const existing = await registryGet(env, v.slug);
+    const entry = { slug: v.slug, name: b.name || (existing && existing.name) || v.slug, status: 'active', ownerEmail: (b.ownerEmail || (existing && existing.ownerEmail) || '').toLowerCase(), plan: b.plan || (existing && existing.plan) || '', createdAt: (existing && existing.createdAt) || new Date().toISOString() };
+    await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    return json({ ok: true, entry });
+  }
   // POST /operator/salons/<slug>/status { status } → enable/disable
   let m = path.match(/^\/operator\/salons\/([a-z0-9-]+)\/status$/);
   if (m && method === 'POST') {
