@@ -38,14 +38,14 @@ let _todayEvents = {}, _todayEventsAt = 0, _todayLoading = false;
 let _unassignedOnly = false;
 // Day | Week view (device-local). Week = a 7-day overview: all visible techs' bookings
 // merged per day column, colored by tech; tapping a day drills into the Day view.
-let _calView = localStorage.getItem('muse_cal_view') === 'week' ? 'week' : 'day';
+let _calView = localStorage.getItem('turndesk_cal_view') === 'week' ? 'week' : 'day';
 const calIsWeek = () => _calView === 'week';
 function calWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
 // Today's-Appointments panel filter (device-local): hide past-time + finished rows.
-let _apptsUpcomingOnly = localStorage.getItem('muse_cal_upcoming') === '1';
+let _apptsUpcomingOnly = localStorage.getItem('turndesk_cal_upcoming') === '1';
 export function toggleApptsUpcoming() {
   _apptsUpcomingOnly = !_apptsUpcomingOnly;
-  localStorage.setItem('muse_cal_upcoming', _apptsUpcomingOnly ? '1' : '0');
+  localStorage.setItem('turndesk_cal_upcoming', _apptsUpcomingOnly ? '1' : '0');
   renderTodaysAppointments();
 }
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
@@ -56,8 +56,8 @@ let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId
 let _apptSaving = false;
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
-let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
-let _calOrder = JSON.parse(localStorage.getItem('gcal_order') || 'null');
+let _calHidden = new Set(JSON.parse(localStorage.getItem('turndesk_gcal_hidden') || '[]'));
+let _calOrder = JSON.parse(localStorage.getItem('turndesk_gcal_order') || 'null');
 // Off-duty auto-hide (opt-in via config.cal_autohide_offduty): calendars whose matched
 // staff is off/sick/vacation are hidden by default each day. _calOffPeek holds the ones
 // the operator turned on for the CURRENTLY-viewed day; it resets on day navigation.
@@ -157,7 +157,7 @@ export function getCalEvents(calId) { return _calEvents[calId] || []; }
 async function ensureTodayApptEvents(force) {
   if (_todayLoading) return;
   if (!force && _todayEventsAt && Date.now() - _todayEventsAt < 60000) return;
-  if (!window.gapi?.client?.calendar || !localStorage.getItem('gcal_token') || !_calCalendars.length) return;
+  if (!window.gapi?.client?.calendar || !localStorage.getItem('turndesk_gcal_token') || !_calCalendars.length) return;
   _todayLoading = true;
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
@@ -378,7 +378,7 @@ async function _fetchWorkerToken() {
   if (!r.ok) { let e = 'token-' + r.status; try { e = (await r.json()).error || e; } catch {} throw new Error(e); }
   const j = await r.json();
   const saved = { token: j.access_token, expires: j.expires };
-  localStorage.setItem('gcal_token', JSON.stringify(saved));
+  localStorage.setItem('turndesk_gcal_token', JSON.stringify(saved));
   if (window.gapi?.client) gapi.client.setToken({ access_token: saved.token });
   scheduleCalTokenRefresh(saved.expires);
   return saved;
@@ -391,7 +391,7 @@ async function _fetchWorkerToken() {
 // and writes always run on a valid token.
 let _calInitDone = false, _calFocusHooked = false;
 function _tokenFresh(skewMs = 120000) {
-  try { const s = JSON.parse(localStorage.getItem('gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
+  try { const s = JSON.parse(localStorage.getItem('turndesk_gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
 }
 function ensureFreshToken() {
   if (_tokenFresh()) return Promise.resolve();
@@ -406,7 +406,7 @@ function _calWriteError(err, verb) {
   const msg = err?.result?.error?.message || err?.message || '';
   const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED' || /auth|credential|invalid.?token/i.test(msg);
   if (auth) {
-    localStorage.removeItem('gcal_token');
+    localStorage.removeItem('turndesk_gcal_token');
     document.getElementById('cal-signin-btn')?.classList.remove('hidden');
     _fetchWorkerToken().catch(() => {});   // re-mint from the Worker's refresh token for the retry
     showToast('Calendar session expired — reconnecting. Please try again in a moment.');
@@ -416,7 +416,7 @@ function _calWriteError(err, verb) {
 // missed its window while backgrounded) and refresh the grid. Registered once.
 function _hookCalFocusRefresh() {
   if (_calFocusHooked) return; _calFocusHooked = true;
-  const onActive = () => { updateCalNowLine(); if (!_calInitDone) return; if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
+  const onActive = () => { updateCalNowLine(); if (!_calInitDone) return; if (!localStorage.getItem('turndesk_gcal_token') && !cfg().turndesk_gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) onActive(); });
   window.addEventListener('focus', onActive);
   window.addEventListener('online', onActive);
@@ -451,7 +451,7 @@ export function calSignIn(silent) {
 export function calSignOut() {
   fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side
   if (window.gapi?.client) gapi.client.setToken(null);
-  localStorage.removeItem('gcal_token');
+  localStorage.removeItem('turndesk_gcal_token');
   _calInitDone = false;   // so a fresh sign-in re-runs the initial load
   _calCalendars = []; _calEvents = {};
   document.getElementById('cal-grid').classList.add('hidden');
@@ -483,7 +483,7 @@ export function setCalView(v) {
   const next = v === 'week' ? 'week' : 'day';
   if (next === _calView) return;
   _calView = next;
-  try { localStorage.setItem('muse_cal_view', _calView); } catch {}
+  try { localStorage.setItem('turndesk_cal_view', _calView); } catch {}
   _calOffPeek = new Set();
   calUpdateDateLabel();
   calLoadAndRender();
@@ -504,7 +504,7 @@ export function calWeekOpenDay(dateStr) {
   _calOffPeek = new Set();
   _calDate = new Date(dateStr + 'T12:00:00');
   _calView = 'day';
-  try { localStorage.setItem('muse_cal_view', 'day'); } catch {}
+  try { localStorage.setItem('turndesk_cal_view', 'day'); } catch {}
   calUpdateDateLabel();
   calLoadAndRender();
 }
@@ -542,7 +542,7 @@ export async function calLoadAndRender(silent) {
     renderCalSelectorList(); calUpdateDateInput(); renderGcalCalendarList(); renderTodaysAppointments();
     if (anyFail) setCalSyncIndicator('error');
   } catch (err) {
-    if (err.status === 401) { localStorage.removeItem('gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
+    if (err.status === 401) { localStorage.removeItem('turndesk_gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
     else calSetStatus('Error loading calendar: ' + (err.result?.error?.message || err.message || 'Unknown error'));
   }
 }
@@ -567,7 +567,7 @@ export function calRenderGrid() {
   calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
   try {
 
-  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const c = JSON.parse(localStorage.getItem('turndesk_cal_hours') || 'null');
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
   const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
   const railEl = document.getElementById('cal-right-rail');
@@ -738,7 +738,7 @@ function calRenderWeekGrid() {
   calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
   try {
 
-  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const c = JSON.parse(localStorage.getItem('turndesk_cal_hours') || 'null');
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
   const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
   const railEl = document.getElementById('cal-right-rail');
@@ -955,7 +955,7 @@ function applyCalOrder() {
   _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
   _calCalendars = ordered;
 }
-function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('gcal_order', JSON.stringify(_calOrder)); }
+function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('turndesk_gcal_order', JSON.stringify(_calOrder)); }
 export function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
@@ -987,7 +987,7 @@ export function calSelectorSave() {
     }
   });
   _calHidden = newHidden; _calOffPeek = newPeek;
-  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
+  localStorage.setItem('turndesk_gcal_hidden', JSON.stringify([..._calHidden]));
   _calSelectorDraft = null;
   const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
   renderCalSelectorList(); calRenderGridPreserveScroll();
@@ -1222,7 +1222,7 @@ export async function calMarkNoShow(calId, eventId) {
 // identical (no marker), so this also clears any genuine past no-shows; that's
 // operationally harmless (history) and was confirmed by the owner.
 export async function clearPastNoShowFlags(sinceDateStr) {
-  if ((!localStorage.getItem('gcal_token') && !cfg().gcal_token) || typeof gapi === 'undefined' || !gapi.client?.calendar) { showToast('Connect Google Calendar on this device first'); return; }
+  if ((!localStorage.getItem('turndesk_gcal_token') && !cfg().turndesk_gcal_token) || typeof gapi === 'undefined' || !gapi.client?.calendar) { showToast('Connect Google Calendar on this device first'); return; }
   const since = new Date((sinceDateStr || '') + 'T00:00:00');
   if (isNaN(since)) { showToast('Pick a valid start date'); return; }
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);

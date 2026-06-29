@@ -300,7 +300,7 @@ export function exportAllData() {
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = `muse-backup-${todayStr()}.json`; a.click(); URL.revokeObjectURL(url);
   const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  localStorage.setItem('muse_last_backup', now);
+  localStorage.setItem('turndesk_last_backup', now);
   const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = now;
   showToast('Backup downloaded ✓');
 }
@@ -332,7 +332,7 @@ export function confirmClearAllRecords() {
     window.showWarnModal?.('Clear All Records?', 'This permanently removes every transaction record. Export a backup first if you need this data.', () => {
       const _n = getState().records.filter(r => r.status !== 'deleted').length;
       getState().records.forEach(r => { if (r.status !== 'deleted') dispatch('record.delete', { id: r.id, reason: 'bulk clear', by: 'admin' }); });
-      localStorage.removeItem('muse_deletion_log');
+      localStorage.removeItem('turndesk_deletion_log');
       window.logAudit?.('Clear records', `Cleared all transaction records (${_n})`);
       window.renderTransactions?.(); window.runReport?.();
       showToast('All records cleared ✓');

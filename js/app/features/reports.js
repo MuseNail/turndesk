@@ -1357,17 +1357,17 @@ function buildDrillHtml(d) {
 // commission, or variable=manual entry here, stored per tech per period). Cash = comm − check.
 let _payrollOffset = 0;   // 0 = current pay period, -1 = previous, +1 = next
 // Device-local: show the prior-pay-period comparison columns (This | Last + Δ). Default on.
-let _payrollCompare = localStorage.getItem('muse_payroll_compare') !== '0';
+let _payrollCompare = localStorage.getItem('turndesk_payroll_compare') !== '0';
 export function payrollToggleCompare() {
   _payrollCompare = !_payrollCompare;
-  localStorage.setItem('muse_payroll_compare', _payrollCompare ? '1' : '0');
+  localStorage.setItem('turndesk_payroll_compare', _payrollCompare ? '1' : '0');
   renderPayrollPage();
 }
 // Technicians | Front Desk pay view (device-local).
-let _payrollView = localStorage.getItem('muse_payroll_view') === 'fd' ? 'fd' : 'tech';
+let _payrollView = localStorage.getItem('turndesk_payroll_view') === 'fd' ? 'fd' : 'tech';
 export function payrollSetView(v) {
   _payrollView = v === 'fd' ? 'fd' : 'tech';
-  try { localStorage.setItem('muse_payroll_view', _payrollView); } catch {}
+  try { localStorage.setItem('turndesk_payroll_view', _payrollView); } catch {}
   renderPayrollPage();
 }
 function prevPayPeriod({ from }) {
@@ -2762,9 +2762,9 @@ export function confirmDeleteTransaction() {
   window.logAudit?.('Delete', `${_deleteTxnRecord?.name || '—'} · $${Math.abs(_deleteTxnRecord?.totalCost || 0).toFixed(2)} · ${reason}`);
   if (queue().find(e => String(e.id) === _deleteTxnId)) dispatch('queue.remove', { id: _deleteTxnId });
   // Device-local audit trail
-  const log = JSON.parse(localStorage.getItem('muse_deletion_log') || '[]');
+  const log = JSON.parse(localStorage.getItem('turndesk_deletion_log') || '[]');
   log.push({ deletedAt: new Date().toISOString(), deletedBy: getActiveUser()?.name || 'Unknown', recordId: _deleteTxnId, name: _deleteTxnRecord?.name || '', total: _deleteTxnRecord?.totalCost || 0, checkinTime: _deleteTxnRecord?.checkinTime || '', reason });
-  localStorage.setItem('muse_deletion_log', JSON.stringify(log));
+  localStorage.setItem('turndesk_deletion_log', JSON.stringify(log));
   closeDeleteTxnModal();
   renderTransactions(); window.renderQueue?.(); runReport();
   showToast('Transaction deleted — reason logged ✓');

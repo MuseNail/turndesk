@@ -27,9 +27,9 @@ const svc     = id => (cfg().services || []).find(s => s.id === id);
 // Station label for an assignment's a.station id (mirrors queue.js stationLabel without importing it).
 const stationLbl = id => { if (!id) return ''; const d = (cfg().stations || []).find(s => s.id === id); return d ? (d.label || d.id) : String(id); };
 
-const MY_KEY = 'muse_staff_id';            // device-local: which tech is signed in on THIS device
+const MY_KEY = 'turndesk_staff_id';            // device-local: which tech is signed in on THIS device
 let myId = localStorage.getItem(MY_KEY) || null;
-const MY_FD_KEY = 'muse_staff_fd_id';      // device-local: a front-desk user signed in here (read-only schedule/hours)
+const MY_FD_KEY = 'turndesk_staff_fd_id';      // device-local: a front-desk user signed in here (read-only schedule/hours)
 let myFdId = localStorage.getItem(MY_FD_KEY) || null;
 let _view = 'active';                      // 'active' | 'appts' | 'history'
 let _updateVer = null;                     // newer published version detected → show the update banner
@@ -131,12 +131,12 @@ function maybeNotifPrompt() {
   if (!(myId || myFdId) || !pushSupported()) return;
   if (Notification.permission !== 'default') return;
   if (isIOS() && !isStandalone()) return;
-  try { if (sessionStorage.getItem('muse_notif_dismissed')) return; } catch {}
+  try { if (sessionStorage.getItem('turndesk_notif_dismissed')) return; } catch {}
   const m = _notifEl(); if (!m || m.style.display === 'flex') return;
   m.classList.remove('hidden'); m.style.display = 'flex';
 }
 window.staffNotifAllow = () => { window.enableStaffPush(); const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } };   // call requestPermission first (within the tap), then hide
-window.staffNotifDismiss = () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } try { sessionStorage.setItem('muse_notif_dismissed', '1'); } catch {} };
+window.staffNotifDismiss = () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } try { sessionStorage.setItem('turndesk_notif_dismissed', '1'); } catch {} };
 
 // ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
 function _fdWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
@@ -798,14 +798,14 @@ async function registerPush() {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(VAPID_PUBLIC_KEY) });
-    let prev = []; try { prev = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
-    const legacy = localStorage.getItem('muse_push_techid'); if (legacy) prev.push(legacy);   // migrate the old single-id key
+    let prev = []; try { prev = JSON.parse(localStorage.getItem('turndesk_push_ids') || 'null') || []; } catch {}
+    const legacy = localStorage.getItem('turndesk_push_techid'); if (legacy) prev.push(legacy);   // migrate the old single-id key
     for (const p of prev) if (!ids.includes(p)) await _pushUnsub(sub, p);   // device switched person → drop stale links
     // Register the browser subscription under each id; report whether the SERVER accepted it
     // (a silent failure here is exactly why "push doesn't work" was hard to see).
     const oks = await Promise.all(ids.map(id => fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, subscription: sub.toJSON() }) }).then(r => r.ok).catch(() => false)));
-    localStorage.setItem('muse_push_ids', JSON.stringify(ids));
-    localStorage.removeItem('muse_push_techid');
+    localStorage.setItem('turndesk_push_ids', JSON.stringify(ids));
+    localStorage.removeItem('turndesk_push_techid');
     return oks.some(Boolean);
   } catch { return false; }
 }
@@ -813,14 +813,14 @@ async function registerPush() {
 // receiving that person's alerts. The browser push subscription itself is left intact
 // (the next sign-in re-tags it via registerPush — no re-prompt).
 async function unregisterPush() {
-  let ids = []; try { ids = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
-  const legacy = localStorage.getItem('muse_push_techid'); if (legacy) ids.push(legacy);
+  let ids = []; try { ids = JSON.parse(localStorage.getItem('turndesk_push_ids') || 'null') || []; } catch {}
+  const legacy = localStorage.getItem('turndesk_push_techid'); if (legacy) ids.push(legacy);
   if (!ids.length || !pushSupported()) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (sub) await Promise.all(ids.map(id => _pushUnsub(sub, id)));
-    localStorage.removeItem('muse_push_ids'); localStorage.removeItem('muse_push_techid');
+    localStorage.removeItem('turndesk_push_ids'); localStorage.removeItem('turndesk_push_techid');
   } catch {}
 }
 

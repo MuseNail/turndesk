@@ -317,10 +317,10 @@ function maybeShowWhatsNew() {
   // active — so an early call while still on the welcome screen retries later instead of blocking.
   if (!document.getElementById('screen-desk')?.classList.contains('active')) return;
   _whatsNewChecked = true;
-  let seen = null; try { seen = localStorage.getItem('muse_whatsnew_seen'); } catch {}
+  let seen = null; try { seen = localStorage.getItem('turndesk_whatsnew_seen'); } catch {}
   if (seen === APP_VERSION) return;                                   // already saw this version
-  const usedBefore = (() => { try { return !!(localStorage.getItem('muse_device_id') || localStorage.getItem('muse_state_cache')); } catch { return false; } })();
-  const markSeen = () => { try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {} };
+  const usedBefore = (() => { try { return !!(localStorage.getItem('turndesk_device_id') || localStorage.getItem('turndesk_state_cache')); } catch { return false; } })();
+  const markSeen = () => { try { localStorage.setItem('turndesk_whatsnew_seen', APP_VERSION); } catch {} };
   if (seen == null && !usedBefore) { markSeen(); return; }            // brand-new device → record silently
   const idx = WHATS_NEW.findIndex(e => e.v === seen);
   const entries = idx > 0 ? WHATS_NEW.slice(0, idx) : (idx === 0 ? [] : [WHATS_NEW[0]]);   // everything newer than seen (or the latest)
@@ -358,7 +358,7 @@ function _renderWhatsNew(list) {
   const wrap = prev?.parentElement; if (wrap) wrap.style.display = maxIdx <= 0 ? 'none' : '';   // nothing to browse yet
 }
 function closeWhatsNew() {
-  try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {}
+  try { localStorage.setItem('turndesk_whatsnew_seen', APP_VERSION); } catch {}
   const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
 }
 Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav });
@@ -458,24 +458,24 @@ Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleV
 window.forceSyncNow = () => { sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…'); };
 
 // ── Square auto-paid ──────────────────────────────
-// The Square return tab writes muse_sq_paid on a successful charge; this (main)
+// The Square return tab writes turndesk_sq_paid on a successful charge; this (main)
 // tab marks those customers Paid. Triggered by the storage event (return tab
 // wrote it), regaining focus, and hydrate (covers a reopened app). IDs not yet in
 // the hydrated queue are kept for a later pass; degrades to manual Mark Paid.
 function applySquarePaidFlag() {
-  let flag; try { flag = JSON.parse(localStorage.getItem('muse_sq_paid') || 'null'); } catch (e) { return; }
+  let flag; try { flag = JSON.parse(localStorage.getItem('turndesk_sq_paid') || 'null'); } catch (e) { return; }
   if (!flag || !flag.ids || !flag.ids.length) return;
-  if (Date.now() - (flag.at || 0) > 10 * 60 * 1000) { localStorage.removeItem('muse_sq_paid'); return; }
+  if (Date.now() - (flag.at || 0) > 10 * 60 * 1000) { localStorage.removeItem('turndesk_sq_paid'); return; }
   const queue = store.getState().queue, remaining = [];
   flag.ids.forEach(id => {
     const e = queue.find(x => String(x.id) === String(id));
     if (!e) { remaining.push(id); return; }                 // not hydrated yet — retry on a later trigger
     if (!['paid', 'done'].includes(e.status)) window.updateStatus?.(String(id), 'paid');
   });
-  if (remaining.length) localStorage.setItem('muse_sq_paid', JSON.stringify({ ids: remaining, at: flag.at }));
-  else localStorage.removeItem('muse_sq_paid');
+  if (remaining.length) localStorage.setItem('turndesk_sq_paid', JSON.stringify({ ids: remaining, at: flag.at }));
+  else localStorage.removeItem('turndesk_sq_paid');
 }
-window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newValue) applySquarePaidFlag(); });
+window.addEventListener('storage', e => { if (e.key === 'turndesk_sq_paid' && e.newValue) applySquarePaidFlag(); });
 // NB: the day rollover is intentionally NOT triggered straight off visibilitychange — it would run
 // on stale cached config before a resync lands (and could wrongly clear the roster). The resync
 // fired on tab-visible pulls a fresh snapshot whose hydrate runs runDayRolloverIfNeeded with
@@ -483,18 +483,18 @@ window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newV
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); helcim.checkUnfinalizedCharges?.(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
-// after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
+// after the Square hand-off WITHOUT the callback data, so the turndesk_sq_paid handoff
 // above never fires (there's no return tab). But proceedSquarePayment stashed
-// muse_sq_pending in this app's own storage right before launching Square, so on
+// turndesk_sq_pending in this app's own storage right before launching Square, so on
 // resume we ask the operator whether the charge went through — iOS gives us no way to
 // know — and mark Paid on confirm. Handled once: the pending flag is cleared the moment
-// we prompt, and we skip if the Safari return tab already wrote muse_sq_paid.
+// we prompt, and we skip if the Safari return tab already wrote turndesk_sq_paid.
 function checkSquarePending() {
-  let pend; try { pend = JSON.parse(localStorage.getItem('muse_sq_pending') || 'null'); } catch (e) { return; }
+  let pend; try { pend = JSON.parse(localStorage.getItem('turndesk_sq_pending') || 'null'); } catch (e) { return; }
   if (!pend || !pend.ids || !pend.ids.length) return;
-  if (Date.now() - (pend.at || 0) > 8 * 60 * 1000) { localStorage.removeItem('muse_sq_pending'); return; }
-  if (localStorage.getItem('muse_sq_paid')) return;   // Safari return tab is handling it
-  localStorage.removeItem('muse_sq_pending');          // handle once
+  if (Date.now() - (pend.at || 0) > 8 * 60 * 1000) { localStorage.removeItem('turndesk_sq_pending'); return; }
+  if (localStorage.getItem('turndesk_sq_paid')) return;   // Safari return tab is handling it
+  localStorage.removeItem('turndesk_sq_pending');          // handle once
   const ids = pend.ids.map(String);
   const amt = pend.cents ? ` — $${(pend.cents / 100).toFixed(2)}` : '';
   const who = pend.names || 'this customer';
@@ -691,8 +691,8 @@ function handleSquarePosReturn() {
   const errored = p.status === 'error' || !!p.error_code;
   // On a successful charge, hand the stashed party off to the main tab to mark Paid.
   try {
-    if (!errored) { const pend = JSON.parse(localStorage.getItem('muse_sq_pending') || 'null'); if (pend && pend.ids && pend.ids.length) localStorage.setItem('muse_sq_paid', JSON.stringify({ ids: pend.ids, at: Date.now() })); }
-    localStorage.removeItem('muse_sq_pending');
+    if (!errored) { const pend = JSON.parse(localStorage.getItem('turndesk_sq_pending') || 'null'); if (pend && pend.ids && pend.ids.length) localStorage.setItem('turndesk_sq_paid', JSON.stringify({ ids: pend.ids, at: Date.now() })); }
+    localStorage.removeItem('turndesk_sq_pending');
   } catch (e) {}
   document.title = 'Muse — Payment';
   document.body.innerHTML = `

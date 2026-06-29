@@ -97,12 +97,12 @@ export function toggleBonusService(serviceId, checked) {
 export function saveCalHours() {
   const start = parseInt(document.getElementById('cal-hour-start')?.value || '6');
   const end = parseInt(document.getElementById('cal-hour-end')?.value || '22');
-  localStorage.setItem('muse_cal_hours', JSON.stringify({ start, end }));
+  localStorage.setItem('turndesk_cal_hours', JSON.stringify({ start, end }));
   if (document.getElementById('panel-calendar')?.classList.contains('active')) window.calRenderGrid?.();
   showToast('Calendar hours updated ✓');
 }
 export function initCalHoursSelectors() {
-  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const c = JSON.parse(localStorage.getItem('turndesk_cal_hours') || 'null');
   if (!c) return;
   const s = document.getElementById('cal-hour-start'), e = document.getElementById('cal-hour-end');
   if (s) s.value = String(c.start ?? 6);
@@ -126,8 +126,8 @@ export function syncSquareFromSettings() {
 
 // ── Google Calendar (Integrations leaf) ───────────
 function gcalConnected() {
-  try { const l = JSON.parse(localStorage.getItem('gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
-  const s = cfg().gcal_token;
+  try { const l = JSON.parse(localStorage.getItem('turndesk_gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
+  const s = cfg().turndesk_gcal_token;
   return !!(s && Date.now() < s.expires - 60000);
 }
 export function renderGcalSettings() {
@@ -147,7 +147,7 @@ export function renderAppInfo() {
   const st = getState();
   const rows = [
     ['App version', APP_VERSION],
-    ['Device ID', localStorage.getItem('muse_device_id') || '—'],
+    ['Device ID', localStorage.getItem('turndesk_device_id') || '—'],
     ['Live sync', st.connected ? `Connected${st.pendingCount ? ` · ${st.pendingCount} pending` : ''}` : 'Offline'],
     ['Square', cfg().square_config ? `Connected · ${cfg().square_config.locationId}` : 'Not connected'],
     ['Google Calendar', gcalConnected() ? 'Connected' : 'Not connected'],
@@ -381,7 +381,7 @@ export function renderSettingsPanel() {
   initCalHoursSelectors();
   window.renderCalAutoHideSetting?.();
   window.renderApptReminderSettings?.();
-  const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
+  const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = localStorage.getItem('turndesk_last_backup') || 'Never';
   setLogo();
   const sqStatus = document.getElementById('settings-square-status'), sqInput = document.getElementById('settings-location-id'), sqAppInput = document.getElementById('settings-app-id');
   if (sqStatus) sqStatus.textContent = cfg().square_config ? `✓ Connected — Location: ${cfg().square_config.locationId}` : 'Not connected';

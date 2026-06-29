@@ -11,7 +11,7 @@
 // (the WebSocket, the /gcal/connect navigation) append the token with withAuth().
 // Import it FIRST in every entry point (main.js, staff.js, reports-app.js).
 
-const KEY = 'muse_session';
+const KEY = 'turndesk_session';
 
 // Same origin rule as sync.js: localhost page → local `wrangler dev`, else prod.
 const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';

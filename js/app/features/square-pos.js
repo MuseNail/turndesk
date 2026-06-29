@@ -322,9 +322,9 @@ export function proceedSquarePayment() {
     options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
   };
   // Stash the party (+ names/amount) so we can mark them Paid on return. The Safari
-  // return tab uses this to write muse_sq_paid; the installed PWA — which iOS resumes
+  // return tab uses this to write turndesk_sq_paid; the installed PWA — which iOS resumes
   // WITHOUT the callback data — uses it for the confirm-on-resume prompt (see main.js).
-  try { localStorage.setItem('muse_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], names: _pendingPay.names || '', cents: _pendingPay.cents || 0, at: Date.now() })); } catch (e) {}
+  try { localStorage.setItem('turndesk_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], names: _pendingPay.names || '', cents: _pendingPay.cents || 0, at: Date.now() })); } catch (e) {}
   // R6: stash the recorded gift cards on the ticket so they're logged + drawn down when it's
   // marked Paid (on Square return). The full amount still goes to Square above — charge unchanged.
   if (_payTicketId) {
@@ -420,7 +420,7 @@ export async function proceedTerminalPayment() {
     cashKey:     `cash-${idemBase}-${cashAppliedC}`,
     zelleKey:    `zelle-${idemBase}-${zelleC}`,
   };
-  try { localStorage.setItem('muse_term_pending', JSON.stringify({ ...pend, at: Date.now() })); } catch (e) {}
+  try { localStorage.setItem('turndesk_term_pending', JSON.stringify({ ...pend, at: Date.now() })); } catch (e) {}
   // Resolve/create the Square customer for this ticket (by the primary guest's phone) so the
   // sale is ATTACHED to them in Square via customer_id — not just a free-text name note.
   // Best-effort: never blocks the charge (no phone / Square unreachable → stays unlinked).
@@ -443,7 +443,7 @@ export async function proceedTerminalPayment() {
       hideTerminalModal();
       if (!res.ok) {
         _unstageGift(ticketId);
-        if (res.status === 'CANCELLED' || res.status === 'TIMEOUT') { try { localStorage.removeItem('muse_term_pending'); } catch (e) {} }
+        if (res.status === 'CANCELLED' || res.status === 'TIMEOUT') { try { localStorage.removeItem('turndesk_term_pending'); } catch (e) {} }
         showToast(res.error || 'Payment not completed.');
         return;
       }
@@ -465,7 +465,7 @@ export async function proceedTerminalPayment() {
       _termCheckoutId = coJson.checkout?.id;
       const co = await _pollTerminalCheckout(_termCheckoutId);
       if (co.status === 'TIMEOUT')  { hideTerminalModal(); _unstageGift(ticketId); showToast('Terminal timed out — check the device, then try again.'); return; }
-      if (co.status === 'CANCELED') { hideTerminalModal(); _unstageGift(ticketId); try { localStorage.removeItem('muse_term_pending'); } catch (e) {} showToast('Payment canceled on the Terminal.'); return; }
+      if (co.status === 'CANCELED') { hideTerminalModal(); _unstageGift(ticketId); try { localStorage.removeItem('turndesk_term_pending'); } catch (e) {} showToast('Payment canceled on the Terminal.'); return; }
       cardPaymentId = (co.payment_ids || [])[0] || null;
     }
     // 2) Only AFTER the card succeeds, record the cash portion in Square.
@@ -603,7 +603,7 @@ function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unreco
     }
     window.updateStatus?.(String(id), 'paid');   // → saveRecord (records tenders/tip/squarePaymentIds) + gift-card draw-down + audit
   });
-  try { localStorage.removeItem('muse_term_pending'); } catch (e) {}
+  try { localStorage.removeItem('turndesk_term_pending'); } catch (e) {}
   _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0; _payTip = 0; _payZelle = 0;
   // If a cash/Zelle record failed to reach Square, the ticket is still correctly Paid (money was
   // received) but Square's totals are short — tell the operator instead of a clean "Paid ✓".

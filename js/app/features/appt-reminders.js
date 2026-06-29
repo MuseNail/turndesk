@@ -11,7 +11,7 @@ import { getActiveUser } from '../session.js';
 
 const cfg = () => getState().config;
 const ALL_LEADS = [5, 15, 30, 60];           // minutes offered in the settings menu
-const FIRED_KEY = 'muse_appt_reminded';      // device-local; { day, keys[] }
+const FIRED_KEY = 'turndesk_appt_reminded';      // device-local; { day, keys[] }
 const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export function reminderLeads() {

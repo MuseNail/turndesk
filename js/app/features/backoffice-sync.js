@@ -12,7 +12,7 @@
 //
 // Setup lives in Settings → Integrations → Back Office sync. The endpoint URL +
 // business id are synced config (`config.bo_sync`); the SYNC token is
-// device-local (`muse_bo_token`) — a secret never rides the state channel.
+// device-local (`turndesk_bo_token`) — a secret never rides the state channel.
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
@@ -20,7 +20,7 @@ import { showToast, localDateStr } from '../utils.js';
 import { computeMetrics, payrollComputedRows, payrollFdRows } from './reports.js';
 
 const cfg = () => getState().config;
-const TOKEN_KEY = 'muse_bo_token';
+const TOKEN_KEY = 'turndesk_bo_token';
 const cents = v => Math.round((v || 0) * 100);
 
 // Net cash-drawer over/short (dollars; + over, − short) across drawers CLOSED on

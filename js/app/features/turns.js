@@ -20,8 +20,8 @@ const setBreak = arr   => dispatch('config.set', { key: 'turns_break', value: ar
 const setOff   = arr   => dispatch('config.set', { key: 'turns_off',   value: arr });
 
 let turnsViewingHistory = null;
-let turnsHistory = JSON.parse(localStorage.getItem('muse_turns_history') || '{}');
-function saveTurnsHistory() { try { localStorage.setItem('muse_turns_history', JSON.stringify(turnsHistory)); } catch (e) { console.warn('[turns] history save failed (quota?)', e); } }
+let turnsHistory = JSON.parse(localStorage.getItem('turndesk_turns_history') || '{}');
+function saveTurnsHistory() { try { localStorage.setItem('turndesk_turns_history', JSON.stringify(turnsHistory)); } catch (e) { console.warn('[turns] history save failed (quota?)', e); } }
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {
@@ -212,7 +212,7 @@ export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); rend
 // Device-local (like the text size) — hide each tech's billed dollar total on a
 // shared screen so staff don't compare earnings. Applied as a panel class; the
 // CSS hides .turns-billed. Turn counts stay visible.
-let _turnsTotalsShow = localStorage.getItem('muse_turns_totals') !== '0';
+let _turnsTotalsShow = localStorage.getItem('turndesk_turns_totals') !== '0';
 function _applyTurnsTotals() {
   document.getElementById('panel-turns')?.classList.toggle('turns-hide-totals', !_turnsTotalsShow);
   const btn = document.getElementById('turns-totals-toggle');
@@ -229,18 +229,18 @@ function _applyTurnsTotals() {
 }
 export function toggleTurnsTotals() {
   _turnsTotalsShow = !_turnsTotalsShow;
-  localStorage.setItem('muse_turns_totals', _turnsTotalsShow ? '1' : '0');
+  localStorage.setItem('turndesk_turns_totals', _turnsTotalsShow ? '1' : '0');
   _applyTurnsTotals();
   showToast(_turnsTotalsShow ? 'Tech totals shown (this device) ✓' : 'Tech totals hidden (this device) ✓');
 }
 
 // ── Per-device Turns text size (C8) ───────────────
-// Device-local (like muse_cal_hours) — the front-desk monitor can run Large while the
+// Device-local (like turndesk_cal_hours) — the front-desk monitor can run Large while the
 // iPad stays Standard. Applied as a panel class; the size overrides live in styles.css.
-const turnsLarge = () => localStorage.getItem('muse_turns_large') === '1';
+const turnsLarge = () => localStorage.getItem('turndesk_turns_large') === '1';
 function _applyTurnsTextSize() { document.getElementById('panel-turns')?.classList.toggle('turns-large', turnsLarge()); }
 export function setTurnsLarge(on) {
-  localStorage.setItem('muse_turns_large', on ? '1' : '0');
+  localStorage.setItem('turndesk_turns_large', on ? '1' : '0');
   _applyTurnsTextSize(); renderTurnsDisplaySettings();
   showToast(on ? 'Turns board: large text (this device) ✓' : 'Turns board: standard text (this device) ✓');
 }
@@ -258,9 +258,9 @@ export function renderTurnsDisplaySettings() {
 // Device-local (like the text size) — how the tech box is set apart from the turn
 // bubbles so they don't read as one merged block. 'divider' = a thin rule; 'lane' =
 // the bubbles sit in a tinted recessed track. Applied in renderTurnsTechGrid.
-const turnsSep = () => localStorage.getItem('muse_turns_sep') === 'lane' ? 'lane' : 'divider';
+const turnsSep = () => localStorage.getItem('turndesk_turns_sep') === 'lane' ? 'lane' : 'divider';
 export function setTurnsSep(mode) {
-  localStorage.setItem('muse_turns_sep', mode === 'lane' ? 'lane' : 'divider');
+  localStorage.setItem('turndesk_turns_sep', mode === 'lane' ? 'lane' : 'divider');
   if (!turnsViewingHistory) renderTurnsTechGrid();
   renderTurnsSepSettings();
   showToast(mode === 'lane' ? 'Turns board: recessed lane (this device) ✓' : 'Turns board: divider line (this device) ✓');
@@ -281,13 +281,13 @@ function renderTurnsSepSettings() {
 // upcoming appt is ≤30 min away. Data comes from window.apptsForTurns() (calendar.js),
 // which already filters to upcoming-only (not passed / no-show / checked-in).
 let _turnsApptTimer = null;
-let _turnsApptShow = localStorage.getItem('muse_turns_appts_show') === '1';
+let _turnsApptShow = localStorage.getItem('turndesk_turns_appts_show') === '1';
 const _tEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function turnsUpcomingAppts() { try { return window.apptsForTurns?.() || []; } catch { return []; } }
 
 export function toggleTurnsApptStrip() {
   _turnsApptShow = !_turnsApptShow;
-  localStorage.setItem('muse_turns_appts_show', _turnsApptShow ? '1' : '0');
+  localStorage.setItem('turndesk_turns_appts_show', _turnsApptShow ? '1' : '0');
   applyTurnsApptStripVisibility();
 }
 function applyTurnsApptStripVisibility() {
@@ -832,7 +832,7 @@ export function shiftTurnsDate(dir) {
 }
 // Past-day grid: built from the synced transaction records for the date (the same
 // source Reports uses, so the two always agree), grouped per technician like the
-// live grid. The device-local muse_turns_history snapshot is used only as a
+// live grid. The device-local turndesk_turns_history snapshot is used only as a
 // fallback for the tech ordering. Renders IDENTICALLY to the live grid — party
 // dots (multiple guests on one ticket), split-tech link chips (one guest under
 // 2+ techs), and group outlines — but greyed + read-only so a past day can't be
@@ -1154,7 +1154,7 @@ export function exportTurnsPDF() {
 // Drag #turns-split-handle to widen/narrow the waiting+active panel; the tech grid
 // (flex-grow) takes the rest. Width persists per device (like the calendar-hours pref).
 (function initTurnsSplit() {
-  const KEY = 'muse_turns_split', MIN = 260, MAX = 680;
+  const KEY = 'turndesk_turns_split', MIN = 260, MAX = 680;
   const panel = () => document.getElementById('turns-side-panel');
   function restore() { const v = parseInt(localStorage.getItem(KEY) || '', 10); const p = panel(); if (p && v >= MIN && v <= MAX) p.style.width = v + 'px'; }
   document.addEventListener('DOMContentLoaded', restore); restore();

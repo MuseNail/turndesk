@@ -160,7 +160,7 @@ const upsert = entry => { dispatch('queue.upsert', { entry }); if (isPaidStatus(
 
 // ── Queue history (read-only past-day view) ───────
 // Source: the daily turns-history snapshot (turns.js archives q() into
-// muse_turns_history each night), so a past day's queue is recoverable without
+// turndesk_turns_history each night), so a past day's queue is recoverable without
 // any extra storage. View is read-only — actions only make sense on today's live queue.
 let queueViewingHistory = null;
 
@@ -174,7 +174,7 @@ export function openQueueHistoryPicker(ev) {
 }
 export function loadQueueHistory(dateStr) {
   if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }
-  const hist = JSON.parse(localStorage.getItem('muse_turns_history') || '{}')[dateStr];
+  const hist = JSON.parse(localStorage.getItem('turndesk_turns_history') || '{}')[dateStr];
   queueViewingHistory = { date: dateStr, snapshot: (hist && hist.snapshot) || [] };
   const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(dateStr);
   renderQueue();

@@ -173,7 +173,7 @@ export function formatElapsed(checkinTime) {
 let _idCounter = 0;
 export function newEntryId() {
   let dev = '';
-  try { dev = localStorage.getItem('muse_device_id') || ''; } catch {}
+  try { dev = localStorage.getItem('turndesk_device_id') || ''; } catch {}
   if (!dev) dev = 'd' + Math.random().toString(36).slice(2, 6);
   return `${dev}-${Date.now()}-${(++_idCounter).toString(36)}`;
 }
@@ -250,9 +250,9 @@ function _watchNumpadHost(inputEl) {
 
 // On a touch device the on-screen numpad replaces the OS keyboard; on a desktop (pointer:fine) the
 // native input is used instead. A device can opt INTO the on-screen numpad anyway (desktop testing,
-// or a desktop with a touchscreen) by setting localStorage muse_numpad_force = '1' — off by default,
+// or a desktop with a touchscreen) by setting localStorage turndesk_numpad_force = '1' — off by default,
 // so prod behavior is unchanged.
-const _numpadForced = () => { try { return localStorage.getItem('muse_numpad_force') === '1'; } catch { return false; } };
+const _numpadForced = () => { try { return localStorage.getItem('turndesk_numpad_force') === '1'; } catch { return false; } };
 export function openNumpad(inputEl, label, mode) {
   if (window.matchMedia('(pointer: fine)').matches && !_numpadForced()) return;
   _numpadMode = mode === 'percent' ? 'percent' : (mode === 'int' ? 'int' : 'cost'); _numpadTarget = inputEl;

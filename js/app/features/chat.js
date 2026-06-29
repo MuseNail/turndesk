@@ -21,7 +21,7 @@ import { PUSH_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
 const CHAT_CAP = 300;
-const SEEN_KEY = 'muse_chat_seen';   // device-local { channelKey: lastSeenMs }
+const SEEN_KEY = 'turndesk_chat_seen';   // device-local { channelKey: lastSeenMs }
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 // The dashboard defaults "me" to the active front-desk user. The staff app calls

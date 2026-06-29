@@ -1,6 +1,6 @@
 // ── Square customers: directory, autocomplete, upsert, staff import ─────────
 // Customers are owned by Square — kept as a device-local cache (localStorage
-// 'muse_customers'), NOT in the DO store. Staff import writes config.staff.
+// 'turndesk_customers'), NOT in the DO store. Staff import writes config.staff.
 
 import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
@@ -38,7 +38,7 @@ function _storeCustomers() {
   const fromStore = getState().customers || [];
   if (fromStore.length) return { list: fromStore, fromStore: true };
   try {
-    const cached = JSON.parse(localStorage.getItem('muse_customers') || '[]');
+    const cached = JSON.parse(localStorage.getItem('turndesk_customers') || '[]');
     return { list: cached.map(c => ({ id: c.squareId, firstName: c.firstName || '', lastName: c.lastName || '', phone: c.phone || '', email: c.email || '', squareId: c.squareId })), fromStore: false };
   } catch { return { list: [], fromStore: false }; }
 }
@@ -49,7 +49,7 @@ function rebuildDirectory() {
     id: c.id, given_name: c.firstName || '', family_name: c.lastName || '',
     phone: c.phone || '', display: [c.firstName, c.lastName].filter(Boolean).join(' '),
   }));
-  if (fromStore) { try { localStorage.setItem('muse_customers', JSON.stringify(customerDirectory)); } catch (e) {} }
+  if (fromStore) { try { localStorage.setItem('turndesk_customers', JSON.stringify(customerDirectory)); } catch (e) {} }
   window.renderCustomersTab?.();   // live-refresh the Customers tab if it's the open panel
 }
 rebuildDirectory();

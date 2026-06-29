@@ -16,12 +16,12 @@ const ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.
   : PROD_ORIGIN;
 const WS_URL     = ORIGIN.replace(/^http/, 'ws') + '/ws';
 const STATE      = ORIGIN + '/state';
-const OUTBOX_KEY = 'muse_outbox';
-const FAILED_KEY = 'muse_failed_ops';   // dead-letter: writes the server rejected (never silently dropped)
+const OUTBOX_KEY = 'turndesk_outbox';
+const FAILED_KEY = 'turndesk_failed_ops';   // dead-letter: writes the server rejected (never silently dropped)
 
 export const DEVICE_ID = (() => {
-  let id = localStorage.getItem('muse_device_id');
-  if (!id) { id = 'dev-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('muse_device_id', id); }
+  let id = localStorage.getItem('turndesk_device_id');
+  if (!id) { id = 'dev-' + Math.random().toString(36).slice(2, 8); localStorage.setItem('turndesk_device_id', id); }
   return id;
 })();
 

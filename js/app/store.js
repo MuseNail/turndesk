@@ -6,9 +6,9 @@
 // No global mutable scope: feature modules import { getState, subscribe } and
 // dispatch writes through sync.js (which calls applyChange + sends the mutation).
 
-const CACHE_KEY = 'muse_state_cache';
+const CACHE_KEY = 'turndesk_state_cache';
 
-// Canonical config field names (clean slate — not the old muse_* Sheets keys).
+// Canonical config field names (clean slate — not the old turndesk_* Sheets keys).
 function emptyConfig() {
   return {
     staff: [], services: [], items: [], fees: [], fd_users: [],

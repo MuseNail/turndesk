@@ -24,7 +24,7 @@ import { drawerReportHtml, cdPrintShift, cdPrintCounts } from './features/cashdr
 
 const cfg = () => store.getState().config;
 
-const MY_KEY = 'muse_reports_uid';         // device-local: which fd user is signed in here
+const MY_KEY = 'turndesk_reports_uid';         // device-local: which fd user is signed in here
 let myUid = localStorage.getItem(MY_KEY) || null;
 let _view = 'reports';                     // 'reports' | 'payroll'
 let _range = 'today';                      // 'today' | 'yesterday' | 'week' | 'payperiod' | 'month'

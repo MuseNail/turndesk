@@ -140,12 +140,12 @@ export function openClockStationSetting() {
 // once). Stored against the current station id, so an evicted/cleared localStorage drops the
 // dismissal too — which is exactly when we want the nudge to reappear.
 export function dismissClockNudge() {
-  try { localStorage.setItem('muse_clock_nudge_dismissed', clockStationDeviceId()); } catch {}
+  try { localStorage.setItem('turndesk_clock_nudge_dismissed', clockStationDeviceId()); } catch {}
   _hideClockPopover(); renderClockButton();
 }
 function _nudgeDismissed() {
   const s = clockStationDeviceId(); if (!s) return false;
-  try { return localStorage.getItem('muse_clock_nudge_dismissed') === s; } catch { return false; }
+  try { return localStorage.getItem('turndesk_clock_nudge_dismissed') === s; } catch { return false; }
 }
 // Tap-outside closes the popover (but not a tap on the clock button or inside the popover).
 document.addEventListener('click', (e) => {
@@ -158,8 +158,8 @@ document.addEventListener('click', (e) => {
 // ── Time-clock station (one designated device) ───────────────────────────────
 // Clocking only works on the device an admin designated as the salon station — so a
 // front-desk user can't clock in from a personal phone. The chosen device's id is stored
-// in synced config (timeclock_device_id) and compared against this device's muse_device_id.
-function _myDeviceId() { try { return localStorage.getItem('muse_device_id') || ''; } catch { return ''; } }
+// in synced config (timeclock_device_id) and compared against this device's turndesk_device_id.
+function _myDeviceId() { try { return localStorage.getItem('turndesk_device_id') || ''; } catch { return ''; } }
 export function clockStationDeviceId() { return cfg().timeclock_device_id || ''; }
 export function isClockStation() { const s = clockStationDeviceId(); return !!s && s === _myDeviceId(); }
 export function setThisClockStation() {
