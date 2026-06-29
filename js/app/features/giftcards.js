@@ -3,9 +3,13 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
-import { customerDirectory } from './square-customers.js';
+import { customerDirectory, ensureCustomerInStore } from './square-customers.js';
+import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
+import { chargeOnHelcim, helcimActive } from './helcim.js';
+import { getActiveUser } from '../session.js';
 
 const giftCards = () => getState().giftcards;
+const cfg = () => getState().config;
 
 // A card's redemptions = explicit [{date,amount}] array, or a legacy single
 // dateUsed/amountUsed migrated to one entry. gcTotalUsed = sum of all redemptions.
@@ -24,7 +28,7 @@ function _gcCommit(card) {
   const redemptions = (card.redemptions || []).filter(r => r && ((r.amount || 0) > 0 || r.date));
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const dateUsed = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
-  dispatch('giftcard.save', { card: { ...card, redemptions, amountUsed, dateUsed, updatedAt: new Date().toISOString() } });
+  dispatch('giftcard.save', { card: { ...card, redemptions, amountUsed, dateUsed } });   // updatedAt stamped numerically in dispatch()
 }
 export function gcReverseTicket(ticketId) {
   if (!ticketId) return;
@@ -41,8 +45,39 @@ export function gcSyncTicket(ticketId, items) {
   (items || []).forEach(it => {
     if (!(it.amount > 0)) return;
     const g = giftCards().find(x => x.id === it.giftcardId); if (!g) return;
-    _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: +it.amount, ticketId }] });
+    // Hard clamp at the remaining balance (this ticket's prior draws were just reversed above) so
+    // a stale picker amount or a concurrent redemption on another device can't overdraw the card.
+    const amt = Math.min(+it.amount, Math.max(0, (g.amount || 0) - gcTotalUsed(g)));
+    if (amt <= 0) return;
+    _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: amt, ticketId }] });
   });
+}
+
+// ── Gift card SOLD on a ticket / Quick Sale (Phase 3) ───────────────────────
+// A gift-card line is charged with the ticket but is NOT income — on paid it auto-creates a
+// ledger entry (counts in Gift Cards Sold, redeemable), tied to the ticket so a reopen reverses
+// it, and the recipient is auto-added to the directory (phone-keyed). Total used by the charge.
+export const giftSaleTotal = e => (e?.giftcardSales || []).reduce((s, g) => s + (+g.amount || 0), 0);
+export function gcCreateSalesFromTicket(ticketId, sales) {
+  if (!ticketId || !Array.isArray(sales)) return;
+  sales.forEach((s, i) => {
+    if (!(+s.amount > 0)) return;
+    const id = `gc-tkt-${ticketId}-${i}`;
+    if (giftCards().some(g => g.id === id)) return;   // idempotent — already created for this ticket
+    const raw = String(s.serial || '').trim();
+    const serial = /^\d+$/.test(raw) ? raw.padStart(8, '0') : raw;
+    dispatch('giftcard.save', { card: {
+      id, datePurchased: todayStr(), serial, amount: +s.amount,
+      phone: s.phone || '', from: s.from || '', to: s.to || '', notes: '',
+      redemptions: [], amountUsed: 0, dateUsed: '',
+      saleTicketId: String(ticketId), createdAt: new Date().toISOString(),
+    } });
+    if (s.to && s.phone) { try { ensureCustomerInStore({ name: s.to, phone: s.phone }); } catch {} }
+  });
+}
+export function gcReverseSalesForTicket(ticketId) {
+  if (!ticketId) return;
+  giftCards().filter(g => g.saleTicketId === String(ticketId)).forEach(g => dispatch('giftcard.delete', { id: g.id }));
 }
 
 let _gcSortField = 'datePurchased', _gcSortDir = 'desc', _gcHideZero = false;
@@ -54,6 +89,8 @@ export function showAddGiftCard() {
   ['gc-edit-id','gc-serial','gc-amount','gc-phone','gc-from','gc-to','gc-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('gc-date').value = todayStr();
   _gcRedeem = []; renderGcRedemptions(); _gcShowDelete(false);
+  const pm = document.getElementById('gc-paymethod'); if (pm) pm.value = 'none';   // default: no charge
+  document.getElementById('gc-paymethod-row')?.classList.remove('hidden');         // payment offered on NEW only
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('gc-serial').focus(), 100);
@@ -70,8 +107,11 @@ export function showEditGiftCard(id) {
   document.getElementById('gc-from').value = gc.from || '';
   document.getElementById('gc-to').value = gc.to || '';
   document.getElementById('gc-notes').value = gc.notes || '';
-  _gcRedeem = gcRedemptions(gc).map(r => ({ date: r.date || '', amount: r.amount || 0 }));
+  // Preserve ticketId on each redemption so auto-reversal (gcReverseTicket on reopen) still matches
+  // after a manual edit+save. Hand-added rows simply have no ticketId.
+  _gcRedeem = gcRedemptions(gc).map(r => ({ date: r.date || '', amount: r.amount || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
   renderGcRedemptions(); _gcShowDelete(true);
+  document.getElementById('gc-paymethod-row')?.classList.add('hidden');   // no re-charge when editing an existing card
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -120,28 +160,64 @@ export function gcPickRecipient(i) {
 }
 export function gcHideRecipientAc() { setTimeout(() => document.getElementById('gc-to-ac')?.classList.add('hidden'), 150); }
 
-export function saveGiftCard() {
+export async function saveGiftCard() {
   const editId = document.getElementById('gc-edit-id').value;
   const existing = editId ? giftCards().find(g => g.id === editId) : null;
   const rawSerial = document.getElementById('gc-serial').value.trim();
   const serial = /^\d+$/.test(rawSerial) ? rawSerial.padStart(8, '0') : rawSerial;   // 29 → 00000029
-  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0 }));
+  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
+  const amount = parseFloat(document.getElementById('gc-amount').value) || 0;
+  const datePurchased = document.getElementById('gc-date').value;
+  const phone = document.getElementById('gc-phone').value.trim();
+  const from = document.getElementById('gc-from').value.trim();
+  const to = document.getElementById('gc-to').value.trim();
+  const notes = document.getElementById('gc-notes').value.trim();
+  // A card can never be redeemed for more than its value — reject so a typo can't drive a
+  // negative balance / wrong outstanding-liability figure.
+  if (amountUsed > amount + 0.005) { showToast(`Redemptions ($${amountUsed.toFixed(2)}) exceed the card value ($${amount.toFixed(2)}).`); return; }
+
+  // NEW card sold with a payment method → charge the purchase amount through Square FIRST, and
+  // only register the card if it succeeds (so the registry never shows a card that wasn't paid).
+  let squarePaymentIds = existing?.squarePaymentIds || null, salePaidBy = existing?.salePaidBy || null;
+  const payMethod = editId ? 'none' : (document.getElementById('gc-paymethod')?.value || 'none');
+  if (!editId && payMethod !== 'none') {
+    if (!(amount > 0)) { showToast('Enter a purchase amount to charge.'); return; }
+    const cents = Math.round(amount * 100);
+    const loc = cfg().square_config?.locationId;
+    const note = `Gift card${serial ? ' #' + serial : ''}${to ? ' · ' + to : ''}`;
+    const idem = `gcsale-${(serial || from || to || 'x')}-${cents}-${datePurchased}-${payMethod}`;   // stable so a retry can't double-charge
+    const btn = document.querySelector('#gc-modal button[onclick="saveGiftCard()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Charging…'; }
+    let res;
+    if (helcimActive()) {
+      // Card → charge on the Helcim terminal; cash/Zelle → app-only (collected manually, no processor record).
+      if (payMethod === 'card') { const hr = await chargeOnHelcim(amount, idem); res = hr.ok ? { ok: true, paymentId: hr.transactionId } : { ok: false, error: hr.error }; }
+      else res = { ok: true, paymentId: null };
+    } else {
+      if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
+      else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
+      else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
+      else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Gift Card'; }
+    if (!res.ok) { showToast('Gift-card payment failed: ' + (res.error || 'error') + ' — card not created.'); return; }
+    squarePaymentIds = res.paymentId ? [res.paymentId] : null;
+    salePaidBy = payMethod;
+    showToast(`Gift card charged $${amount.toFixed(2)} (${payMethod}) ✓`);
+  }
+
   const card = {
     id: editId || 'gc-' + Date.now(),
-    datePurchased: document.getElementById('gc-date').value,
-    serial,
-    amount: parseFloat(document.getElementById('gc-amount').value) || 0,
-    phone: document.getElementById('gc-phone').value.trim(),
-    from: document.getElementById('gc-from').value.trim(),
-    to: document.getElementById('gc-to').value.trim(),
+    datePurchased, serial, amount, phone, from, to,
     redemptions,
     amountUsed,          // running total — kept for display + report/back-compat
     dateUsed: lastDate,  // last redemption date — legacy compat
-    notes: document.getElementById('gc-notes').value.trim(),
+    notes,
     createdAt: existing?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    // updatedAt/updatedBy are stamped numerically in dispatch() so the stale-write guard can compare them.
+    ...(squarePaymentIds ? { squarePaymentIds } : {}),
+    ...(salePaidBy ? { salePaidBy } : {}),
   };
   dispatch('giftcard.save', { card });
   closeGcModal();
@@ -199,9 +275,10 @@ export function renderGiftCards() {
   list.innerHTML = filtered.map(g => {
     const used = gcTotalUsed(g);
     const balance = (g.amount||0) - used;
-    const isRedeemed = balance <= 0 && used > 0;
-    const isPartial = used > 0 && balance > 0;
-    const sc = isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#1a5252' };
+    const isOverdrawn = balance < -0.005;   // redeemed for more than its value — surface it, don't hide
+    const isRedeemed = !isOverdrawn && balance <= 0.005 && used > 0;
+    const isPartial = used > 0 && balance > 0.005;
+    const sc = isOverdrawn ? { bg:'rgba(229,90,87,0.12)', border:'#c53030', label:'Overdrawn', lc:'#c53030' } : isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#1a5252' };
     return `<div onclick="showEditGiftCard('${g.id}')" title="Edit gift card" class="rounded-xl border flex items-center gap-0 overflow-hidden cursor-pointer hover:shadow-md transition-shadow" style="background:${sc.bg};border-color:${sc.border}">
       <div class="flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-xl px-4 self-stretch" style="width:88px;background:${sc.border}22;border-right:1px solid ${sc.border}40;color:${sc.lc}">$${(g.amount||0).toFixed(0)}</div>
       <div class="flex-shrink-0 flex items-center justify-center px-3" style="width:96px"><span class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style="background:${sc.border}20;color:${sc.lc}">${sc.label}</span></div>
@@ -211,7 +288,7 @@ export function renderGiftCards() {
       <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.to ? `<span class="text-on-surface">${g.to}</span>` : '<span class="text-outline-variant">—</span>'}</div>
       <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${g.phone || '—'}</div>
       <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${g.notes || ''}</div>
-      <div class="flex-shrink-0 text-right px-4 py-3" style="width:96px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${used>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${used.toFixed(2)} used</div>`:''}</div>
+      <div class="flex-shrink-0 text-right px-4 py-3" style="width:96px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${isOverdrawn?'#c53030':balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${used>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${used.toFixed(2)} used</div>`:''}</div>
     </div>`;
   }).join('');
 }
@@ -221,9 +298,9 @@ export function exportAllData() {
   const s = getState();
   const backup = { exportedAt: new Date().toISOString(), appVersion: APP_NAME + '-' + APP_VERSION, state: { config: s.config, queue: s.queue, records: s.records, giftcards: s.giftcards } };
   const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
-  const a = document.createElement('a'); a.href = url; a.download = `turndesk-backup-${todayStr()}.json`; a.click(); URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href = url; a.download = `muse-backup-${todayStr()}.json`; a.click(); URL.revokeObjectURL(url);
   const now = new Date().toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  localStorage.setItem('turndesk_last_backup', now);
+  localStorage.setItem('muse_last_backup', now);
   const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = now;
   showToast('Backup downloaded ✓');
 }
@@ -255,7 +332,7 @@ export function confirmClearAllRecords() {
     window.showWarnModal?.('Clear All Records?', 'This permanently removes every transaction record. Export a backup first if you need this data.', () => {
       const _n = getState().records.filter(r => r.status !== 'deleted').length;
       getState().records.forEach(r => { if (r.status !== 'deleted') dispatch('record.delete', { id: r.id, reason: 'bulk clear', by: 'admin' }); });
-      localStorage.removeItem('turndesk_deletion_log');
+      localStorage.removeItem('muse_deletion_log');
       window.logAudit?.('Clear records', `Cleared all transaction records (${_n})`);
       window.renderTransactions?.(); window.runReport?.();
       showToast('All records cleared ✓');

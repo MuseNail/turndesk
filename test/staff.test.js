@@ -73,19 +73,19 @@ const histQueue = [
   { id: 12, name: 'Nia',  checkinTime: D, status: 'paid', completedAt: D, assignments: [{ serviceId: 's3', techId: 'a', status: 'paid', cost: 55 }] },
 ];
 const histRecords = [
-  { id: 12, name: 'Nia (rec dup)', checkinTime: D, status: 'paid', assignments: [{ serviceId: 's3', techId: 'a', status: 'paid', cost: 999 }] }, // dup id → queue wins
+  { id: 12, name: 'Nia (rec dup)', checkinTime: D, status: 'paid', assignments: [{ serviceId: 's3', techId: 'a', status: 'paid', cost: 999 }] }, // dup id → record wins (source of truth)
   { id: 20, name: 'Omar', checkinTime: D, status: 'paid', completedAt: D, assignments: [{ serviceId: 's1', techId: 'a', status: 'paid', cost: 30 }] },
   { id: 21, name: 'Pia',  checkinTime: D, status: 'paid', assignments: [{ serviceId: 's1', techId: 'b', status: 'paid', cost: 70 }] }, // other tech
   { id: 22, name: 'Gone', checkinTime: D, status: 'deleted', assignments: [{ serviceId: 's1', techId: 'a', status: 'paid', cost: 500 }] }, // deleted
 ];
 
-test('myHistory sums complete + paid for the tech, queue wins on dup, excludes other/deleted/unfinished', () => {
+test('myHistory sums complete + paid for the tech, RECORD wins on dup, excludes other/deleted/unfinished', () => {
   const lines = myHistory(histQueue, histRecords, [], 'a');
-  // Liv 40 (complete) + Nia 55 (paid, queue wins over 999) + Omar 30 (record) = 3 lines / $125
+  // Liv 40 (complete, no record → from queue) + Nia 999 (paid, RECORD wins over queue's 55) + Omar 30 (record) = 3 lines / $1069
   assert.equal(lines.length, 3);
-  assert.equal(lines.reduce((s, l) => s + l.cost, 0), 125);
+  assert.equal(lines.reduce((s, l) => s + l.cost, 0), 1069);
   assert.ok(!lines.some(l => l.name === 'Mara'));            // unfinished excluded
-  assert.ok(!lines.some(l => l.cost === 999));               // queue won the dup
+  assert.ok(!lines.some(l => l.cost === 55));                // record won the dup (queue's 55 ignored)
   assert.ok(!lines.some(l => l.name === 'Pia'));             // other tech
   assert.ok(!lines.some(l => l.cost === 500));               // deleted
 });

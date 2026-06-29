@@ -28,25 +28,51 @@ function median(sorted) {
   return n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-// Average completed service time for a (tech, service) pair, in ms.
-// Returns { avgMs:null, n } when there isn't enough clean data to be meaningful.
-export function avgServiceTime(techId, serviceId) {
-  if (!techId || !serviceId) return { avgMs: null, n: 0 };
-  // Per-tech reset: ignore visits before this tech's benchmark cutoff (non-destructive —
-  // records are untouched; the average just rebuilds from visits on/after the reset).
-  const resetTs = getState().config?.svc_time_reset?.[techId] || 0;
-  const samples = [];
-  (getState().records || []).forEach(r => {
-    if (resetTs && new Date(r.checkinTime).getTime() < resetTs) return;
-    (r.assignments || []).forEach(a => {
-      if (a.techId === techId && a.serviceId === serviceId && a.serviceMs > 0) samples.push(a.serviceMs);
-    });
-  });
+// Reduce a list of in-service durations (ms) to an average with outlier rejection.
+function avgFromSamples(samples) {
   if (samples.length < MIN_SAMPLES) return { avgMs: null, n: samples.length };
   const med = median([...samples].sort((x, y) => x - y));
   const kept = samples.filter(s => s >= med * OUTLIER_LO && s <= med * OUTLIER_HI);
   if (kept.length < MIN_SAMPLES) return { avgMs: null, n: kept.length };
   return { avgMs: kept.reduce((s, x) => s + x, 0) / kept.length, n: kept.length };
+}
+
+// Per-render-pass memo. avgServiceTime is called once per assignment per service on the floor,
+// which re-renders every 10s — recomputing from the full record history for each bubble is
+// O(records × seats). Instead build every (tech, service) average in one pass over the records
+// and cache it, keyed on the store's data-revision counter so it rebuilds only when state
+// actually changes. (records are mutated in place, so the array ref alone isn't a safe signal.)
+let _cacheRev = -1;
+let _cacheMap = null;
+function avgMap() {
+  const st = getState();
+  if (st.rev === _cacheRev && _cacheMap) return _cacheMap;
+  const resets = st.config?.svc_time_reset || null;
+  const groups = new Map();   // `${techId}|${serviceId}` -> ms[]
+  (st.records || []).forEach(r => {
+    const t = new Date(r.checkinTime).getTime();
+    (r.assignments || []).forEach(a => {
+      if (!a.techId || !a.serviceId || !(a.serviceMs > 0)) return;
+      // Per-tech reset: ignore visits before this tech's benchmark cutoff (non-destructive —
+      // records are untouched; the average just rebuilds from visits on/after the reset).
+      const resetTs = (resets && resets[a.techId]) || 0;
+      if (resetTs && t < resetTs) return;
+      const k = a.techId + '|' + a.serviceId;
+      let arr = groups.get(k); if (!arr) { arr = []; groups.set(k, arr); }
+      arr.push(a.serviceMs);
+    });
+  });
+  const map = new Map();
+  groups.forEach((samples, k) => map.set(k, avgFromSamples(samples)));
+  _cacheMap = map; _cacheRev = st.rev;
+  return map;
+}
+
+// Average completed service time for a (tech, service) pair, in ms.
+// Returns { avgMs:null, n } when there isn't enough clean data to be meaningful.
+export function avgServiceTime(techId, serviceId) {
+  if (!techId || !serviceId) return { avgMs: null, n: 0 };
+  return avgMap().get(techId + '|' + serviceId) || { avgMs: null, n: 0 };
 }
 
 // Elapsed in-service time for one assignment right now (live spell + any banked ms).

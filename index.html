@@ -2,21 +2,22 @@
 <html lang="en" class="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <!-- Force browsers to always fetch fresh HTML — prevents stale cached versions after deploys -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>TurnDesk — Check-In</title>
+<title>Muse Nails & Spa — Check-In</title>
 
 <!-- PWA -->
-<link rel="manifest" href="/turndesk/manifest.json">
+<link rel="manifest" href="/musedashboard/manifest.json">
 <meta name="theme-color" content="#1a5252">
 <!-- iOS PWA — Safari ignores the manifest for most of these -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="TurnDesk">
-<link rel="apple-touch-icon" href="/turndesk/icons/icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Muse">
+<link rel="apple-touch-icon" href="/musedashboard/icons/icon-192.png">
 
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -74,12 +75,12 @@ tailwind.config = {
 
   <!-- Logo -->
   <div class="flex flex-col items-center fade-up">
-    <img id="logo-welcome" src="" alt="TurnDesk"
+    <img id="logo-welcome" src="" alt="Muse Nails & Spa"
          class="h-56 md:h-64 w-auto object-contain mx-auto" style="border-radius:8px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-welcome').style.display='block'">
     <div id="logo-text-welcome" style="display:none" class="text-center">
-      <div class="text-5xl font-headline font-bold tracking-widest text-on-surface">TURNDESK</div>
-      <div class="text-xs font-body tracking-[0.3em] text-secondary uppercase mt-1">Salon Turns &amp; POS</div>
+      <div class="text-5xl font-headline font-bold tracking-widest text-on-surface">MUSE</div>
+      <div class="text-xs font-body tracking-[0.3em] text-secondary uppercase mt-1">Nails &amp; Spa</div>
     </div>
   </div>
 
@@ -142,11 +143,11 @@ tailwind.config = {
       <span class="material-symbols-outlined text-lg">arrow_back</span>
       Back
     </button>
-    <img id="logo-checkin" src="" alt="TurnDesk" class="h-14 w-auto object-contain" style="border-radius:6px;padding:2px;"
+    <img id="logo-checkin" src="" alt="Muse" class="h-14 w-auto object-contain" style="border-radius:6px;padding:2px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-checkin').style.display='block'">
     <div id="logo-text-checkin" style="display:none" class="text-right">
-      <div class="text-lg font-headline font-bold tracking-widest">TURNDESK</div>
-      <div class="text-[9px] tracking-[0.25em] text-secondary uppercase">Salon Turns &amp; POS</div>
+      <div class="text-lg font-headline font-bold tracking-widest">MUSE</div>
+      <div class="text-[9px] tracking-[0.25em] text-secondary uppercase">Nails &amp; Spa</div>
     </div>
     <div class="w-16"></div><!-- spacer -->
   </header>
@@ -201,32 +202,20 @@ tailwind.config = {
   <!-- Top bar: logo left, nav centered, sync+user right -->
   <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:62px;padding:0 12px;min-width:0">
     <!-- Logo -->
-    <img id="logo-desk" src="" alt="TurnDesk" class="h-[60px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
+    <img id="logo-desk" src="" alt="Muse" class="h-[60px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
     <!-- Nav — centered, takes remaining space -->
-    <nav class="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scroll min-w-0" style="min-width:0">
-      <button class="dash-tab active" id="nav-turns" onclick="showDashPanel('turns')">
-        <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Turns
-      </button>
-      <button class="dash-tab" id="nav-floorplan" onclick="showDashPanel('floorplan')">
-        <span class="material-symbols-outlined" style="font-size:18px">grid_view</span> Floor Plan
-      </button>
-      <button class="dash-tab" id="nav-queue" onclick="showDashPanel('queue')">
-        <span class="material-symbols-outlined" style="font-size:18px">queue</span> Queue
+    <nav id="dash-nav" class="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scroll min-w-0" style="min-width:0;justify-content:safe center">
+      <button class="dash-tab active" id="nav-floor" onclick="showDashGroup('floor')">
+        <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Floor
       </button>
       <button class="dash-tab" id="nav-calendar" onclick="showDashPanel('calendar')">
         <span class="material-symbols-outlined" style="font-size:18px">calendar_month</span> Calendar
       </button>
-      <button class="dash-tab" id="nav-reports" onclick="showDashPanel('reports')">
+      <button class="dash-tab" id="nav-money" onclick="showDashGroup('money')">
+        <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> Sales
+      </button>
+      <button class="dash-tab" id="nav-reportsgrp" onclick="showDashGroup('reportsgrp')">
         <span class="material-symbols-outlined" style="font-size:18px">bar_chart</span> Reports
-      </button>
-      <button class="dash-tab" id="nav-transactions" onclick="showDashPanel('transactions')">
-        <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> Transactions
-      </button>
-      <button class="dash-tab" id="nav-payroll" onclick="showDashPanel('payroll')">
-        <span class="material-symbols-outlined" style="font-size:18px">payments</span> Payroll
-      </button>
-      <button class="dash-tab" id="nav-giftcards" onclick="showDashPanel('giftcards')">
-        <span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> Gift Cards
       </button>
       <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
         <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
@@ -234,32 +223,74 @@ tailwind.config = {
     </nav>
     <!-- Right side: sync pills + actions — locked right -->
     <div class="flex items-center gap-1.5 flex-shrink-0">
+      <button onclick="openGlobalSearch()" title="Search customers, tickets, gift cards (anything)" aria-label="Search"
+        class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">search</span>
+      </button>
       <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="forceSyncNow()" title="Live sync — tap to re-sync now">
-        <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
-        <span id="sheets-sync-text">Live</span>
+        <span class="sync-dot" id="conn-dot" style="background:#adb3b5"></span>
+        <span id="conn-text">Live</span>
       </div>
       <div id="cal-sync-pill" class="hidden items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="calForceSync()" title="Tap to sync calendar">
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="turndesk"></span>
-      <button onclick="toggleChat()" id="chat-btn" title="Staff chat" class="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chat</span>
-        <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
+      <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="musedashboard"></span>
+      <!-- Popover for the clock notice / admin nudge (filled by timeclock.js). -->
+      <div id="clock-popover" class="hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl p-4" style="position:fixed;z-index:62;width:264px"></div>
+      <button onclick="toggleChat()" id="chat-btn" title="Staff chat" class="relative flex items-center justify-center w-11 h-11 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">chat</span>
+        <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
       </button>
       <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">tablet</span>
       </button>
-      <button onclick="logout()" id="logged-in-user-btn" title="Log out"
-        class="flex items-center gap-2 px-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors" style="height:32px">
-        <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
-        <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">logout</span>
-      </button>
+      <!-- User bubble: tap to open account menu (clock in/out + log out). -->
+      <div style="position:relative">
+        <button onclick="toggleUserMenu()" id="logged-in-user-btn" title="Account"
+          class="relative flex items-center gap-2 px-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors" style="height:32px">
+          <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
+          <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
+          <span id="clock-btn-dot" class="hidden absolute" style="top:-2px;right:-2px;width:10px;height:10px;border-radius:9999px;border:2px solid var(--surface);background:#f59e0b"></span>
+        </button>
+        <!-- User menu dropdown -->
+        <div id="user-menu" class="hidden" style="position:absolute;right:0;top:40px;z-index:61;min-width:196px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;padding:6px 0">
+          <button id="clock-btn" onclick="onClockBtn();closeUserMenu()" style="display:none;width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">schedule</span>
+            <span id="clock-btn-label">Clock in</span>
+          </button>
+          <div id="user-menu-clock-divider" style="display:none;height:1px;background:var(--surface-container-high);margin:4px 0"></div>
+          <button onclick="openPriceMenu();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">request_quote</span>
+            Price Menu
+          </button>
+          <button onclick="openAppGuide();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">menu_book</span>
+            App guide
+          </button>
+          <button onclick="openAppQuickRef();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">bolt</span>
+            Quick reference
+          </button>
+          <button onclick="showWhatsNew();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">new_releases</span>
+            What's new
+          </button>
+          <div style="height:1px;background:var(--surface-container-high);margin:4px 0"></div>
+          <button onclick="logout()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">logout</span>
+            Log out
+          </button>
+        </div>
+      </div>
     </div>
   </header>
+
+  <!-- Sub-view switcher for grouped tabs (Floor: Turns|Queue|Floor Plan · Transactions|Gift Cards ·
+       Reports|Payroll · Settings→Customers back-nav). Rendered by main.js renderDashSubnav(). -->
+  <div id="dash-subnav" class="hidden"></div>
 
   <!-- Main content (full width, no sidebar). The body scrolls (this grows with content);
        no overflow here so panel .dash-head bars stick to the body viewport under the nav. -->
@@ -268,11 +299,11 @@ tailwind.config = {
       <!-- ── FLOOR PLAN PANEL ── -->
       <div class="dash-panel" id="panel-floorplan">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
-          <h2 class="text-lg font-headline font-bold text-on-surface">Floor Plan</h2>
-          <span id="floorplan-mode-label" class="text-xs font-body text-on-surface-variant px-2 py-0.5 rounded-full bg-surface-container">Live</span>
-          <div class="ml-auto flex gap-2 items-center">
+          <span class="subnav-slot" id="subnav-slot-floorplan" style="flex:0 1 auto"></span>
+          <div id="floorplan-tray" class="flex-1 min-w-0"></div>
+          <div class="flex gap-2 items-center flex-shrink-0">
             <div id="floorplan-edit-tools" class="hidden flex items-center gap-1">
-              <button onclick="fpSelectAll()" title="Select all stations" class="border border-outline-variant text-on-surface-variant hover:bg-surface-container px-2.5 py-1.5 rounded-lg text-xs font-body transition-all">Select all</button>
+              <button onclick="fpSelectAll()" title="Select all stations" class="btn-secondary">Select all</button>
               <div class="flex items-center gap-0.5 border border-outline-variant rounded-lg px-1 py-0.5">
                 <button onclick="fpZoom(-1)" title="Zoom out" class="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container text-lg leading-none">−</button>
                 <span id="floorplan-zoom-label" class="text-[11px] font-body text-on-surface-variant w-9 text-center">100%</span>
@@ -280,11 +311,10 @@ tailwind.config = {
                 <button onclick="fpZoomFit()" title="Fit layout to screen" class="px-2 h-7 rounded text-on-surface-variant hover:bg-surface-container text-xs font-body">Fit</button>
               </div>
             </div>
-            <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden border border-outline-variant text-on-surface-variant hover:bg-surface-container px-3 py-1.5 rounded-lg text-xs font-body transition-all">Reset layout</button>
-            <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="flex items-center gap-1 border border-primary text-primary hover:bg-primary hover:text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
+            <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden btn-secondary">Reset layout</button>
+            <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
           </div>
         </div>
-        <div id="floorplan-tray" class="mb-3"></div>
         <div id="floorplan-props" class="hidden bg-surface-container rounded-xl px-4 py-3 mb-3"></div>
         <div id="floorplan-grid" style="position:relative"></div>
         <div id="floorplan-staff-row" class="mt-4"></div>
@@ -294,28 +324,32 @@ tailwind.config = {
       <div class="dash-panel active" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
         <div class="dash-head flex gap-2 flex-wrap items-center">
-          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-primary text-on-primary transition-all">All</button>
-          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Waiting</button>
-          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">In Service</button>
-          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Complete</button>
-          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Paid</button>
-          <!-- Done toggle -->
-          <button onclick="toggleDoneVisibility()" id="done-toggle-btn"
-            class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all border border-outline-variant/40">
-            <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
-            <span id="done-toggle-label">Hide Paid</span>
-          </button>
+          <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+          <span class="subnav-slot" id="subnav-slot-queue" style="flex:0 1 auto"></span>
           <!-- History date picker -->
-          <div class="flex items-center gap-2 ml-2">
+          <div class="flex items-center gap-2 mr-1">
             <button onclick="shiftQueueDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="queue-date-btn-val">Today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="queue-date-btn-val">Today</span>
             </button>
             <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
           </div>
-          <button onclick="showManualAdd()" class="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
+          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn fchip-on px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">All <span id="tab-count-all" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Waiting <span id="tab-count-waiting" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">In Service <span id="tab-count-inservice" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Done <span id="tab-count-complete" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Paid <span id="tab-count-paid" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <!-- Done toggle -->
+          <button onclick="toggleDoneVisibility()" id="done-toggle-btn"
+            class="chip">
+            <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
+            <span id="done-toggle-label">Hide Paid</span>
+          </button>
+          <button onclick="openQuickSale()" class="ml-auto btn-secondary">
+            <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Quick Sale
+          </button>
+          <button onclick="showManualAdd()" class="btn-primary">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
           </button>
         </div>
@@ -329,100 +363,95 @@ tailwind.config = {
 
       <!-- ── REPORTS PANEL ── -->
       <div class="dash-panel" id="panel-reports">
-        <div class="dash-head flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Reports</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">Income, staff earnings & commissions</p>
-          </div>
-          <div class="flex gap-2 flex-wrap justify-end">
-            <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV
-            </button>
-            <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF
-            </button>
-            <button onclick="exportReportLink()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link
-            </button>
-          </div>
-        </div>
-
-        <!-- Date range selector (Square-style: Date button + comparison) -->
+        <!-- Date range selector (Square-style: Date button + comparison) + exports -->
         <div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high mb-3">
           <div class="flex gap-2 flex-wrap items-center">
             <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label date-pick-val">Today</span>
             </button>
             <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
             <button onclick="openCompareMenu(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
             </button>
+            <span class="subnav-slot" id="subnav-slot-reports"></span>
+            <div class="flex gap-2 flex-wrap ml-auto">
+              <button onclick="exportReportExcel()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+              <button onclick="exportReportPDF()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+              <button onclick="exportReportLink()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link</button>
+            </div>
           </div>
           <p class="text-xs font-body text-on-surface-variant mt-1.5" id="report-range-label">Showing: Today</p>
         </div>
 
-        <!-- Summary cards -->
-        <div class="grid grid-cols-3 gap-3 mb-3">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Total Billed + gift card sales − redemptions (true new cash collected)">
+        <!-- Headline strip — the daily-glance numbers (money · guests · card · cash) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="All money collected: Total Billed + gift card sales − redemptions + tips">
             <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-gross-income">$0.00</div>
             <span class="rpt-delta" id="rpt-gross-income-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gross Income</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Money Collected</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-total-guests">0</div>
             <span class="rpt-delta" id="rpt-total-guests-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Guests Served</div>
           </div>
+          <div onclick="drillDownPay('card')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card charges including tips — matches your Square deposit. Tap for the tickets behind it.">
+            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-pay-card">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-card-delta"></span>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-card"></div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Card (incl. tips)</div>          </div>
+          <div onclick="drillDownPay('cash')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Cash collected (drawer). Tap for the tickets behind it.">
+            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-pay-cash">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-cash-delta"></span>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-cash"></div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>          </div>
+        </div>
+
+        <!-- Secondary metrics (smaller) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-avg-ticket">$0.00</div>
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-avg-ticket">$0.00</div>
             <span class="rpt-delta" id="rpt-avg-ticket-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Avg Ticket</div>
           </div>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-5">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-total-income">$0.00</div>
-            <span class="rpt-delta" id="rpt-total-income-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Billed</div>
-          </div>
-          <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
-            <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
-            <span class="rpt-delta" id="rpt-shop-keeps-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Shop Keeps</div>
-          </div>
-          <div class="rounded-xl p-4 border text-center" style="background:rgba(255,224,178,0.3);border-color:rgba(212,134,10,0.4)">
-            <div class="text-2xl font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
-            <span class="rpt-delta" id="rpt-total-commission-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Commission Owed</div>
-          </div>
-        </div>
-
-        <!-- Revenue breakdown by type -->
-        <div class="grid grid-cols-2 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
             <span class="rpt-delta" id="rpt-svc-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
           </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+          <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
+            <div class="text-lg font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
+            <span class="rpt-delta" id="rpt-shop-keeps-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Shop Keeps</div>
+          </div>
+          <div class="rounded-xl p-4 border text-center" style="background:rgba(255,224,178,0.3);border-color:rgba(212,134,10,0.4)">
+            <div class="text-lg font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-commission-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Commission Owed</div>
+          </div>
+        </div>
+
+        <!-- Revenue breakdown by type (3-col, compact) -->
+        <div class="grid grid-cols-3 gap-3 mb-3">
+          <div onclick="drillDownTips()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card tips collected this period (not salon revenue — paid out to staff). Tap for the tickets behind it.">
+            <div class="text-lg font-headline font-extrabold text-primary" id="rpt-total-tips">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-tips-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Tips</div>          </div>
+          <div onclick="drillDownItems()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see the retail items sold this period">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-items-total">$0.00</div>
             <span class="rpt-delta" id="rpt-items-total-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Retail Items</div>
-          </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Retail Items</div>          </div>
+          <div onclick="drillDownFeesAll()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see every fee charged this period">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-fees-total">$0.00</div>
             <span class="rpt-delta" id="rpt-fees-total-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>
-          </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>          </div>
+          <div onclick="drillDownDiscounts()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see every discounted ticket this period">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-discount-total">-$0.00</div>
             <span class="rpt-delta" id="rpt-discount-total-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>
-          </div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>          </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
             <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-sold">$0.00</div>
             <span class="rpt-delta" id="rpt-gc-sold-delta"></span>
@@ -433,22 +462,57 @@ tailwind.config = {
             <span class="rpt-delta" id="rpt-gc-redeemed-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Cards Redeemed</div>
           </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center col-span-2 hidden" id="rpt-refunds-row">
+          <div onclick="drillDownRefunds()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center col-span-3 hidden cursor-pointer hover:bg-surface-container transition-colors" id="rpt-refunds-row" title="Tap to see every refund issued this period">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-refunds-total">-$0.00</div>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Refunds Issued</div>
-          </div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Refunds Issued</div>          </div>
         </div>
 
-        <!-- Performance by hour + insights -->
-        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Performance by Hour</h3>
-        <div id="rpt-perf" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5"></div>
+        <!-- Other payment methods (card & cash are shown in the headline strip above) -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Other Payments</h3>
+        <div class="grid grid-cols-3 gap-3 mb-5">
+          <div onclick="drillDownPay('zelle')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Paid via Zelle. Tap for the tickets behind it.">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-zelle">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-zelle-delta"></span>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-zelle"></div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Zelle</div>          </div>
+          <div onclick="drillDownPay('gift')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Gift cards redeemed as payment. Tap for the tickets behind it.">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-gift">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-gift-delta"></span>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-gift"></div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Card</div>          </div>
+          <div onclick="drillDownPay('other')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Sales with no recorded payment method (older / direct Mark-Paid / historical). Tap for the tickets behind it.">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-other">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-other-delta"></span>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-other"></div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Other / Untracked</div>          </div>
+        </div>
+
+        <!-- Performance — selectable time grouping + metric + $/# unit -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Performance</h3>
+        <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
+          <div class="flex items-center gap-2 flex-wrap mb-3">
+            <span id="perf-gran" class="inline-flex bg-surface-container rounded-lg p-0.5 flex-shrink-0">
+              <button onclick="setPerfGran('hour')" data-g="hour" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Hour</button>
+              <button onclick="setPerfGran('day')" data-g="day" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Day</button>
+              <button onclick="setPerfGran('week')" data-g="week" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Week</button>
+              <button onclick="setPerfGran('month')" data-g="month" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Month</button>
+              <button onclick="setPerfGran('year')" data-g="year" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Year</button>
+            </span>
+            <select id="perf-metric" onchange="setPerfMetric(this.value)" class="border border-surface-container-high bg-transparent rounded-lg px-2.5 py-2 text-sm font-body font-semibold text-on-surface focus:outline-none focus:border-primary"></select>
+            <span id="perf-unit" class="inline-flex bg-surface-container rounded-lg p-0.5 flex-shrink-0" title="Show as dollars or as a transaction count">
+              <button onclick="setPerfUnit('amount')" data-u="amount" class="px-3.5 py-1.5 rounded-md text-sm font-body font-bold transition-colors">$</button>
+              <button onclick="setPerfUnit('count')" data-u="count" class="px-3.5 py-1.5 rounded-md text-sm font-body font-bold transition-colors">#</button>
+            </span>
+          </div>
+          <div id="rpt-perf"></div>
+        </div>
 
         <!-- Ask about your data (AI) -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Ask About Your Data</h3>
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2">
             <input id="ai-q" type="text" placeholder="e.g. When am I busiest? What's my slowest day?" onkeydown="if(event.key==='Enter')aiAsk()" class="flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
-            <button onclick="aiAsk()" class="px-4 py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Ask</button>
+            <button onclick="aiAsk()" class="btn-primary">Ask</button>
           </div>
           <div class="flex items-center gap-3 mt-2">
             <button onclick="aiCopyForBridge()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:14px">content_copy</span> Copy for my Claude/ChatGPT tab</button>
@@ -477,6 +541,10 @@ tailwind.config = {
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Gift Cards</h3>
         <div id="rpt-giftcards-breakdown" class="space-y-2 mb-5"></div>
 
+        <!-- Cash drawer — read-only view + print. The full register (open/close/cash in-out) lives in Sales → Transactions. -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Cash Drawer</h3>
+        <div id="rpt-drawer" class="mb-5"></div>
+
       </div>
 
       <!-- Shared date-range picker popup (Reports + Transactions) — anchored to its button -->
@@ -491,20 +559,14 @@ tailwind.config = {
                 <button onclick="datePickerNavMonth(1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
               </div>
               <div id="date-picker-grid" class="dp-grid"></div>
-              <div id="date-picker-custom" class="hidden mt-3 pt-3 border-t border-surface-container-high">
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label><input type="date" id="dp-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
-                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label><input type="date" id="dp-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
-                </div>
-                <button onclick="applyCustomRange()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Apply range</button>
-              </div>
+              <div id="date-picker-hint" class="text-[11px] font-body text-on-surface-variant mt-3 pt-3 border-t border-surface-container-high text-center"></div>
             </div>
           </div>
         </div>
       </div>
       <!-- Comparison mode menu — anchored to its button -->
       <div id="compare-menu" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeCompareMenu()">
-        <div id="compare-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto py-2" style="position:fixed;width:min(260px,calc(100vw - 16px));max-height:82vh">
+        <div id="compare-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto py-2" style="position:fixed;width:min(320px,calc(100vw - 16px));max-height:82vh">
           <div class="px-4 py-2 text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Compare to</div>
           <div id="compare-menu-list"></div>
         </div>
@@ -529,26 +591,29 @@ tailwind.config = {
 
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
-        <div class="dash-head flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Transaction History</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap justify-end">
-            <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
-              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
-            </button>
-            <button id="txn-merge-btn" onclick="openTxnMergeModal()" title="Merge separate tickets into one party"
-              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">merge</span> Merge</button>
-            <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
-            <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+        <div class="dash-head flex items-start justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap">
             <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
-              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label date-pick-val">Today</span>
             </button>
             <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
+            <button onclick="openCashRegister()" title="Open the cash drawer / register" class="btn-primary"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register</button>
+            <button id="add-historical-btn" onclick="showHistoricalEntryModal()" class="hidden btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical</button>
+          </div>
+          <span class="subnav-slot" id="subnav-slot-transactions"></span>
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            <button onclick="openReconcile()" title="Find tickets whose recorded total doesn't match what was charged"
+              class="btn-secondary">
+              <span class="material-symbols-outlined" style="font-size:16px">rule</span> Reconcile
+            </button>
+            <button onclick="openProcessorReconcile()" title="Pull the actual card payments from your active processor for this date range and match them to your records"
+              class="btn-secondary">
+              <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> <span id="reconcile-proc-label">Reconcile w/ Square</span>
+            </button>
+            <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
         <div id="txn-total-bar" class="mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">
@@ -556,9 +621,15 @@ tailwind.config = {
             <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">receipt_long</span>
             <span class="truncate">Showing <strong id="txn-total-range">Today</strong> · <span id="txn-total-count">0</span> ticket<span id="txn-total-count-s">s</span></span>
           </div>
-          <div class="text-right flex-shrink-0">
-            <div class="font-headline font-extrabold text-primary text-xl leading-none" id="txn-total-net">$0.00</div>
-            <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Net Total</div>
+          <div class="flex items-center gap-5 flex-shrink-0">
+            <div id="txn-total-refunds-wrap" class="text-right hidden">
+              <div class="font-headline font-extrabold text-xl leading-none" style="color:#c53030" id="txn-total-refunds">-$0.00</div>
+              <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Refunds</div>
+            </div>
+            <div class="text-right">
+              <div class="font-headline font-extrabold text-primary text-xl leading-none" id="txn-total-net">$0.00</div>
+              <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Net Total</div>
+            </div>
           </div>
         </div>
         <div id="txn-list" class="space-y-2"></div>
@@ -570,63 +641,67 @@ tailwind.config = {
 
       <!-- ── PAYROLL PANEL ── -->
       <div class="dash-panel" id="panel-payroll">
-        <div class="dash-head flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Payroll</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">Per-tech commission, check &amp; cash by pay period</p>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap justify-end">
-            <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
-            <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
-            <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+        <!-- Two centered rows: clocked-in (left) · Reports|Payroll toggle (center) · exports (right);
+             then the period nav centered under the toggle with the Tech|Front Desk view to its right.
+             Equal 1fr side columns keep the center column truly centered regardless of side widths. -->
+        <div class="grid items-center gap-4 mb-2" style="grid-template-columns:1fr auto 1fr">
+          <div id="clocked-in-now" class="hidden" style="min-width:0;grid-column:1"></div>
+          <span class="subnav-slot justify-self-center" id="subnav-slot-payroll" style="grid-column:2"></span>
+          <div class="flex items-center gap-2 flex-wrap justify-self-end" style="grid-column:3">
+            <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
+            <button onclick="payrollExportExcel()" title="Excel workbook — Totals tab + a detailed tab per staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> Excel</button>
           </div>
         </div>
-        <div class="flex items-center justify-center gap-3 mb-4">
-          <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
-          <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
-          <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+        <div class="grid items-center gap-3 mb-3" style="grid-template-columns:1fr auto 1fr">
+          <span style="grid-column:1"></span>
+          <div class="flex items-center gap-2 justify-self-center" style="grid-column:2">
+            <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+            <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[150px] text-center">Pay Period</span>
+            <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+            <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
+          </div>
+          <!-- Technicians | Front Desk pay view — to the right of the centered period nav -->
+          <div class="subnav-seg justify-self-start" style="grid-column:3">
+            <button id="payroll-view-tech" onclick="payrollSetView('tech')" class="subnav-btn on">Technicians</button>
+            <button id="payroll-view-fd" onclick="payrollSetView('fd')" class="subnav-btn">Front Desk</button>
+          </div>
         </div>
-        <div id="payroll-cards" class="overflow-x-auto pb-3 rounded-xl border border-surface-container-high" style="scrollbar-width:thin"></div>
+        <!-- No overflow here — only the pay TABLE inside scrolls horizontally. -->
+        <div id="payroll-cards" class="pb-3"></div>
       </div>
 
       <!-- ── TURNS PANEL ── -->
       <div class="dash-panel" id="panel-turns">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div>
-              <h2 class="text-xl font-headline font-bold text-on-surface">Technician Turns</h2>
-              <p class="text-sm font-body text-on-surface-variant mt-0.5" id="turns-date-label">Today</p>
-            </div>
-            <!-- Date select for history (matches Reports date picker) -->
+            <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+            <span class="subnav-slot" id="subnav-slot-turns" style="flex:0 1 auto"></span>
+            <!-- Date picker — day history. Shows the relative word + the date. -->
             <button onclick="shiftTurnsDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openTurnsHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="turns-date-btn-val">Today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="turns-date-btn-val">Today</span>
             </button>
             <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
           <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
-              <div class="w-2 h-2 rounded-full bg-primary"></div>
-              <span>Active: <strong id="turns-active-count">0</strong></span>
-            </div>
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
-              <div class="w-2 h-2 rounded-full" style="background:#f5c870"></div>
-              <span>Break: <strong id="turns-break-count">0</strong></span>
-            </div>
             <!-- Add/Remove technicians button -->
-            <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
+            <button onclick="showTurnsTechSelector()" class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">people</span> Technicians
             </button>
             <!-- Show/hide the upcoming-appointments strip -->
-            <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+            <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">event_upcoming</span> Appointments
             </button>
+            <!-- Show/hide each tech's "$ billed" total (per device) -->
+            <button onclick="toggleTurnsTotals()" id="turns-totals-toggle" title="Show/hide each tech's billed total" class="btn-secondary">
+              <span class="material-symbols-outlined" id="turns-totals-icon" style="font-size:16px">visibility</span> Totals
+            </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
-            <button onclick="showManualAdd()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
+            <button onclick="showManualAdd()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
             </button>
           </div>
@@ -640,6 +715,18 @@ tailwind.config = {
             <span class="text-[11px] text-on-surface-variant" id="turns-appts-sub">· today's upcoming appointments</span>
           </div>
           <div id="turns-appts-cards" class="flex gap-1.5 p-1.5 overflow-x-auto" style="scrollbar-width:thin"></div>
+        </div>
+
+        <!-- Slot color + turn-badge legend -->
+        <div class="flex items-center gap-3 flex-wrap text-[10px] text-on-surface-variant mb-2 px-1">
+          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#f5c870;display:inline-block"></span>Waiting</span>
+          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#2a7a4f;display:inline-block"></span>In service</span>
+          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#1a5c7a;display:inline-block"></span>Done</span>
+          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#6b4fb0;display:inline-block"></span>Awaiting price</span>
+          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#5b6166;display:inline-block"></span>Paid</span>
+          <span class="inline-flex items-center gap-1" style="border-left:1px solid var(--surface-container-high);padding-left:12px"><b class="font-semibold" style="background:#f5c870;color:#3a2800;padding:0 4px;border-radius:3px">0.5</b> half turn</span>
+          <span class="inline-flex items-center gap-1"><b class="font-semibold text-secondary">Bonus</b> bonus service</span>
+          <span class="inline-flex items-center gap-1"><b class="font-semibold" style="color:#9a6b00">?</b> needs price</span>
         </div>
 
         <!-- Two column layout — left scrolls, right sticks -->
@@ -679,24 +766,26 @@ tailwind.config = {
       <div class="dash-panel" id="panel-calendar">
         <!-- Header -->
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Appointments</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5" id="cal-date-label">Loading…</p>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <!-- Date nav -->
-            <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+          <div class="flex items-center gap-2">
+            <!-- Date nav (far left) -->
+            <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_left</span>
             </button>
-            <!-- Date button → calendar popup (Today / In 1–6 weeks presets) -->
             <button onclick="openCalDatePicker(event)" class="flex items-center gap-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="height:32px;padding:0 12px">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
-              <span class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="cal-date-btn-val">Today</span>
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="cal-date-btn-val">Today</span>
             </button>
-            <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+            <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
+            <!-- Day | Week view toggle — same segmented style as the panel view switchers;
+                 the selected side gets the raised white pill + a check (syncCalViewToggle). -->
+            <div class="subnav-seg ml-1" style="flex-shrink:0">
+              <button id="cal-view-day" onclick="setCalView('day')" class="subnav-btn"><span class="material-symbols-outlined cal-view-check" style="font-size:15px;display:none">check</span><span>Day</span></button>
+              <button id="cal-view-week" onclick="setCalView('week')" class="subnav-btn"><span class="material-symbols-outlined cal-view-check" style="font-size:15px;display:none">check</span><span>Week</span></button>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
             <!-- Unassigned-only toggle -->
             <button id="cal-unassigned-toggle" onclick="toggleUnassignedOnly()" title="Show only unassigned appointments" class="flex items-center gap-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">
               <span class="material-symbols-outlined" style="font-size:16px">person_off</span>
@@ -721,11 +810,11 @@ tailwind.config = {
             </div>
             <!-- Auth / New appointment -->
             <div id="cal-auth-area">
-              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">login</span> Connect Google Calendar
               </button>
             </div>
-            <button onclick="showNewApptModal()" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+            <button onclick="showNewApptModal()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Appointment
             </button>
           </div>
@@ -796,12 +885,27 @@ tailwind.config = {
           <button id="settings-back-btn" onclick="settingsBack()" class="hidden w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined">arrow_back</span></button>
           <div>
             <h2 id="settings-nav-title" class="text-xl font-headline font-bold text-on-surface">Settings</h2>
-            <p id="settings-nav-desc" class="text-sm font-body text-on-surface-variant mt-0.5">Configure app behavior and customer options</p>
+            <p id="settings-nav-desc" class="text-xs font-body text-on-surface-variant mt-0.5"></p>
           </div>
         </div>
 
+        <!-- Settings search (root only) — filters the whole tree, jumps to any leaf -->
+        <div id="settings-search-wrap" class="mb-4">
+          <div class="flex items-center gap-2 bg-surface-container-lowest border border-surface-container-high rounded-xl px-4 py-2.5 focus-within:border-primary transition-colors">
+            <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">search</span>
+            <input id="settings-search" type="text" oninput="filterSettings(this.value)" placeholder="Search settings…" class="flex-1 bg-transparent outline-none text-sm font-body text-on-surface">
+            <button onclick="clearSettingsSearch()" id="settings-search-clear" class="hidden text-on-surface-variant hover:text-on-surface flex items-center"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+          </div>
+        </div>
+        <!-- Settings search results -->
+        <div id="settings-results" class="hidden"></div>
+
         <!-- Drill-down: category cards (root) -->
         <div id="settings-root" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button onclick="showDashPanel('customers')" class="flex items-center gap-4 px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high hover:bg-surface-container hover:border-primary/40 transition-colors text-left">
+            <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary">contacts</span></div>
+            <div class="min-w-0"><div class="font-headline font-bold text-on-surface">Customers</div><div class="text-xs font-body text-on-surface-variant mt-0.5">Directory, notes &amp; history</div></div>
+          </button>
           <button onclick="settingsOpenCategory('catalog')" class="flex items-center gap-4 px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high hover:bg-surface-container hover:border-primary/40 transition-colors text-left">
             <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary">sell</span></div>
             <div class="min-w-0"><div class="font-headline font-bold text-on-surface">Services, Items &amp; Fees</div><div class="text-xs font-body text-on-surface-variant mt-0.5">What you sell</div></div>
@@ -844,20 +948,25 @@ tailwind.config = {
               </div>
               <!-- Controls -->
               <div class="flex-grow space-y-2">
-                <button onclick="recropLogo()" id="logo-recrop-btn" class="hidden w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+                <button onclick="recropLogo()" id="logo-recrop-btn" class="hidden w-full btn-primary">
                   <span class="material-symbols-outlined" style="font-size:18px">crop</span> Re-crop / Adjust
                 </button>
                 <label class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors cursor-pointer w-full">
                   <span class="material-symbols-outlined" style="font-size:18px">upload</span> Upload New Logo
                   <input type="file" accept="image/png,image/jpeg,image/jpg" class="hidden" onchange="handleLogoUpload(this)">
                 </label>
-                <button onclick="removeLogo()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+                <button onclick="removeLogo()" class="w-full btn-secondary">
                   <span class="material-symbols-outlined" style="font-size:16px">delete</span> Remove Logo
                 </button>
                 <p class="text-xs font-body text-on-surface-variant">PNG with transparent background works best. Wide/rectangular logos display better than square ones.</p>
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Leaf: Receipt & Reviews (admin only) — re-routable review-QR link -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="receipt-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Turn Thresholds -->
@@ -879,7 +988,7 @@ tailwind.config = {
                 <p class="text-[11px] font-body text-on-surface-variant mt-1">Between half min and full min = half turn. Below half min = bonus</p>
               </div>
             </div>
-            <button onclick="saveTurnThresholds()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold mb-4 hover:bg-primary-dim transition-all active:scale-95">Save Thresholds</button>
+            <button onclick="saveTurnThresholds()" class="w-full mb-4 btn-primary">Save Thresholds</button>
 
             <div class="border-t border-surface-container-high pt-4">
               <div class="font-headline font-semibold text-on-surface mb-1">Always-Bonus Services</div>
@@ -912,6 +1021,34 @@ tailwind.config = {
 
         <!-- Leaf: Square -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="helcim-section" class="hidden px-5 py-4 space-y-3">
+            <div class="text-xs font-body text-on-surface-variant">Drive your Helcim Smart Terminal for card payments. The API token &amp; result webhook are configured on the server.</div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Active card processor</label>
+              <div class="flex gap-2">
+                <button id="helcim-proc-square" onclick="setPaymentProcessor('square')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Square</button>
+                <button id="helcim-proc-helcim" onclick="setPaymentProcessor('helcim')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Helcim</button>
+              </div>
+              <div class="text-[11px] text-on-surface-variant mt-1">Which processor the checkout charges cards on. Switch any time — instant fallback.</div>
+            </div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Terminal device code</label>
+              <div class="flex gap-2">
+                <input id="helcim-device-code" type="text" placeholder="e.g. 7C0X" autocapitalize="characters" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline uppercase focus:border-primary outline-none">
+                <button onclick="helcimSaveDevice()" class="btn-primary">Save</button>
+              </div>
+              <div class="text-[11px] text-on-surface-variant mt-1">The code from your terminal (Helcim → Devices, with API mode on).</div>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button onclick="helcimCheckConnection()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">wifi_tethering</span> Check connection</button>
+              <button onclick="helcimRunTest()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Send $1.00 test charge</button>
+            </div>
+            <div id="helcim-conn-status" class="text-xs font-body text-on-surface-variant rounded-lg bg-surface-container-lowest border border-surface-container-high px-3 py-2">No terminal device code set.</div>
+            <button onclick="settingsOpenLeaf('square-section')" class="w-full mt-1 flex items-center justify-between px-4 py-3 rounded-xl border border-surface-container-high hover:bg-surface-container transition-colors text-left">
+              <div><div class="font-body font-semibold text-on-surface text-sm">Square configuration</div><div class="text-[11px] text-on-surface-variant">Location, connection &amp; sync — used when Square is the active processor</div></div>
+              <span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+            </button>
+          </div>
           <div id="square-section" class="hidden px-5 py-4 space-y-3">
             <div class="text-xs font-body text-on-surface-variant" id="settings-square-status">Checking…</div>
             <div>
@@ -927,12 +1064,21 @@ tailwind.config = {
                 class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
               <p class="text-[11px] font-body text-on-surface-variant mt-1">From Square Developer Dashboard → your app → Credentials. Needed for "Pay in Square POS". Not the access token.</p>
             </div>
-            <button onclick="saveSquareFromSettings()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+            <button onclick="saveSquareFromSettings()" class="w-full btn-primary">
               Save & Connect
             </button>
-            <button onclick="syncSquareFromSettings()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
-              <span class="material-symbols-outlined" style="font-size:18px">sync</span> Sync Customers & Catalog
+            <button onclick="syncSquareFromSettings()" class="w-full btn-secondary">
+              <span class="material-symbols-outlined" style="font-size:18px">sync</span> Sync Customers from Square
             </button>
+            <div class="pt-3 border-t border-surface-container-high">
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Square Terminal</label>
+              <div id="sq-terminal-current" class="text-xs font-body mb-2"><span class="text-on-surface-variant">No Terminal paired yet.</span></div>
+              <div id="sq-terminal-status" class="text-xs font-body text-on-surface-variant mb-2"></div>
+              <button onclick="pairTerminal()" class="w-full btn-secondary">
+                <span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pair Terminal
+              </button>
+              <p class="text-[11px] font-body text-on-surface-variant mt-1">Enables itemized in-person payments on your Square Terminal (the "Pay on Terminal" button at checkout).</p>
+            </div>
           </div>
         </div>
 
@@ -941,20 +1087,46 @@ tailwind.config = {
           <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
             <p class="text-sm font-body text-on-surface-variant">Connect Google Calendar to view and create appointments in the Calendar tab.</p>
             <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
-            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full btn-primary">
               <span class="material-symbols-outlined" style="font-size:18px">login</span> Connect Google Calendar
             </button>
-            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full flex items-center justify-center gap-2 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-surface-container">
+            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full btn-secondary">
               <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
             </button>
             <div id="gcal-calendar-list" class="border-t border-surface-container-high pt-3 space-y-0.5"></div>
           </div>
         </div>
+
+        <!-- Leaf: Text Messaging (SMS) -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="sms-section" class="hidden px-5 py-4 space-y-3">
+            <p class="text-sm font-body text-on-surface-variant">Send texts from the shop's Android phone (httpSMS). In the Worker, set <code class="text-xs">HTTPSMS_API_KEY</code> and <code class="text-xs">HTTPSMS_FROM</code> as secrets, then deploy. Send a test below to confirm it works.</p>
+            <div id="sms-status" class="text-xs font-body text-on-surface-variant">Checking…</div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Send a test text to</label>
+              <input id="sms-test-to" type="tel" placeholder="(555) 000-0000" autocomplete="off" onfocus="openPhoneNumpad(this)" oninput="formatPhone(this)"
+                class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+            </div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Message</label>
+              <textarea id="sms-test-msg" rows="2" maxlength="1000"
+                class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-sm font-body text-on-surface focus:border-primary transition-colors outline-none resize-none">Muse Nails &amp; Spa — your texts are working! ✦</textarea>
+            </div>
+            <button id="sms-test-btn" onclick="sendTestSms()" class="w-full btn-primary">
+              <span class="material-symbols-outlined" style="font-size:18px">sms</span> Send test text
+            </button>
+            <div id="sms-test-result" class="text-xs font-body"></div>
+          </div>
+        </div>
+        <!-- Leaf: Back Office sync (admin only) — M11 one-way push to the books app -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="bosync-section" class="hidden px-5 py-4"></div>
+        </div>
         <!-- Leaf: Data Backup & Restore -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="backup-section" class="hidden px-5 py-4">
             <div class="grid grid-cols-2 gap-3 mb-4">
-              <button onclick="exportAllData()" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
+              <button onclick="exportAllData()" class="btn-primary">
                 <span class="material-symbols-outlined" style="font-size:18px">download</span> Export Backup
               </button>
               <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-all cursor-pointer">
@@ -978,12 +1150,12 @@ tailwind.config = {
             <!-- Recalculate totals — heals any stored total that doesn't match its parts -->
             <div class="mt-4 pt-4 border-t border-surface-container-high">
               <button onclick="healRecordTotals()"
-                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-all">
+                class="w-full btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:18px">calculate</span> Recalculate Transaction Totals
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Fixes any saved total that doesn't match its services + items + fees − discount (e.g. a fee added after the total was saved). Export a backup first.</p>
               <button onclick="listFeelessTickets()"
-                class="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-outline-variant text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-all">
+                class="w-full mt-3 btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:18px">search</span> Find Tickets With No Fee (30 days)
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Read-only list to help spot tickets that should've had a fee, so you can re-add it.</p>
@@ -1020,10 +1192,7 @@ tailwind.config = {
                 <button onclick="toggleAllDashServices()" class="text-primary underline">Toggle Dashboard</button>
               </div>
               <div class="flex gap-2">
-                <button onclick="squarePullServices()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
-                  <span class="material-symbols-outlined" style="font-size:16px">sync</span> Sync from Square
-                </button>
-                <button onclick="showAddService()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+                <button onclick="showAddService()" class="btn-primary">
                   <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Service
                 </button>
               </div>
@@ -1057,13 +1226,10 @@ tailwind.config = {
           <div id="staff-merged-section" class="hidden px-5 py-4">
             <div class="flex items-center gap-2 mb-3 flex-wrap">
               <button onclick="toggleAllActiveStaff()" class="text-xs font-body text-primary underline mr-auto">Toggle All Active</button>
-              <button onclick="toggleStaffScheduleView()" id="schedule-view-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
+              <button onclick="toggleStaffScheduleView()" id="schedule-view-btn" class="btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule
               </button>
-              <button onclick="squarePullStaff()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
-                <span class="material-symbols-outlined" style="font-size:16px">sync</span> Sync Square
-              </button>
-              <button onclick="showAddStaff()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+              <button onclick="showAddStaff()" class="btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">add</span> Add
               </button>
             </div>
@@ -1082,8 +1248,8 @@ tailwind.config = {
                   <button onclick="scheduleWeekOffset(1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant">
                     <span class="material-symbols-outlined" style="font-size:20px">chevron_right</span>
                   </button>
-                  <button onclick="scheduleWeekOffset(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
-                  <button onclick="copyLastWeekSchedule()" title="Copy the previous week's schedule into this week" class="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-body font-semibold border border-surface-container-high text-on-surface-variant hover:bg-surface-container transition-all"><span class="material-symbols-outlined" style="font-size:15px">content_copy</span>Copy last week</button>
+                  <button onclick="scheduleWeekOffset(0, true)" class="btn-ghost">Today</button>
+                  <button onclick="copyLastWeekSchedule()" title="Copy the previous week's schedule into this week" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:15px">content_copy</span>Copy last week</button>
                 </div>
                 <div class="flex gap-3 flex-wrap">
                   <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Working</div>
@@ -1103,21 +1269,53 @@ tailwind.config = {
         <!-- Leaf: Front Desk Users -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="fdusers-merged-section" class="hidden px-5 py-4">
-            <div class="flex items-center justify-between mb-3">
-              <p class="text-sm font-body text-on-surface-variant">Staff who sign in to the dashboard with a PIN.</p>
-              <button onclick="showAddFdUser()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors flex-shrink-0">
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+              <p class="text-sm font-body text-on-surface-variant mr-auto">Staff who sign in to the dashboard with a PIN.</p>
+              <button onclick="toggleFdScheduleView()" id="fd-schedule-view-btn" class="flex-shrink-0 btn-secondary">
+                <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule
+              </button>
+              <button onclick="showAddFdUser()" class="flex-shrink-0 btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">add</span> Add
               </button>
             </div>
-            <div id="fdusers-list" class="space-y-2"></div>
+            <div id="fdusers-list-view">
+              <div id="fdusers-list" class="space-y-2"></div>
             <!-- Manager-only: view all PINs -->
             <div id="pin-viewer-section" class="mt-4 hidden">
-              <button onclick="togglePinViewer()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant text-sm font-body hover:bg-surface-container transition-colors">
+              <button onclick="togglePinViewer()" class="btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">key</span>
                 <span id="pin-viewer-label">View Login PINs</span>
               </button>
               <div id="pin-viewer-list" class="hidden mt-3 bg-surface-container rounded-xl overflow-hidden border border-surface-container-high"></div>
             </div>
+            </div><!-- /fdusers-list-view -->
+            <div id="fdusers-schedule-view" class="hidden">
+              <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <button onclick="fdScheduleWeek(-1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+                  <span id="fd-schedule-week-label" class="text-sm font-body font-semibold text-on-surface min-w-40 text-center"></span>
+                  <button onclick="fdScheduleWeek(1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+                  <button onclick="fdScheduleWeek(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+                </div>
+                <div class="flex gap-3 flex-wrap text-xs font-body text-on-surface-variant">
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Shift hours</div>
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#f5c870"></div>Off</div>
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-md relative flex-shrink-0" style="background:#dcebea;border:1px solid #b6d2d0"><span style="position:absolute;top:-2px;right:-2px;width:5px;height:5px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px #fff"></span></div>Repeats weekly</div>
+                </div>
+              </div>
+              <div class="overflow-auto no-scroll rounded-xl border border-surface-container-high" style="max-height:calc(100vh - 320px)"><div id="fd-schedule-grid" class="min-w-max"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leaf: Turns Board Display (per-device) -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-turnsdisplay-section" class="hidden px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-4">Turns board display. Saved <strong>per device</strong> — set it on each iPad/computer separately.</p>
+            <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Text size</div>
+            <div id="turns-display-buttons" class="flex gap-2 mb-5"></div>
+            <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Tech / turn separation</div>
+            <div id="turns-sep-buttons" class="flex gap-2"></div>
           </div>
         </div>
 
@@ -1194,14 +1392,28 @@ tailwind.config = {
       <!-- ═══════════════════════════════════════════════
            GIFT CARDS PANEL (inside dashboard)
       ═══════════════════════════════════════════════ -->
+      <div id="panel-customers" class="dash-panel">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <input id="customers-search" type="text" placeholder="Search by name, phone, or email…" oninput="filterCustomersTab(this.value)" class="flex-1 min-w-[200px] border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body focus:border-primary outline-none">
+          <div class="flex gap-2 flex-wrap flex-shrink-0">
+            <button onclick="showAddCustomer()" class="btn-primary"><span class="material-symbols-outlined" style="font-size:16px">person_add</span> Add Customer</button>
+            <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicates" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up</button>
+            <button onclick="exportCustomersCSV()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">download</span> CSV</button>
+            <button onclick="importCustomersFromSquare()" title="One-time import of your existing Square customers" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">sync</span> Import from Square</button>
+          </div>
+        </div>
+        <div id="customers-content"></div>
+      </div>
+
       <div id="panel-giftcards" class="dash-panel">
         <div class="dash-head flex items-center justify-between">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Gift Cards</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Track gift cards sold and redeemed</p>
           </div>
+          <span class="subnav-slot" id="subnav-slot-giftcards"></span>
           <div class="flex gap-2">
-            <button onclick="showAddGiftCard()" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+            <button onclick="showAddGiftCard()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Gift Card
             </button>
           </div>
@@ -1233,7 +1445,7 @@ tailwind.config = {
             oninput="renderGiftCards()"
             class="flex-1 min-w-48 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
           <button id="gc-hide-zero-btn" onclick="toggleGcHideZero()"
-            class="px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">Hide $0</button>
+            class="chip">Hide $0</button>
           <select onchange="setGcSort(this.value); this.blur()"
             class="px-3 py-2 rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none">
             <option value="datePurchased">Sort: Date</option>
@@ -1291,6 +1503,15 @@ tailwind.config = {
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Purchase Amount ($)</label>
         <input type="text" inputmode="decimal" id="gc-amount" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none" onfocus="openNumpad(this,'Amount')" oninput="updateGcTotals()">
+      </div>
+      <div id="gc-paymethod-row">
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Pay by <span class="text-on-surface-variant normal-case tracking-normal">(runs through Square)</span></label>
+        <select id="gc-paymethod" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
+          <option value="none">No charge — just register the card</option>
+          <option value="card">Card — charge on the Terminal</option>
+          <option value="cash">Cash</option>
+          <option value="zelle">Zelle</option>
+        </select>
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
@@ -1483,15 +1704,20 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      STAFF EDIT MODAL
 ═══════════════════════════════════════════════ -->
-<div id="staff-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4">
+<div id="staff-modal" onclick="if(event.target===this)closeStaffModal()" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 id="staff-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Staff</h2>
       <button onclick="closeStaffModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
     <div class="space-y-4">
       <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Name</label>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Legal Name <span class="normal-case tracking-normal text-on-surface-variant">(payroll / official)</span></label>
+        <input id="staff-legalname-input" type="text" placeholder="e.g. Christina Nguyen"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Preferred Name <span class="normal-case tracking-normal text-on-surface-variant">(display &amp; Google Calendar)</span></label>
         <input id="staff-name-input" type="text" placeholder="e.g. Christina"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
       </div>
@@ -1538,6 +1764,15 @@ tailwind.config = {
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Personal code this tech uses to open the Staff app. Leave blank if they don't use it.</p>
       </div>
       <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Staff app features</label>
+        <div class="space-y-2.5">
+          <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Download today's transactions PDF</span><input id="staff-app-pdf" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+          <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View transaction history</span><input id="staff-app-history" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="staffAppHistChanged()"></label>
+          <label class="flex items-center justify-between gap-3 cursor-pointer" id="staff-app-histnames-row"><span class="text-sm font-body text-on-surface">Show customer names in history</span><input id="staff-app-histnames" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+        </div>
+        <p class="text-[11px] font-body text-on-surface-variant mt-1">What this tech sees in the Muse Staff app on their phone.</p>
+      </div>
+      <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services this tech performs</label>
         <div class="grid grid-cols-4 gap-2" id="staff-services-picker"></div>
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Leave all unselected to allow all services</p>
@@ -1572,6 +1807,11 @@ tailwind.config = {
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary outline-none transition-colors placeholder:text-outline-variant">
       </div>
       <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Hourly Rate ($/hr) <span class="text-outline-variant normal-case">— for time-clock pay</span></label>
+        <input id="fduser-rate-input" type="text" inputmode="decimal" placeholder="0.00"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary outline-none transition-colors placeholder:text-outline-variant">
+      </div>
+      <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Role</label>
         <div class="flex gap-2">
           <button type="button" id="role-btn-admin" onclick="selectRole('admin')"
@@ -1580,12 +1820,57 @@ tailwind.config = {
             class="role-btn flex-1 py-2 rounded-xl border-2 border-primary bg-primary text-on-primary font-body font-semibold text-sm transition-all">Manager</button>
           <button type="button" id="role-btn-frontdesk" onclick="selectRole('frontdesk')"
             class="role-btn flex-1 py-2 rounded-xl border-2 border-outline-variant bg-transparent text-on-surface font-body font-semibold text-sm transition-all">Front Desk</button>
+          <button type="button" id="role-btn-reviewer" onclick="selectRole('reviewer')"
+            class="role-btn flex-1 py-2 rounded-xl border-2 border-outline-variant bg-transparent text-on-surface font-body font-semibold text-sm transition-all">Reviewer</button>
         </div>
         <input type="hidden" id="fduser-role-input" value="manager">
       </div>
     </div>
     <input type="hidden" id="fduser-edit-id">
     <button onclick="saveFdUser()" class="w-full mt-6 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Save</button>
+  </div>
+</div>
+
+<!-- Front-desk shift picker (schedule with hours) -->
+<div id="fd-shift-picker" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-up">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="fd-shift-picker-label" class="text-base font-headline font-bold text-on-surface"></h2>
+      <button onclick="closeFdShiftPicker()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="mb-3">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
+      <div class="flex items-center gap-1.5">
+        <select id="fd-start-hour" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <span class="font-headline font-bold text-on-surface-variant">:</span>
+        <select id="fd-start-min" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <select id="fd-start-ampm" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"><option value="AM">AM</option><option value="PM">PM</option></select>
+      </div>
+    </div>
+    <div class="mb-2">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">End</label>
+      <div class="flex items-center gap-1.5">
+        <select id="fd-end-hour" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <span class="font-headline font-bold text-on-surface-variant">:</span>
+        <select id="fd-end-min" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <select id="fd-end-ampm" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"><option value="AM">AM</option><option value="PM">PM</option></select>
+      </div>
+    </div>
+    <div id="fd-shift-hours" class="text-center text-xs font-body text-on-surface-variant mb-4"></div>
+
+    <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1.5">Apply to</label>
+    <div id="fd-day-chips" class="flex gap-1.5 mb-4"></div>
+
+    <div class="flex bg-surface-container rounded-xl p-1 mb-5">
+      <button type="button" onclick="fdSetShiftMode('week')" id="fd-mode-week" class="flex-1 py-2 rounded-lg text-xs font-body font-semibold transition-colors">Just this week</button>
+      <button type="button" onclick="fdSetShiftMode('every')" id="fd-mode-every" class="flex-1 py-2 rounded-lg text-xs font-body font-semibold transition-colors">Every week</button>
+    </div>
+
+    <div class="flex gap-2">
+      <button onclick="setFdShiftOff()" class="flex-1 py-2.5 rounded-xl font-body font-semibold text-sm" style="background:#f5c870;color:#3a2800">Off</button>
+      <button onclick="clearFdShift()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Clear</button>
+      <button onclick="saveFdShift()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm">Save</button>
+    </div>
   </div>
 </div>
 
@@ -1625,6 +1910,8 @@ tailwind.config = {
     <div id="group-assign-content" class="flex-grow overflow-y-auto no-scroll p-5"></div>
     <!-- Footer buttons -->
     <div class="p-5 border-t border-surface-container-high flex flex-col gap-2 flex-shrink-0">
+      <!-- Per-person service subtotals (party only) — pinned here so they're visible after scrolling -->
+      <div id="group-party-breakdown" class="hidden text-[11px] font-body text-on-surface-variant space-y-0.5 mb-1"></div>
       <!-- Party total -->
       <div class="flex items-center justify-between mb-1">
         <span class="text-sm font-body font-semibold text-on-surface-variant">Party Total</span>
@@ -1632,12 +1919,9 @@ tailwind.config = {
       </div>
       <button id="group-split-btn" onclick="splitFromAssignModal()" class="hidden self-start flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline mb-1"><span class="material-symbols-outlined" style="font-size:15px">call_split</span> Split party / pay separately</button>
       <div class="flex gap-2">
-        <button onclick="saveGroupAssignments()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all">Save All</button>
-      </div>
-      <div class="flex gap-2">
-        <button onclick="openSquarePOSFromModal()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-2 rounded-xl font-body text-sm transition-all flex items-center justify-center gap-1.5">
-          <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
-          Pay in Square POS
+        <button onclick="saveGroupAssignments()" class="flex-1 border border-primary text-primary hover:bg-primary/5 py-3 rounded-xl font-headline font-bold tracking-tight transition-all">Save</button>
+        <button onclick="openSquarePOSFromModal()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Check Out
         </button>
       </div>
     </div>
@@ -1684,8 +1968,8 @@ tailwind.config = {
     <div class="flex items-center justify-between gap-3 p-5 border-b border-surface-container-high flex-shrink-0">
       <h3 id="rpt-drill-title" class="text-base font-headline font-bold text-on-surface min-w-0 truncate"></h3>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="exportDrillCSV()" title="Export this detail to CSV" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-        <button onclick="exportDrillPDF()" title="Export this detail to PDF" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+        <button onclick="exportDrillCSV()" title="Export this detail to CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+        <button onclick="exportDrillPDF()" title="Export this detail to PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
         <button onclick="closeDrillDown()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
       </div>
     </div>
@@ -1720,19 +2004,91 @@ tailwind.config = {
       <h2 class="text-lg font-headline font-bold text-on-surface">Confirm Payment</h2>
       <button onclick="closeSquareConfirm()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
     </div>
-    <p class="px-5 pt-3 text-xs font-body text-on-surface-variant flex-shrink-0">Review the ticket, then continue to Square to take payment.</p>
-    <div id="square-confirm-body" class="flex-1 overflow-y-auto px-5 py-3 space-y-2"></div>
-    <div id="square-gc-section" class="px-5 flex-shrink-0"></div>
+    <div class="flex-1 min-h-0 overflow-y-auto">
+      <p class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to Square to take payment.</p>
+      <div id="square-confirm-body" class="px-5 py-3 space-y-2"></div>
+      <div id="square-gc-section" class="px-5"></div>
+    </div>
     <div class="px-5 py-4 border-t border-surface-container-high flex flex-col gap-3 flex-shrink-0">
-      <div class="flex items-center justify-between">
-        <span class="font-headline font-semibold text-on-surface-variant">Total</span>
-        <span id="square-confirm-total" class="text-2xl font-headline font-extrabold text-primary">$0.00</span>
-      </div>
+      <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>
       <div class="flex gap-2">
         <button onclick="closeSquareConfirm()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
-        <button onclick="proceedSquarePayment()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Pay in Square POS</button>
+        <button id="sq-pos-btn" onclick="proceedSquarePayment()" class="square-only flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Square POS</button>
+      </div>
+      <!-- Admin/manager only: record a payment collected outside the app (e.g. keyed manually on the terminal) without charging. Hidden by default; shown for admin/manager in openSquarePOS. Two confirmation steps. -->
+      <button id="sq-markpaid-btn" onclick="markPaidNoCharge()" class="hidden text-xs font-body text-on-surface-variant hover:text-on-surface underline self-center mt-0.5">Already paid — record without charging</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Quick Sale modal (no-service retail / gift-card sale) ── -->
+<div id="quicksale-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" onclick="if(event.target===this)closeQuickSale()">
+  <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3.5 border-b border-surface-container-high">
+      <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary">point_of_sale</span><h2 class="text-lg font-headline font-bold text-on-surface">Quick Sale</h2></div>
+      <button onclick="closeQuickSale()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="px-5 py-4 overflow-y-auto space-y-4">
+      <div class="flex items-end gap-3 flex-wrap">
+        <div class="flex-1 min-w-[180px]">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer name <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label>
+          <input id="qs-name" type="text" placeholder="Quick Sale" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div class="text-xs font-body text-on-surface-variant pb-2">Sold by <span id="qs-soldby" class="font-semibold text-on-surface">—</span></div>
+      </div>
+      <div>
+        <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1.5">Retail items</div>
+        <div id="qs-catalog" class="grid grid-cols-2 gap-2"></div>
+      </div>
+      <div>
+        <button onclick="qsToggleGcForm()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> + Gift Card</button>
+        <div id="qs-gc-form" class="hidden mt-2 p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="qs-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Serial <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label><input id="qs-gc-serial" type="text" placeholder="#00000000" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">To (recipient)</label><input id="qs-gc-to" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Recipient phone</label><input id="qs-gc-phone" type="tel" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          </div>
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note, optional)</span></label><input id="qs-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          <button onclick="qsAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to sale</button>
+        </div>
+      </div>
+      <div>
+        <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Sale</div>
+        <div id="qs-cart"></div>
       </div>
     </div>
+    <div class="px-5 py-3.5 border-t border-surface-container-high flex items-center gap-3">
+      <div class="flex-1"><div class="text-[11px] text-on-surface-variant uppercase tracking-widest">Total</div><div id="qs-total" class="text-xl font-headline font-extrabold text-on-surface">$0.00</div></div>
+      <button id="qs-checkout-btn" onclick="qsCheckout()" class="px-5 py-3 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm hover:bg-primary-dim transition-colors">Add items to continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SQUARE TERMINAL STATUS MODAL
+═══════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════
+     CASH REGISTER / CASH DRAWER MODAL
+═══════════════════════════════════════════════ -->
+<div id="cash-register-modal" class="fixed inset-0 hidden items-center justify-center bg-on-surface/50 p-4" style="display:none;z-index:82">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md shadow-2xl fade-up flex flex-col max-h-[90vh]">
+    <div class="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
+      <h2 id="cash-register-title" class="text-xl font-headline font-bold text-on-surface">Cash Register</h2>
+      <button onclick="closeCashRegister()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="cash-register-body" class="px-6 pb-6 overflow-y-auto"></div>
+  </div>
+</div>
+
+<div id="square-terminal-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:81">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-sm flex flex-col items-center text-center shadow-2xl px-6 py-7 gap-4">
+    <span class="material-symbols-outlined text-primary" style="font-size:44px">contactless</span>
+    <div id="square-terminal-status" class="font-headline font-semibold text-on-surface">Sending to the Terminal…</div>
+    <div class="text-xs font-body text-on-surface-variant">Complete the payment on the Square Terminal. This updates automatically.</div>
+    <button onclick="cancelTerminalCheckout()" class="w-full border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
   </div>
 </div>
 
@@ -1750,7 +2106,7 @@ tailwind.config = {
 </div>
 
 
-<div id="warn-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/50">
+<div id="warn-modal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-on-surface/50">
   <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 text-center">
     <div class="w-14 h-14 rounded-full bg-secondary-container flex items-center justify-center mx-auto mb-4">
       <span class="material-symbols-outlined text-secondary" style="font-size:28px;font-variation-settings:'FILL' 1">warning</span>
@@ -1934,6 +2290,7 @@ tailwind.config = {
           </div>
         </div>
       </div>
+      <div id="schedule-picker-note" class="text-[11px] font-body text-on-surface-variant px-3 pt-1 leading-snug hidden"></div>
     </div>
   </div>
 </div>
@@ -1971,33 +2328,6 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      FIRST-TIME SETUP WIZARD (shows if not configured)
 ═══════════════════════════════════════════════ -->
-<div id="setup-wizard" class="fixed inset-0 z-[200] hidden items-center justify-center bg-on-surface/70">
-  <div class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-md shadow-2xl mx-4">
-    <div class="text-center mb-6">
-      <div class="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-        <span class="material-symbols-outlined text-on-primary" style="font-size:32px">store</span>
-      </div>
-      <h2 class="text-2xl font-headline font-bold text-on-surface">Welcome to TurnDesk</h2>
-      <p class="text-sm font-body text-on-surface-variant mt-2">One-time setup — enter your Square Location ID to connect.</p>
-    </div>
-    <div class="space-y-4">
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Square Location ID</label>
-        <input id="setup-location-id" type="text" placeholder="e.g. L01VG1HJ5WMJD"
-          class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
-        <p class="text-xs font-body text-on-surface-variant mt-1">Find this in Square Dashboard → Locations</p>
-      </div>
-      <button onclick="completeSetup()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold text-base transition-all active:scale-95">
-        Connect & Start
-      </button>
-      <button onclick="skipSetup()" class="w-full text-on-surface-variant text-sm font-body py-2 hover:text-on-surface transition-colors">
-        Skip for now (Square features disabled)
-      </button>
-    </div>
-  </div>
-</div>
-
-
 <!-- ═══════════════════════════════════════════════
      EDIT CHECK-IN MODAL
 ═══════════════════════════════════════════════ -->
@@ -2018,23 +2348,7 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      CUSTOMER DIRECTORY MODAL
 ═══════════════════════════════════════════════ -->
-<div id="customer-dir-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-2xl shadow-2xl fade-up mx-4 max-h-[90vh] flex flex-col">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Customer Directory</h2>
-      <button onclick="closeCustomerDir()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
-    </div>
-    <div class="flex gap-2 mb-4">
-      <input id="customer-dir-search" type="text" placeholder="Search by name or phone…"
-        oninput="filterCustomerDir(this.value)"
-        class="flex-grow border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
-      <button onclick="syncSquareCustomers()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors">
-        <span class="material-symbols-outlined" style="font-size:16px">sync</span> Sync Square
-      </button>
-    </div>
-    <div id="customer-dir-list" class="overflow-y-auto flex-1" style="scrollbar-width:thin"></div>
-  </div>
-</div>
+<!-- (Customer Directory modal removed in v4.25 — replaced by the dedicated Customers tab.) -->
 
 <!-- ═══════════════════════════════════════════════
      EDIT CUSTOMER MODAL
@@ -2042,7 +2356,7 @@ tailwind.config = {
 <div id="edit-customer-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/40" onclick="if(event.target===this)closeEditCustomer()">
   <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl fade-up mx-4 max-h-[92vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
+      <h2 id="edit-customer-title" class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
       <button onclick="closeEditCustomer()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
     <div class="space-y-4">
@@ -2074,8 +2388,9 @@ tailwind.config = {
       </div>
     </div>
     <div class="flex gap-2 mt-5">
+      <button id="edit-cust-delete-btn" onclick="deleteCustomerFromEdit()" class="hidden px-4 py-3 rounded-xl border border-error/60 text-error font-headline font-semibold hover:bg-error/10 transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
       <button onclick="closeEditCustomer()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
-      <button onclick="saveEditCustomer()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save to Square</button>
+      <button onclick="saveEditCustomer()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save</button>
     </div>
   </div>
 </div>
@@ -2195,6 +2510,14 @@ tailwind.config = {
       <textarea id="refund-reason" rows="2" placeholder="Customer request, service issue, etc."
         class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body text-on-surface focus:border-primary outline-none resize-none"></textarea>
     </div>
+    <label id="refund-square-row" class="hidden items-start gap-2.5 mb-4 cursor-pointer select-none rounded-xl border border-surface-container-high px-3 py-2.5">
+      <input type="checkbox" id="refund-to-square" class="mt-0.5 w-4 h-4 flex-shrink-0" style="accent-color:#5c4010">
+      <span class="text-xs font-body text-on-surface-variant leading-snug">Also refund this <strong class="text-on-surface" id="refund-processor-label">in Square</strong> (<span id="refund-square-amt">card portion</span>) — card goes back to the card; cash &amp; Zelle are recorded refunds. Gift-card portions are returned by hand.</span>
+    </label>
+    <label id="refund-cash-out-row" class="hidden items-start gap-2.5 mb-4 cursor-pointer select-none rounded-xl border border-surface-container-high px-3 py-2.5">
+      <input type="checkbox" id="refund-cash-out" class="mt-0.5 w-4 h-4 flex-shrink-0" style="accent-color:#5c4010">
+      <span class="text-xs font-body text-on-surface-variant leading-snug">I returned this <strong class="text-on-surface">in cash from the drawer</strong> — log a Cash Out so the open drawer reconciles. (Leave unchecked for card / Zelle refunds.)</span>
+    </label>
     <div class="flex gap-2">
       <button onclick="closeRefundModal()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
       <button onclick="confirmRefund()" class="flex-1 py-3 rounded-xl font-headline font-bold text-white transition-all" style="background:#5c4010">Confirm Refund</button>
@@ -2244,13 +2567,15 @@ tailwind.config = {
 
       <!-- Customer -->
       <div class="grid grid-cols-2 gap-3">
-        <div>
+        <div class="ac-input-wrap">
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name *</label>
-          <input type="text" id="hist-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <input type="text" id="hist-name" placeholder="Full name" autocomplete="off" oninput="histAcSearch(this,'first')" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <div id="hist-ac-name" class="autocomplete-list hidden"></div>
         </div>
-        <div>
+        <div class="ac-input-wrap">
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
-          <input type="tel" id="hist-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <input type="tel" id="hist-phone" placeholder="(555) 000-0000" autocomplete="off" oninput="histAcSearch(this,'phone')" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <div id="hist-ac-phone" class="autocomplete-list hidden"></div>
         </div>
       </div>
 
@@ -2305,6 +2630,27 @@ tailwind.config = {
           <input type="text" id="hist-discount-note" placeholder="Optional note"
             class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
         </div>
+      </div>
+
+      <!-- Tip (recorded only — adjusts the tracked number; never re-charges the card; not part of the total below) -->
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Tip ($) <span class="text-on-surface-variant normal-case tracking-normal">— recorded only, not part of the total</span></label>
+        <input type="text" inputmode="decimal" id="hist-tip" placeholder="0.00"
+          class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+      </div>
+
+      <!-- Payment method — recorded as the tender so it shows in the Payment Mix + reconcile -->
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Payment method</label>
+        <div class="flex gap-2 flex-wrap">
+          <button type="button" id="hist-method-card" onclick="setHistMethod('card')" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all">Card</button>
+          <button type="button" id="hist-method-cash" onclick="setHistMethod('cash')" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all">Cash</button>
+          <button type="button" id="hist-method-zelle" onclick="setHistMethod('zelle')" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all">Zelle</button>
+          <button type="button" id="hist-method-gift" onclick="setHistMethod('gift')" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all">Gift</button>
+          <button type="button" id="hist-method-other" onclick="setHistMethod('other')" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all">Other</button>
+        </div>
+        <input type="text" id="hist-ref" placeholder="Reference / transaction id (optional — e.g. Helcim txn id, for reconcile)"
+          class="w-full mt-2 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
       </div>
 
       <!-- Auto-calculated total -->
@@ -2392,26 +2738,29 @@ tailwind.config = {
           <option value="120">2 hours</option>
         </select>
       </div>
-      <!-- Service lines: each row = service + technician (primary guest) -->
+      <!-- Service lines: each row = service + technician (primary guest). "Add service" is a
+           full-width TEAL button right under the rows — clearly part of THIS guest's services. -->
       <div>
-        <div class="flex items-center justify-between mb-2">
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Primary Guest — Services &amp; Technicians</label>
-          <button type="button" onclick="addApptServiceLine()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-            <span class="material-symbols-outlined" style="font-size:14px">add</span> Add service
-          </button>
-        </div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services &amp; Technicians</label>
         <div id="appt-service-lines" class="space-y-2"></div>
+        <button type="button" onclick="addApptServiceLine()" class="w-full mt-2 flex items-center justify-center gap-1.5 border-2 border-dashed border-primary/60 text-primary hover:bg-primary/5 rounded-xl py-2.5 text-sm font-body font-semibold transition-colors">
+          <span class="material-symbols-outlined" style="font-size:16px">add</span> Add service
+        </button>
       </div>
-
-      <!-- Additional guests — each with their own name/phone + services -->
-      <div id="appt-extra-guests"></div>
-      <button type="button" onclick="apptAddGuest()" class="flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-        <span class="material-symbols-outlined" style="font-size:14px">person_add</span> Add another guest
-      </button>
 
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
         <input type="text" id="appt-notes" placeholder="Optional notes" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
+      </div>
+
+      <!-- Additional guests — a SEPARATE zone (distinct amber colour, divided off) so "Add another
+           guest" can't be confused with the teal "Add service" above. Each guest carries their own
+           name/phone + service lines. -->
+      <div class="border-t border-surface-container-high pt-4">
+        <div id="appt-extra-guests"></div>
+        <button type="button" onclick="apptAddGuest()" class="w-full flex items-center justify-center gap-2 border-2 rounded-xl py-3 text-sm font-body font-semibold transition-colors" style="border-color:#a07c2a;color:#7a5c1a;background:rgba(120,90,26,.05)">
+          <span class="material-symbols-outlined" style="font-size:18px">group_add</span> Add another guest
+        </button>
       </div>
       <input type="hidden" id="appt-event-id">
       <input type="hidden" id="appt-cal-id">
@@ -2425,18 +2774,24 @@ tailwind.config = {
 
 <div id="numpad-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-on-surface/40" onclick="closeNumpad(event)">
   <div class="bg-surface-container-lowest w-full max-w-sm rounded-t-2xl shadow-2xl pb-safe" onclick="event.stopPropagation()">
+    <!-- Matching customers (phone mode) — mirrored from the field's autocomplete, which the
+         numpad sheet otherwise covers on the iPad. Tap a match → fills the form + closes. -->
+    <div id="numpad-ac" class="hidden border-b border-surface-container-high max-h-44 overflow-y-auto no-scroll" onclick="setTimeout(()=>dismissNumpad(),50)"></div>
+    <!-- Calculator receipt tape (money mode only) — running list of the operands/operators typed -->
+    <div id="numpad-tape" class="hidden px-6 pt-2 text-right text-xs text-on-surface-variant max-h-16 overflow-y-auto no-scroll" style="font-variant-numeric:tabular-nums;line-height:1.5"></div>
     <!-- Display -->
     <div class="px-6 pt-5 pb-3 border-b border-surface-container-high flex items-end justify-between gap-3">
       <div class="min-w-0">
         <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1" id="numpad-label">Cost</div>
         <div class="text-4xl font-headline font-bold text-on-surface tracking-tight" id="numpad-display">$0.00</div>
       </div>
-      <button onpointerdown="event.preventDefault();numpadClear()" title="Clear" class="flex items-center gap-1 px-5 py-3 rounded-2xl border border-surface-container-high bg-surface-container text-on-surface-variant font-headline font-bold text-lg active:scale-95 transition-all flex-shrink-0">
+      <button id="numpad-clear-btn" onpointerdown="event.preventDefault();numpadClear()" title="Clear" class="flex items-center gap-1 px-5 py-3 rounded-2xl border border-surface-container-high bg-surface-container text-on-surface-variant font-headline font-bold text-lg active:scale-95 transition-all flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:20px">backspace</span> AC
       </button>
     </div>
     <!-- Keys -->
-    <div class="grid grid-cols-4 gap-px bg-surface-container-high" style="padding:1px">
+    <div style="display:flex;gap:1px;background:var(--surface-container-high,#c2cacd)">
+    <div class="grid grid-cols-4 gap-px bg-surface-container-high flex-1" style="padding:1px">
       <button onpointerdown="event.preventDefault();numpadKey('1')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">1</button>
       <button onpointerdown="event.preventDefault();numpadKey('2')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">2</button>
       <button onpointerdown="event.preventDefault();numpadKey('3')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">3</button>
@@ -2458,12 +2813,40 @@ tailwind.config = {
       <button onpointerdown="event.preventDefault();numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
       <button onpointerdown="event.preventDefault();numpadKey('.')" id="numpad-dot-key" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
     </div>
+    <!-- Operator rail (money mode only; shown by openNumpad). The grid's + key is the 4th operator. -->
+    <div id="numpad-ops" style="display:none;flex-direction:column;gap:1px;background:var(--surface-container-high,#c2cacd)">
+      <button onpointerdown="event.preventDefault();numpadKey('/')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">÷</button>
+      <button onpointerdown="event.preventDefault();numpadKey('*')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">×</button>
+      <button onpointerdown="event.preventDefault();numpadKey('-')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">−</button>
+    </div>
+    </div>
   </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
      CUSTOMER NOTE POPUP (dashboard check-in: view + edit a returning customer's note)
 ═══════════════════════════════════════════════ -->
+
+<!-- ═══════════════════════════════════════════════
+     WHAT'S NEW (one-time per device after a version update)
+═══════════════════════════════════════════════ -->
+<div id="whatsnew-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeWhatsNew()">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md shadow-2xl fade-up max-h-[85vh] flex flex-col">
+    <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
+      <span class="material-symbols-outlined text-primary" style="font-size:22px">auto_awesome</span>
+      <h2 class="text-lg font-headline font-bold text-on-surface">What's new <span id="whatsnew-version" class="text-on-surface-variant font-body font-semibold text-sm"></span></h2>
+      <!-- Browse earlier release notes (up to 5 back) -->
+      <div class="ml-auto flex items-center gap-1 flex-shrink-0">
+        <button id="whatsnew-prev" onclick="whatsNewNav(1)" title="Older update" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center disabled:opacity-30"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chevron_left</span></button>
+        <button id="whatsnew-next" onclick="whatsNewNav(-1)" title="Newer update" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center disabled:opacity-30"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chevron_right</span></button>
+      </div>
+    </div>
+    <div id="whatsnew-body" class="flex-1 overflow-y-auto p-5 space-y-3"></div>
+    <div class="p-5 border-t border-surface-container-high flex-shrink-0">
+      <button onclick="closeWhatsNew()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Got it</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
   <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
@@ -2478,22 +2861,8 @@ tailwind.config = {
 <!-- Appointment reminder banners (top-center, non-blocking, stack, persist until OK) -->
 <div id="appt-reminder-banners" class="fixed flex flex-col items-center gap-2" style="top:54px;left:50%;transform:translateX(-50%);z-index:85;pointer-events:none;width:max-content;max-width:96vw"></div>
 
-<!-- Staff chat (real-time across logged-in devices; rides config sync) -->
-<div id="chat-panel" class="hidden fixed flex-col rounded-2xl shadow-2xl overflow-hidden bg-surface-container-lowest" style="display:none;flex-direction:column;z-index:75;top:56px;right:12px;width:330px;max-width:calc(100vw - 24px);height:440px;max-height:calc(100vh - 80px);border:1px solid var(--outline-variant,#c2cacd)">
-  <div class="flex items-center justify-between px-4 py-3 flex-shrink-0" style="border-bottom:1px solid var(--outline-variant,#c2cacd)">
-    <div class="font-headline font-bold text-on-surface text-sm flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:18px">forum</span> Staff Chat</div>
-    <div class="flex items-center gap-1">
-      <button id="chat-clear-btn" onclick="clearChat()" title="Clear chat for everyone (manager)" class="hidden text-on-surface-variant hover:text-error"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
-      <button onclick="closeChat()" title="Close" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
-    </div>
-  </div>
-  <div id="chat-messages" class="flex-1 overflow-y-auto px-3 py-3" style="min-height:0"></div>
-  <div class="flex items-center gap-2 px-3 py-3 flex-shrink-0" style="border-top:1px solid var(--outline-variant,#c2cacd)">
-    <input id="chat-input" type="text" maxlength="1000" placeholder="Message…" onkeydown="chatInputKey(event)" autocomplete="off"
-      class="flex-1 bg-surface-container border border-surface-container-high rounded-full px-4 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
-    <button onclick="sendChatMessage()" title="Send" class="flex items-center justify-center w-9 h-9 rounded-full bg-primary text-on-primary flex-shrink-0 active:scale-95 transition-all"><span class="material-symbols-outlined" style="font-size:18px">send</span></button>
-  </div>
-</div>
+<!-- Staff chat (Team + DMs; rendered by features/chat.js; rides config sync) -->
+<div id="chat-panel" class="chat-panel hidden"></div>
 
 <script type="module" src="js/app/main.js"></script>
 

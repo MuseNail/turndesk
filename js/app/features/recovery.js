@@ -57,11 +57,16 @@ function _entryName(op, payload) {
 export function recoveryRestoreFailed(mutationId) {
   const item = failedOps().find(x => x.mutationId === mutationId);
   if (!item) { showToast('Item no longer available'); return; }
+  // Restore under the ORIGINAL id (not a fresh one). A fresh id would bypass the
+  // "never revive a deleted transaction" guard and create a duplicate financial record;
+  // re-saving with the original id merges cleanly if the record still exists, and is
+  // correctly blocked by the deletion guard if it was deliberately deleted.
   if (item.op === 'queue.upsert' && item.payload?.entry) {
-    dispatch('queue.upsert', { entry: { ...item.payload.entry, id: newEntryId() } });
+    dispatch('queue.upsert', { entry: { ...item.payload.entry } });
     showToast('Restored to queue ✓');
   } else if (item.op === 'record.save' && item.payload?.record) {
-    dispatch('record.save', { record: { ...item.payload.record, id: newEntryId() } });
+    if (getState().deletions.includes(String(item.payload.record.id))) { showToast('That transaction was deleted — not restored'); return; }
+    dispatch('record.save', { record: { ...item.payload.record } });
     showToast('Transaction restored ✓');
   } else { showToast('This item can’t be auto-restored'); return; }
   clearFailedOp(mutationId);
@@ -146,7 +151,15 @@ export function renderRecoveryReport() {
       <div class="text-sm font-body text-on-surface whitespace-pre-wrap">${_esc(o.text)}</div>
     </div>`).join('') : none('No orphaned notes — every note maps to a current customer.');
 
+  // E — calendar: clear past auto-written No-Show flags
+  const _since90 = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const noShowBody = `<div class="flex flex-wrap gap-2 items-center">
+      <input type="date" id="noshow-clear-since" value="${_since90}" class="px-3 py-2 rounded-lg border border-surface-container-high bg-surface text-sm font-body text-on-surface">
+      <button onclick="window.clearPastNoShowFlags(document.getElementById('noshow-clear-since').value)" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_busy</span> Clear past no-shows</button>
+    </div>`;
+
   el.innerHTML =
+    section('Calendar — past no-shows', 'Clears the No-Show flag from appointments before today (today is left alone). Use this once to undo the old auto-no-show that wrongly flagged served customers. Needs Google Calendar connected on this device.', noShowBody) +
     section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml) +
     section('Waiting to sync', 'Writes from this device not yet confirmed by the server. These send automatically on reconnect.', pendingHtml) +
     section('Failed writes', 'Writes the server rejected. Restore re-adds the customer/transaction to the queue.', failedHtml) +

@@ -2,19 +2,20 @@
 <html lang="en" class="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>TurnDesk Staff</title>
+<title>Muse Staff</title>
 
 <!-- PWA (separate installable app, shares the same origin + Durable Object) -->
-<link rel="manifest" href="/turndesk/manifest-staff.json">
+<link rel="manifest" href="/musedashboard/manifest-staff.json">
 <meta name="theme-color" content="#1a5252">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="TurnDesk Staff">
-<link rel="apple-touch-icon" href="/turndesk/icons/icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Muse Staff">
+<link rel="apple-touch-icon" href="/musedashboard/icons/icon-192.png">
 
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -59,7 +60,7 @@ tailwind.config = {
   <!-- ── PIN login ───────────────────────────────── -->
   <div id="staff-login" class="hidden fixed inset-0 flex items-center justify-center p-6">
     <div class="bg-surface-container-lowest rounded-2xl shadow-2xl p-8 w-full max-w-xs text-center fade-up">
-      <div class="text-2xl font-headline font-extrabold text-primary mb-1">TurnDesk Staff</div>
+      <div class="text-2xl font-headline font-extrabold text-primary mb-1">Muse Staff</div>
       <div class="text-sm font-body text-on-surface-variant mb-6">Enter your PIN to see your customers</div>
       <input id="staff-pin-entry" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"
         onkeydown="staffPinKey(event)" oninput="staffPinInput()" autofocus
@@ -76,7 +77,7 @@ tailwind.config = {
       <div class="flex items-center gap-2 min-w-0">
         <span id="staff-conn" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e8730a"></span>
         <div class="min-w-0">
-          <div class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">TurnDesk Staff</div>
+          <div class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">Muse Staff</div>
           <div id="staff-tech-name" class="font-headline font-bold text-lg leading-tight truncate"></div>
         </div>
       </div>
@@ -87,10 +88,46 @@ tailwind.config = {
     <main id="staff-list" class="p-3 max-w-md mx-auto"></main>
   </div>
 
+  <!-- ── Inline price calculator ─────────────────── -->
+  <div id="staff-calc-modal" class="hidden fixed inset-0 z-[90] items-end sm:items-center justify-center bg-black/50 p-4" style="display:none" onclick="if(event.target===this)staffCalcClose()">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-xs p-4 fade-up">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-headline font-bold text-lg text-on-surface">Calculator</div>
+        <button onclick="staffCalcClose()" class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="bg-surface-container rounded-xl px-4 py-3 mb-3 text-right">
+        <div id="staff-calc-expr" class="font-headline text-3xl text-on-surface min-h-[2.5rem] break-all leading-tight">0</div>
+        <div id="staff-calc-res" class="font-body text-base font-semibold text-primary h-6"></div>
+      </div>
+      <div id="staff-calc-keys" class="grid grid-cols-4 gap-2"></div>
+      <button onclick="staffCalcOk()" class="w-full mt-3 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold text-lg active:scale-95 transition-all">OK — use this amount</button>
+    </div>
+  </div>
+
   <!-- ── Toast (used by utils.showToast) ─────────── -->
   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
     <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
   </div>
+
+  <!-- ── Allow-notifications prompt (auto-shown once when signed in w/o permission) ── -->
+  <div id="staff-notif-modal" class="hidden fixed inset-0 z-[95] items-center justify-center bg-black/50 p-5" style="display:none" onclick="if(event.target===this)staffNotifDismiss()">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center fade-up">
+      <div class="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3"><span class="material-symbols-outlined text-primary" style="font-size:30px">notifications_active</span></div>
+      <div class="font-headline font-bold text-lg text-on-surface mb-1">Turn on notifications</div>
+      <div class="text-sm font-body text-on-surface-variant mb-5">Get pinged on your phone when you're assigned a customer or someone messages you in chat.</div>
+      <button onclick="staffNotifAllow()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3.5 rounded-xl font-headline font-bold active:scale-95 transition-all mb-2">Allow notifications</button>
+      <button onclick="staffNotifDismiss()" class="w-full text-on-surface-variant font-body font-semibold py-2">Not now</button>
+    </div>
+  </div>
+
+  <!-- ── Staff chat (Team + DMs) ─────────────────── -->
+  <button id="chat-fab" class="chat-fab" style="display:none" onclick="toggleChat()" title="Chat">
+    <span class="material-symbols-outlined" style="font-size:26px">chat</span>
+    <span id="chat-badge" class="chat-badge hidden">0</span>
+  </button>
+  <div id="chat-panel" class="chat-panel hidden"></div>
 
   <script type="module" src="js/app/staff.js"></script>
 </body>

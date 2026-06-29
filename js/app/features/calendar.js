@@ -1,38 +1,106 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, formatPhone, byName, newEntryId } from '../utils.js';
+import { PUSH_PROXY } from '../config.js';
+import { withAuth } from '../apptoken.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
-import { squarePushBooking } from './square-pos.js';
 
-const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
-const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
+// Server-side refresh-token auth: the Worker holds the Google refresh token and mints access
+// tokens on demand, so the iPad never depends on Safari/Chrome silent renewal. gapi (below) is
+// still loaded for the Calendar/Tasks API calls; the access token comes from the Worker, not GIS.
+const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
+const records = () => getState().records;
 
-let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
+// Escapers for untrusted Google/Square data interpolated into innerHTML. _escHtml
+// for HTML-text/attribute context; _escAttrJs for a value placed inside a single-
+// quoted JS string that itself sits inside a double-quoted on*= attribute (JS-string
+// escape first, then HTML-escape so the browser's attribute decode yields a clean
+// JS literal). Several render fns still define their own local escHtml/_e — these are
+// the module-level versions used by calEventClick / tasks / autocomplete.
+const _escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const _escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+let _calGapiLoaded = false, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
+// Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
+// the Turns "upcoming" strip + appointment reminders always reflect TODAY even when the Calendar
+// tab is parked on another date. (Before, both read _calEvents, which holds whatever day you're
+// viewing — so navigating the calendar polluted Turns/reminders.) Short TTL; refreshed in the
+// background by callers (fire-and-forget). Needs gapi + a Google token (Calendar opened/connected
+// at least once this session); otherwise empty and callers fall back to _calEvents when it's today.
+let _todayEvents = {}, _todayEventsAt = 0, _todayLoading = false;
 let _unassignedOnly = false;
+// Day | Week view (device-local). Week = a 7-day overview: all visible techs' bookings
+// merged per day column, colored by tech; tapping a day drills into the Day view.
+let _calView = localStorage.getItem('muse_cal_view') === 'week' ? 'week' : 'day';
+const calIsWeek = () => _calView === 'week';
+function calWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
 // Today's-Appointments panel filter (device-local): hide past-time + finished rows.
-let _apptsUpcomingOnly = localStorage.getItem('turndesk_cal_upcoming') === '1';
+let _apptsUpcomingOnly = localStorage.getItem('muse_cal_upcoming') === '1';
 export function toggleApptsUpcoming() {
   _apptsUpcomingOnly = !_apptsUpcomingOnly;
-  localStorage.setItem('turndesk_cal_upcoming', _apptsUpcomingOnly ? '1' : '0');
+  localStorage.setItem('muse_cal_upcoming', _apptsUpcomingOnly ? '1' : '0');
   renderTodaysAppointments();
 }
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
+// Re-entry guard: saveAppt runs a multi-second sequence of awaited Google writes while
+// the modal stays open. Without this, an impatient second Save tap mints a fresh groupId
+// and inserts a whole duplicate party (+ duplicate Square upserts). Blocks re-entry until
+// the in-flight save settles.
+let _apptSaving = false;
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
-let _calHidden = new Set(JSON.parse(localStorage.getItem('turndesk_gcal_hidden') || '[]'));
-let _calOrder = JSON.parse(localStorage.getItem('turndesk_gcal_order') || 'null');
+let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
+let _calOrder = JSON.parse(localStorage.getItem('gcal_order') || 'null');
 // Off-duty auto-hide (opt-in via config.cal_autohide_offduty): calendars whose matched
 // staff is off/sick/vacation are hidden by default each day. _calOffPeek holds the ones
 // the operator turned on for the CURRENTLY-viewed day; it resets on day navigation.
 let _calOffPeek = new Set();
 const CAL_SYNC_INTERVAL = 60000;
+
+// ── Google eventual-consistency guards ────────────────────────────────────────
+// Right after a write, events.list can still RETURN just-deleted events (ghosts) and
+// MISS just-inserted/updated ones for several seconds. That made edits — especially
+// multi-staff bookings, which are delete+reinsert fan-outs — "not display properly"
+// (duplicates, stale copies) until a later sync. Every delete records a tombstone and
+// every insert/update/patch pins the resource Google returned; _gcalApplyGuards()
+// reconciles each fetched list against both for a couple of minutes.
+const GCAL_LAG_MS = 120000;
+const _calGhosts = new Map();   // `${calId}|${eventId}` -> expiresAt
+const _calPins   = new Map();   // `${calId}|${eventId}` -> { ev, expiresAt }
+export function _gcalNoteDeleted(calId, eventId) {
+  if (!calId || !eventId) return;
+  _calGhosts.set(calId + '|' + eventId, Date.now() + GCAL_LAG_MS);
+  _calPins.delete(calId + '|' + eventId);
+}
+export function _gcalNoteWritten(calId, ev) {
+  if (!calId || !ev || !ev.id) return;
+  _calPins.set(calId + '|' + ev.id, { ev, expiresAt: Date.now() + GCAL_LAG_MS });
+  _calGhosts.delete(calId + '|' + ev.id);
+}
+export function _gcalApplyGuards(calId, items) {
+  const now = Date.now();
+  for (const [k, exp] of _calGhosts) if (exp <= now) _calGhosts.delete(k);
+  for (const [k, v] of _calPins) if (v.expiresAt <= now) _calPins.delete(k);
+  let out = (items || []).filter(e => !_calGhosts.has(calId + '|' + e.id));
+  // Prefer the pinned (post-write) copy while the fetched one is older; once Google
+  // catches up the fetched copy wins and the pin ages out.
+  out = out.map(e => {
+    const p = _calPins.get(calId + '|' + e.id);
+    return (p && +new Date(p.ev.updated || 0) > +new Date(e.updated || 0)) ? p.ev : e;
+  });
+  for (const [k, v] of _calPins) {
+    const sep = k.indexOf('|');
+    if (k.slice(0, sep) === calId && !out.some(e => e.id === k.slice(sep + 1))) out.push(v.ev);
+  }
+  return out;
+}
 
 // A calendar's tech is off on the viewed date? Maps Google calendar → staff by NAME
 // (case-insensitive, trimmed), reads the in-app schedule only (off/sick/vacation for
@@ -42,7 +110,10 @@ function calColumnOff(cal) {
   const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
   if (!st) return false;
   const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
-  const status = sc[dstr]?.[st.id] || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null;
+  const explicit = sc[dstr]?.[st.id];
+  // '__none__' is a one-off blank that overrides the weekly repeat (mirrors getScheduleStatus).
+  const status = explicit === '__none__' ? null
+    : (explicit || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null);
   return status === 'off' || status === 'sick' || status === 'vacation';
 }
 // Auto-hide active? (opt-in setting). Calendars filter + grid both consult this.
@@ -66,35 +137,85 @@ export function renderCalAutoHideSetting() {
     + `<div class="flex items-start justify-between gap-4">`
     + `<div class="min-w-0"><p class="text-sm font-body font-semibold text-on-surface">Auto-hide off-duty staff</p>`
     + `<p class="text-xs font-body text-on-surface-variant mt-0.5">Show only staff scheduled to work each day. Staff marked off, sick, or vacation are hidden automatically. Open the Calendars filter to peek at one — it re-hides when you change days.</p></div>`
-    + `<button onclick="toggleCalAutoHide()" class="flex-shrink-0 mt-0.5" aria-label="Auto-hide off-duty staff">`
+    + `<button onclick="toggleCalAutoHide(this)" class="flex-shrink-0 mt-0.5" aria-label="Auto-hide off-duty staff">`
     + `<div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on?'left-7':'left-0.5'}"></div></div>`
     + `</button></div>`;
 }
-export function toggleCalAutoHide() {
-  dispatch('config.set', { key: 'cal_autohide_offduty', value: !calAutoHideOn() });
-  renderCalAutoHideSetting();
+export function toggleCalAutoHide(btn) {
+  const on = !calAutoHideOn();
+  dispatch('config.set', { key: 'cal_autohide_offduty', value: on });
+  if (btn) setSwitchVisual(btn, on); else renderCalAutoHideSetting();
   _calOffPeek = new Set();
   if (document.getElementById('cal-grid')) { calRenderGridPreserveScroll(); renderCalSelectorList(); }
 }
 
-// Exposed for square-pos.squarePushBooking (via window.calEventsFor in main.js).
+// Returns the loaded events for a calendar (exposed via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
+
+// Load TODAY's events for all calendars into _todayEvents, independent of _calDate. Cached with
+// a 60s TTL; fire-and-forget from the callers. Re-renders the Turns strip when a load completes.
+async function ensureTodayApptEvents(force) {
+  if (_todayLoading) return;
+  if (!force && _todayEventsAt && Date.now() - _todayEventsAt < 60000) return;
+  if (!window.gapi?.client?.calendar || !localStorage.getItem('gcal_token') || !_calCalendars.length) return;
+  _todayLoading = true;
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
+  const next = {};
+  try {
+    await Promise.all(_calCalendars.map(async cal => {
+      try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); next[cal.id] = _gcalApplyGuards(cal.id, r.result.items); }
+      catch (e) { next[cal.id] = _todayEvents[cal.id] || []; }
+    }));
+    _todayEvents = next; _todayEventsAt = Date.now();
+    if (document.getElementById('panel-turns')?.classList.contains('active')) window.renderTurnsApptStrip?.();
+  } finally { _todayLoading = false; }
+}
+// The event source for "today" features (Turns strip, reminders). Triggers a background refresh
+// and returns the freshest today-scoped events; before the first load lands, fall back to
+// _calEvents only when the calendar is showing today, so the common case never regresses.
+function todayApptSource() {
+  ensureTodayApptEvents();
+  if (_todayEventsAt) return _todayEvents;
+  if (new Date().toDateString() === _calDate.toDateString()) return _calEvents;
+  return {};
+}
 
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
+  const uCal = unassignedCalId();
+  const staff = cfg().staff || [];
+  const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
   const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
   const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(ev); }));
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const out = [];
-  groups.forEach((evs) => {
-    const primary = evs.find(e => e.extendedProperties?.private?.musePrimary === '1') || evs[0];
-    const ppriv = primary.extendedProperties?.private || {};
-    out.push({ id: primary.id, name: ppriv.musePrimaryName || ppriv.museName || (primary.summary || '').split(' — ')[0] || 'Guest', startMs: new Date(primary.start.dateTime).getTime() });
+  groups.forEach(items => {
+    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
+    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
+    const startMs = new Date(pev.start.dateTime).getTime();
+    // Don't remind for an appointment already handled: no-show, or already checked in
+    // (linked queue entry or a phone match near the appt time). Mirrors apptsForTurns so
+    // a banner never fires for someone already in a chair or flagged a no-show.
+    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;
+    let qm = null;
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
+    if (qm) return;
+    const lines = [];
+    items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
+    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ');
+    const techName = [...new Set(lines.map(l => staffForCal(l.calId)?.name).filter(Boolean))].join(', ');
+    out.push({ id: pev.id, name: ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest', startMs, svc, techName });
   });
   return out;
 }
 
+// An appointment this many minutes past its start that was never checked in is
+// treated as a de-facto no-show and DROPPED from the Turns strip / next-up — computed
+// live each render, NEVER written to Google. (We used to PATCH museNoShow onto these,
+// which permanently mis-flagged served-but-unlinked customers as No Show on past days.)
+const STALE_APPT_DROP_MIN = 60;
 // For the Turns sheet: today's UPCOMING timed appointments, one entry per
 // (booking × assigned tech). Excludes anything not still upcoming — passed start
 // time, no-show, or already in the queue (checked in / in service / complete / paid).
@@ -107,16 +228,20 @@ export function apptsForTurns() {
   const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
   const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
   const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const out = [];
   groups.forEach(items => {
     const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
     const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
     const startMs = new Date(pev.start.dateTime).getTime();
-    if (startMs < now) return;                                                   // passed
-    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
+    // Keep LATE appointments (start time already passed) — a running-late customer still hasn't
+    // arrived, so the front desk needs to see them, WITH a "late" flag. They drop off only when
+    // checked in, manually marked no-show, or very-late (see below). `late`/`minsLate` flag them.
+    const late = startMs < now, minsLate = late ? Math.round((now - startMs) / 60000) : 0;
+    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // manual no-show
+    if (minsLate > STALE_APPT_DROP_MIN) return;   // very late & never checked in → drop (computed live, never written)
     let qm = null;                                                               // already in the queue → checked in
-    items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g, ''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (ph ? queue().find(x => (x.phone || '').replace(/\D/g, '') === ph) : null); });
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
     if (qm) return;
     const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest';
     const lines = [];
@@ -124,8 +249,9 @@ export function apptsForTurns() {
     const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ') || (pev.summary || '').split(' — ')[0] || 'Appointment';
     const techs = new Map();   // staffId -> name, distinct assigned techs
     lines.forEach(l => { const st = staffForCal(l.calId); if (st) techs.set(st.id, st.name); });
-    if (techs.size === 0) out.push({ startMs, name, svc, techStaffId: '', techName: 'Unassigned' });
-    else techs.forEach((tn, id) => out.push({ startMs, name, svc, techStaffId: id, techName: tn }));
+    const eCalId = primary.calId, eEventId = pev.id, eNotes = _apptNotes(pev);
+    if (techs.size === 0) out.push({ startMs, late, minsLate, name, svc, techStaffId: '', techName: 'Unassigned', calId: eCalId, eventId: eEventId, notes: eNotes });
+    else techs.forEach((tn, id) => out.push({ startMs, late, minsLate, name, svc, techStaffId: id, techName: tn, calId: eCalId, eventId: eEventId, notes: eNotes }));
   });
   out.sort((a, b) => a.startMs - b.startMs);
   return out;
@@ -182,7 +308,7 @@ export function renderTodaysAppointments() {
   const isToday = new Date().toDateString() === _calDate.toDateString();
   if (titleEl) titleEl.textContent = isToday ? "Today's Appointments" : _calDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const uCal = unassignedCalId();
-  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description||'') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())); };
+  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description||'') || ext.museLines !== undefined || cfg().services.some(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())); };
   const groups = new Map();
   Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(ev => { if (!ev.start || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const rows = [];
@@ -196,7 +322,7 @@ export function renderTodaysAppointments() {
     const persons = new Map();
     items.forEach(({ ev }) => { const pnm = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || name; if (!persons.has(pnm)) persons.set(pnm, _parseApptLines(ev, '')); });
     let qm = null;
-    items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || (ph ? queue().find(x => (x.phone||'').replace(/\D/g,'')===ph) : null); });
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime()); });
     rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, noShow, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
@@ -220,7 +346,7 @@ export function renderTodaysAppointments() {
   listEl.innerHTML = shown.map(r => {
     const timeStr = r.startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
     const qs = r.qm?.status;
-    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
+    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (isToday && r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af', isToday ? 'Unconfirmed' : '']);
     const svcLines = [];
     r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (calDisplayName(l.calId)||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--on-surface-variant, #41484d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
@@ -242,53 +368,91 @@ export function renderTodaysAppointments() {
 function scheduleCalTokenRefresh(expires) {
   clearTimeout(_calRefreshTimer);
   const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
-  _calRefreshTimer = setTimeout(() => { if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
+  _calRefreshTimer = setTimeout(() => { _fetchWorkerToken().catch(() => {}); }, delay);
 }
+// Server-side token acquisition: ask the Worker (which holds the refresh token) for a fresh
+// access token. Always works regardless of browser context (PWA / Safari / Chrome) — no GIS,
+// no ITP. Throws on not_connected / reauth_required so the caller can show the Connect button.
+async function _fetchWorkerToken() {
+  const r = await fetch(`${GCAL_PROXY}/token`);
+  if (!r.ok) { let e = 'token-' + r.status; try { e = (await r.json()).error || e; } catch {} throw new Error(e); }
+  const j = await r.json();
+  const saved = { token: j.access_token, expires: j.expires };
+  localStorage.setItem('gcal_token', JSON.stringify(saved));
+  if (window.gapi?.client) gapi.client.setToken({ access_token: saved.token });
+  scheduleCalTokenRefresh(saved.expires);
+  return saved;
+}
+
+// ── On-demand token freshness ─────────────────────
+// The proactive refresh above is a single setTimeout, which browsers THROTTLE in a backgrounded
+// tab — so it can fire late and the access token lapses. ensureFreshToken() re-mints from the
+// Worker on demand right before any Google call when the token is expired/near expiry, so reads
+// and writes always run on a valid token.
+let _calInitDone = false, _calFocusHooked = false;
+function _tokenFresh(skewMs = 120000) {
+  try { const s = JSON.parse(localStorage.getItem('gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
+}
+function ensureFreshToken() {
+  if (_tokenFresh()) return Promise.resolve();
+  return _fetchWorkerToken().then(() => {});
+}
+// First-connect side effects, run once (not on every silent refresh — that would reload the
+// grid and yank the view mid-use).
+function _calInitialLoad() { if (_calInitDone) return; _calInitDone = true; startCalSync(); calLoadAndRender(); loadTaskLists(); }
+// A failed write is "authentication" when the token expired/was revoked or a refresh failed.
+// Drop the stale token, kick a silent reconnect so the NEXT attempt works, and tell the user.
+function _calWriteError(err, verb) {
+  const msg = err?.result?.error?.message || err?.message || '';
+  const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED' || /auth|credential|invalid.?token/i.test(msg);
+  if (auth) {
+    localStorage.removeItem('gcal_token');
+    document.getElementById('cal-signin-btn')?.classList.remove('hidden');
+    _fetchWorkerToken().catch(() => {});   // re-mint from the Worker's refresh token for the retry
+    showToast('Calendar session expired — reconnecting. Please try again in a moment.');
+  } else showToast(verb + ' failed: ' + (msg || 'Unknown error'));
+}
+// Keep the token alive when the desktop tab regains focus (the throttled setTimeout may have
+// missed its window while backgrounded) and refresh the grid. Registered once.
+function _hookCalFocusRefresh() {
+  if (_calFocusHooked) return; _calFocusHooked = true;
+  const onActive = () => { updateCalNowLine(); if (!_calInitDone) return; if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) onActive(); });
+  window.addEventListener('focus', onActive);
+  window.addEventListener('online', onActive);
+}
+
 export function loadGCalScripts() {
+  _hookCalFocusRefresh();
   if (document.getElementById('gapi-script')) return;
+  // Only gapi (the Calendar/Tasks API). The access token comes from the Worker (/gcal/token),
+  // not the browser GIS sign-in — so there's no gsi/client script anymore.
   const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = () => gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] }); _calGapiLoaded = true; _calTryReady(); });
   document.head.appendChild(s1);
-  const s2 = document.createElement('script'); s2.id = 'gis-script'; s2.src = 'https://accounts.google.com/gsi/client';
-  s2.onload = () => {
-    _calTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GCAL_CLIENT_ID, scope: GCAL_SCOPES, callback: (resp) => {
-      if (resp.error) { calSetStatus('Sign-in failed: ' + resp.error); return; }
-      const expires = Date.now() + (resp.expires_in * 1000);
-      localStorage.setItem('turndesk_gcal_token', JSON.stringify({ token: resp.access_token, expires }));
-      dispatch('config.set', { key: 'turndesk_gcal_token', value: { token: resp.access_token, expires } });
-      gapi.client.setToken({ access_token: resp.access_token });
-      scheduleCalTokenRefresh(expires);
-      document.getElementById('cal-signin-btn')?.classList.add('hidden');
-      calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
-    } });
-    _calGisLoaded = true; _calTryReady();
-  };
-  document.head.appendChild(s2);
 }
 
-function _useToken(saved) {
-  gapi.client.setToken({ access_token: saved.token });
-  scheduleCalTokenRefresh(saved.expires);
-  document.getElementById('cal-signin-btn')?.classList.add('hidden');
-  calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
-}
 function _calTryReady() {
-  if (!_calGapiLoaded || !_calGisLoaded) return;
-  const local = localStorage.getItem('turndesk_gcal_token');
-  if (local) { try { const s = JSON.parse(local); if (Date.now() < s.expires - 60000) { _useToken(s); return; } } catch (e) {} }
-  // Token shared via the DO (another device signed in)
-  const shared = cfg().turndesk_gcal_token;
-  if (shared && Date.now() < shared.expires - 60000) { localStorage.setItem('turndesk_gcal_token', JSON.stringify(shared)); _useToken(shared); return; }
-  document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-  calSetStatus('Click "Connect Google Calendar" to get started');
+  if (!_calGapiLoaded) return;
+  // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
+  _fetchWorkerToken()
+    .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
+    .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
 }
 
 export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); loadGCalScripts(); }
-export function calSignIn(silent) { if (!_calTokenClient) { showToast('Still loading — try again in a moment'); return; } _calTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' }); }
+export function calSignIn(silent) {
+  // Silent = re-mint from the Worker's stored refresh token (no user action). Interactive = send
+  // the owner to Google's consent via the Worker; on return the app reloads and auto-connects.
+  if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) calSilentSync(); else _calInitialLoad(); }).catch(() => {}); return; }
+  // Top-level navigation — no headers possible, so the §13 app token rides as ?auth=.
+  location.href = withAuth(`${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`);
+}
 export function calSignOut() {
-  const token = gapi.client.getToken();
-  if (token) google.accounts.oauth2.revoke(token.access_token, () => {});
-  gapi.client.setToken(null); localStorage.removeItem('turndesk_gcal_token');
+  fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side
+  if (window.gapi?.client) gapi.client.setToken(null);
+  localStorage.removeItem('gcal_token');
+  _calInitDone = false;   // so a fresh sign-in re-runs the initial load
   _calCalendars = []; _calEvents = {};
   document.getElementById('cal-grid').classList.add('hidden');
   document.getElementById('cal-loading').classList.remove('hidden');
@@ -303,12 +467,48 @@ function calSetStatus(msg) {
 }
 
 // ── Date nav ──────────────────────────────────────
-function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
+function calWeekRangeLabel() {
+  const ws = calWeekStart(_calDate), we = new Date(ws); we.setDate(we.getDate() + 6);
+  const f = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return ws.getMonth() === we.getMonth() ? `${f(ws)} – ${we.getDate()}` : `${f(ws)} – ${f(we)}`;
+}
+function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = calIsWeek() ? calWeekRangeLabel() : _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
 function calUpdateDateInput() {
   const btn = document.getElementById('cal-date-btn-val');
-  if (btn) { const isToday = new Date().toDateString() === _calDate.toDateString(); btn.textContent = isToday ? 'Today' : _calDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+  if (btn) btn.textContent = calIsWeek() ? calWeekRangeLabel() : dateBtnLabel(_calDate);   // "Today · Tue, Jun 9" / "Jun 14 – 20"
+  syncCalViewToggle();
 }
-export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
+// Day | Week toggle (toolbar). The buttons live in static HTML; active styling is set here.
+export function setCalView(v) {
+  const next = v === 'week' ? 'week' : 'day';
+  if (next === _calView) return;
+  _calView = next;
+  try { localStorage.setItem('muse_cal_view', _calView); } catch {}
+  _calOffPeek = new Set();
+  calUpdateDateLabel();
+  calLoadAndRender();
+}
+export function syncCalViewToggle() {
+  // Segmented-control look (shared .subnav-seg/.subnav-btn styles): the selected side
+  // is the raised white pill and shows a ✓ so the active view is unmistakable.
+  const set = (id, on) => {
+    const b = document.getElementById(id); if (!b) return;
+    b.classList.toggle('on', on);
+    const c = b.querySelector('.cal-view-check'); if (c) c.style.display = on ? '' : 'none';
+  };
+  set('cal-view-day', !calIsWeek());
+  set('cal-view-week', calIsWeek());
+}
+// Tap a week-view day header / empty slot → that day in Day view.
+export function calWeekOpenDay(dateStr) {
+  _calOffPeek = new Set();
+  _calDate = new Date(dateStr + 'T12:00:00');
+  _calView = 'day';
+  try { localStorage.setItem('muse_cal_view', 'day'); } catch {}
+  calUpdateDateLabel();
+  calLoadAndRender();
+}
+export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta * (calIsWeek() ? 7 : 1)); calUpdateDateLabel(); calLoadAndRender(); }
 export function calGoToday() { _calOffPeek = new Set(); _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
 export function calPickDate(val) { if (!val) return; _calOffPeek = new Set(); _calDate = new Date(val + 'T12:00:00'); calUpdateDateLabel(); calLoadAndRender(); }
 // Square-style date popup: Today / In 1–6 weeks presets + month calendar (shared openDayPicker).
@@ -327,17 +527,22 @@ export async function calLoadAndRender(silent) {
     _calCalendars = items.filter(c => { const name = (c.summary||'').toLowerCase(); return !systemNames.some(s => name.includes(s)) && c.id !== 'primary'; }).map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor || '#1a5252' }));
     if (_calCalendars.length === 0) { const p = items.find(c => c.id === 'primary' || c.primary); if (p) _calCalendars = [{ id: p.id, name: 'Primary', color: '#1a5252' }]; }
     _calPrimaryId = (items.find(c => c.primary) || {}).id || _calPrimaryId;
-    const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
+    // Day view fetches the viewed day; week view fetches Sun–Sat of the viewed week.
+    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
     applyCalOrder();
-    _calEvents = {};
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { _calEvents[cal.id] = []; } }));
+    // Keep the prior day's per-cal events on a transient fetch failure instead of blanking the
+    // column — an empty column reads as "no appointments" and the front desk books over real
+    // bookings. Track anyFail so a partial load shows the error pill rather than a healthy green.
+    const prev = _calEvents; _calEvents = {}; let anyFail = false;
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); _calEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
     const gbBefore = document.getElementById('cal-scroll'); const savedScroll = gbBefore ? gbBefore.scrollTop : null;
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
     renderCalSelectorList(); calUpdateDateInput(); renderGcalCalendarList(); renderTodaysAppointments();
+    if (anyFail) setCalSyncIndicator('error');
   } catch (err) {
-    if (err.status === 401) { localStorage.removeItem('turndesk_gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
+    if (err.status === 401) { localStorage.removeItem('gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
     else calSetStatus('Error loading calendar: ' + (err.result?.error?.message || err.message || 'Unknown error'));
   }
 }
@@ -345,6 +550,8 @@ export async function calLoadAndRender(silent) {
 export function calRenderGrid() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
+  syncCalViewToggle();
+  if (calIsWeek()) return calRenderWeekGrid();
   const uCal = unassignedCalId();
   // "Unassigned only" view isolates the unassigned calendar full-width; turning it
   // off falls straight back to the previous calendars + order (nothing persisted).
@@ -358,19 +565,22 @@ export function calRenderGrid() {
     document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return;
   }
   calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
+  try {
 
-  const c = JSON.parse(localStorage.getItem('turndesk_cal_hours') || 'null');
+  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
   const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
   const railEl = document.getElementById('cal-right-rail');
   const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
   const COL_W = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / visible.length));
-  // When few calendars are shown (e.g. the unassigned-only view), a column gets very
-  // wide. Cap each appointment bubble at ~2.5× its width when ALL calendars are in
-  // view, so a lone wide column doesn't stretch bubbles across the whole screen.
+  // When few calendars are shown a column gets very wide. Normally we cap each
+  // bubble at ~2.5× its all-calendars width so a lone wide column doesn't stretch
+  // bubbles across the screen — BUT in the explicit "Unassigned only" expand view
+  // the whole point is to spread the appointments out, so let them fill the column.
   const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
-  const maxBubbleW = normalColW * 2.5;
+  const maxBubbleW = _unassignedOnly ? Infinity : normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
+  const isPastDay = !isToday && _calDate < now;   // a fully-elapsed previous day → past appts resolve to Completed/No-Show from records
   // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
@@ -392,7 +602,7 @@ export function calRenderGrid() {
     const off = calColumnOff(cal);   // #3: grey the column for a tech who's off this day
     body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${off ? 'background:#e9ebed;opacity:0.6;' : ''}${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; const h = START_HOUR + Math.floor(s*SLOT_MINS/60), m = (s*SLOT_MINS)%60; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calSlotClick('${cal.id}',${h},${m})"></div>`; }
-    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
+    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
     // Group this column's events into bookings so a party checked in together (or
     // one guest with several services) renders as ONE bubble. Overlapping same-time
     // bubbles stacking on top of each other was the "piled-up / unreadable" bug.
@@ -419,6 +629,7 @@ export function calRenderGrid() {
     layout.forEach(b => { if (cluster.length && b.startMin >= clusterEnd) { finalizeCluster(cluster); cluster = []; clusterEnd = -1; } cluster.push(b); clusterEnd = Math.max(clusterEnd, b.endMin); });
     if (cluster.length) finalizeCluster(cluster);
     layout.forEach(({ evs, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
+      try {
       const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
       const gid = first.extendedProperties?.private?.museGroupId || '';
       const linkedCals = gid && groupCals[gid] ? [...groupCals[gid]].filter(c => c !== cal.id) : [];
@@ -432,13 +643,15 @@ export function calRenderGrid() {
       const primaryPhone = ppriv.musePrimaryPhone || _apptPhone(primaryEv);
       const notes = _apptNotes(first), confirmed = evs.some(e => (e.extendedProperties?.private||{}).museConfirmed === '1'), isPast = startDt < now;
       const noShow = evs.some(e => (e.extendedProperties?.private||{}).museNoShow === '1');
-      // Appointment-ness + a queue match from ANY event in the booking. Match a queue
-      // entry only by the check-in link or exact phone — never by loose name prefix.
-      let isAppt = false, qm = null;
+      // Appointment-ness + a queue match for the booking. The check-in link is matched
+      // against EVERY copy's id (all calendars), so the Paid/Checked-In badge shows on
+      // every column — not just the copy the check-in went through. Phone fallback only
+      // after that; never a loose name prefix.
+      let isAppt = false, qm = _queueByEventIds(_bookingEventIds(first));
       for (const ev of evs) {
         const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
-        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
-        if (!qm) { const evPhone = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null); }
+        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
+        if (!qm) qm = _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime());
       }
       const qs = qm?.status || null;
       // One row per service in THIS column: "FirstName — Service".
@@ -451,26 +664,34 @@ export function calRenderGrid() {
         // show the unassigned (no-tech) services. Keeps each service on one column.
         const isUcol = cal.id === uCal;
         const lines = _parseApptLines(ev, cal.id).filter(l => isUcol ? (!l.calId || l.calId === cal.id) : (l.calId === cal.id));
-        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
+        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
         lines.forEach(l => { const s = cfg().services.find(x => x.id === l.svcId); svcRows.push({ fn, label: s?.label || l.svcId || '', svcId: l.svcId || '' }); });
       });
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
       const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
-      let bg, border, tc = '#1a1a1a';   // status is conveyed by the bubble's color
+      let bg, border, tc = '#1a1a1a', pastStatus = '';   // status is conveyed by the bubble's color
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
       else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; }
       else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
-      else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }
+      else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }   // TODAY only: passed start, not checked in → "running late" amber
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
-      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // no-show overrides all
+      // Past day: resolve the appointment against the records — Completed (showed up) or
+      // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
+      if (isPastDay && isAppt && !noShow) {
+        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; }
+        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
+      }
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // manual no-show overrides all
 
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
       const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
       const linkIcon = linked ? `<span title="${_e('Same appointment — also on ' + linkedCals.map(calName).join(', '))}" class="material-symbols-outlined" style="font-size:12px;color:${border};flex-shrink:0;transform:rotate(-45deg)">link</span>` : '';
       // Once the appointment is checked in, show its queue status as a badge on the bubble.
-      const qLabel = noShow ? 'No Show' : { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
+      const qLabel = noShow ? 'No Show' : pastStatus || { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
       const qBadge = qLabel ? `<span style="flex-shrink:0;font-size:7.5px;font-weight:800;color:#fff;background:${border};border-radius:999px;padding:1px 5px;white-space:nowrap">${qLabel}</span>` : '';
       body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
@@ -478,6 +699,7 @@ export function calRenderGrid() {
         + (ht>44?svcHtml:'')
         + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:pre-wrap;overflow-wrap:anywhere;overflow:hidden;line-height:1.3">📝 ${escHtml(notes)}</div>`:'')
         + `</div>`;
+      } catch (_bErr) { console.warn('[calendar] skipped a booking render:', _bErr); }
     });
     body += '</div></div>';
   });
@@ -489,24 +711,195 @@ export function calRenderGrid() {
   grid.innerHTML = `<div id="cal-scroll" style="height:100%;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W*visible.length}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div>`;
   const gb = document.getElementById('cal-scroll');
   if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours()-1); gb.scrollTop = Math.max(0, (scrollToHour-START_HOUR)*(60/SLOT_MINS)*SLOT_H - 10); }
+  startCalNowLine();
+  } catch (_calErr) { console.warn('[calendar] grid render failed:', _calErr); }
 }
 function calRenderGridPreserveScroll() { const gb = document.getElementById('cal-scroll'); const saved = gb ? gb.scrollTop : null; calRenderGrid(); if (saved !== null) requestAnimationFrame(() => { const n = document.getElementById('cal-scroll'); if (n) n.scrollTop = saved; }); }
+
+// ── Week view grid ─────────────────────────────────
+// 7 day columns (Sun–Sat) with every VISIBLE calendar's bookings merged per day,
+// tinted by each booking's tech (calendar) color — the overview competitors call
+// "week view". One block per booking (museGroupId-deduped; a copy on a tech calendar
+// wins over the unassigned copy for color/click ownership). Manual show/hide applies;
+// the per-day off-duty auto-hide does not (it's a single-day concept). Tap a block →
+// the normal appointment popover; tap a day header or empty space → that day's Day view.
+function calRenderWeekGrid() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  const uCal = unassignedCalId();
+  const visible = (_unassignedOnly && uCal && _calCalendars.some(c => c.id === uCal))
+    ? _calCalendars.filter(c => c.id === uCal)
+    : _calCalendars.filter(c => !_calHidden.has(c.id));
+  if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
+  if (visible.length === 0) {
+    calSetStatus('All calendars hidden. Use Calendars filter.');
+    document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return;
+  }
+  calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
+  try {
+
+  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
+  const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
+  const railEl = document.getElementById('cal-right-rail');
+  const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
+  const COL_W = Math.max(110, Math.floor((window.innerWidth - TIME_W - railW - 48) / 7));
+  const ws = calWeekStart(_calDate);
+  const days = [...Array(7)].map((_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });
+  const todayKey = localDateStr(new Date());
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
+  const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Dedup bookings across visible calendars (a booking is one event per calendar).
+  // ownEv = the event copy that lives ON the owning calendar — calEventClick() looks
+  // the id up in _calEvents[calId], so the clicked id must belong to that calendar.
+  const seen = new Map();   // bookingKey -> { evs, calId, ownEv }
+  visible.forEach(cal => (_calEvents[cal.id] || []).forEach(ev => {
+    if (!ev.start) return;
+    const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id);
+    let b = seen.get(k);
+    if (!b) { b = { evs: [], calId: cal.id, ownEv: ev }; seen.set(k, b); }
+    b.evs.push(ev);
+    if (b.calId === uCal && cal.id !== uCal) { b.calId = cal.id; b.ownEv = ev; }
+  }));
+  const byDay = days.map(() => []);
+  const dayKeys = days.map(d => localDateStr(d));
+  seen.forEach(({ evs, calId, ownEv }) => {
+    const first = evs[0];
+    const startDt = new Date(first.start.dateTime || first.start.date);
+    const endDt = new Date(first.end?.dateTime || first.end?.date || startDt.getTime() + 3600000);
+    const di = dayKeys.indexOf(localDateStr(startDt));
+    if (di < 0) return;
+    const sMin = startDt.getHours() * 60 + startDt.getMinutes(), eMin = endDt.getHours() * 60 + endDt.getMinutes();
+    const topMin = sMin - START_HOUR * 60, durMin = Math.max(eMin - sMin, 15);
+    if (topMin < 0 || topMin >= (END_HOUR - START_HOUR) * 60) return;
+    byDay[di].push({ evs, calId, ownEv, first, startDt, startMin: sMin, endMin: sMin + durMin, top: (topMin / SLOT_MINS) * SLOT_H, ht: (durMin / SLOT_MINS) * SLOT_H });
+  });
+
+  let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
+  days.forEach((d, i) => {
+    const isToday = dayKeys[i] === todayKey, isLast = i === 6;
+    hdr += `<div onclick="calWeekOpenDay('${dayKeys[i]}')" title="Open this day" style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;cursor:pointer;background:${isToday ? 'rgba(26,82,82,0.10)' : 'transparent'};border-bottom:3px solid ${isToday ? 'var(--md-primary, #1a5252)' : 'transparent'};border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'};display:flex;flex-direction:column;align-items:center;justify-content:center">`
+      + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${isToday ? 'var(--md-primary, #1a5252)' : 'var(--on-surface-variant, #41484d)'}">${d.toLocaleDateString('en-US', { weekday: 'short' })}${isToday ? ' · Today' : ''}</span>`
+      + `<span style="font-size:16px;font-family:var(--font-headline);font-weight:800;line-height:1.1;color:${isToday ? 'var(--md-primary, #1a5252)' : 'var(--on-surface, #0e1a1a)'}">${d.getDate()}</span></div>`;
+  });
+  hdr += `</div>`;
+
+  let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W * 7}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)">`;
+  for (let s = 0; s < SLOTS; s++) { const h = Math.floor((START_HOUR*60 + s*SLOT_MINS)/60), m = (START_HOUR*60 + s*SLOT_MINS)%60, isHour = m === 0; const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:''); body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0">${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--on-surface-variant, #41484d);white-space:nowrap;margin-top:-6px">${label}</span>`:''}</div>`; }
+  body += '</div>';
+
+  days.forEach((d, di) => {
+    const isToday = dayKeys[di] === todayKey, isLast = di === 6, isFirst = di === 0;
+    const isPastDay = dayKeys[di] < todayKey;   // previous day → resolve past appts to Completed/No-Show
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${isToday ? 'background:rgba(26,82,82,0.04);' : ''}${isFirst ? 'border-left:2px solid rgba(0,0,0,0.12);' : ''}${isLast ? '' : 'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
+    for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calWeekOpenDay('${dayKeys[di]}')"></div>`; }
+    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-date="${dayKeys[di]}" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none"><div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div></div>`; }
+
+    const layout = byDay[di];
+    layout.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
+    let cluster = [], clusterEnd = -1;
+    const finalizeCluster = cl => { const laneEnds = []; cl.forEach(b => { let li = laneEnds.findIndex(end => end <= b.startMin); if (li === -1) { li = laneEnds.length; laneEnds.push(0); } laneEnds[li] = b.endMin; b.lane = li; }); cl.forEach(b => b.laneCount = laneEnds.length); };
+    layout.forEach(b => { if (cluster.length && b.startMin >= clusterEnd) { finalizeCluster(cluster); cluster = []; clusterEnd = -1; } cluster.push(b); clusterEnd = Math.max(clusterEnd, b.endMin); });
+    if (cluster.length) finalizeCluster(cluster);
+
+    layout.forEach(({ evs, calId, ownEv, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
+      try {
+      const cal = _calCalendars.find(x => x.id === calId);
+      const color = (calId === uCal || !cal) ? '#9ca3af' : cal.color;
+      const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const primaryEv = evs.find(e => (e.extendedProperties?.private || {}).musePrimary === '1') || first;
+      const ppriv = primaryEv.extendedProperties?.private || {};
+      const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary || '').split(' — ')[0] || 'Guest';
+      const notes = _apptNotes(first);
+      const confirmed = evs.some(e => (e.extendedProperties?.private || {}).museConfirmed === '1');
+      const noShow = evs.some(e => (e.extendedProperties?.private || {}).museNoShow === '1');
+      const guests = Math.max(0, [...new Set(evs.map(e => (e.extendedProperties?.private || {}).museName).filter(Boolean))].length - 1);
+      let isAppt = false;
+      for (const ev of evs) {
+        const ext = ev.extendedProperties?.private || {}, dsc = ev.description || '', t = ev.summary || '';
+        if (!!ext.musePhone || ext.museLines !== undefined || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(dsc) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase()))) { isAppt = true; break; }
+      }
+      const gap = laneCount > 1 ? 3 : 0;
+      const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
+      const bLeft = 4 + lane * (laneW + gap);
+      let bg = color + '1f', border = color, tc = '#1a1a1a';
+      if (isPastDay && isAppt && !noShow) {
+        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
+        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
+      }
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
+      body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(calId)}','${_e((ownEv || first).id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
+        + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
+        + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
+        + `</div>`;
+      } catch (_bErr) { console.warn('[calendar] skipped a week booking render:', _bErr); }
+    });
+    body += '</div></div>';
+  });
+  body += '</div>';
+
+  // Staff color key — week blocks are tinted by tech, so name the colors. Pinned above
+  // the scrollport (doesn't scroll away); one chip per visible calendar, grid order.
+  const legend = `<div id="cal-week-legend" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0;padding:6px 12px;border-bottom:1.5px solid var(--outline-variant, #cfd8d8);background:var(--surface-container-lowest, #f5f7f8)">`
+    + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--on-surface-variant, #41484d)">Staff</span>`
+    + visible.map(cal => {
+        const color = cal.id === uCal ? '#9ca3af' : cal.color;
+        return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-body);font-weight:600;color:var(--on-surface, #0e1a1a)"><span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>${escHtml(calDisplayName(cal))}</span>`;
+      }).join('')
+    + `</div>`;
+  grid.innerHTML = `<div style="height:100%;display:flex;flex-direction:column">${legend}<div id="cal-scroll" style="flex:1;min-height:0;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W * 7}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div></div>`;
+  const gb = document.getElementById('cal-scroll');
+  if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours() - 1); gb.scrollTop = Math.max(0, (scrollToHour - START_HOUR) * (60 / SLOT_MINS) * SLOT_H - 10); }
+  startCalNowLine();
+  } catch (_calErr) { console.warn('[calendar] week grid render failed:', _calErr); }
+}
+
+// ── "Now" line keep-alive ─────────────────────────
+// The red current-time line is positioned at grid-render time, so on its own it only moves when
+// the grid re-renders (every CAL_SYNC_INTERVAL) and FREEZES while a backgrounded / asleep iPad
+// throttles timers — that's the "lags behind" report. This repositions the existing line(s)
+// cheaply (no re-render) on a short timer, and onActive() snaps it the instant the iPad wakes.
+// Geometry (start hour / slot size) is read from the line's data-attrs so it tracks the zoom.
+let _calNowTimer = null;
+function updateCalNowLine() {
+  const lines = document.querySelectorAll('.cal-now-line');
+  if (!lines.length) return;
+  const now = new Date();
+  // Week view stamps the line's own date (today's column); day view checks the viewed day.
+  const lineDate = lines[0].dataset.date;
+  if (lineDate ? lineDate !== localDateStr(now) : now.toDateString() !== _calDate.toDateString()) return;
+  const g = lines[0].dataset, startHour = +g.start, slotMins = +g.slotmins || 30, slotH = +g.sloth || 52, slots = +g.slots;
+  const nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  const lineTop = ((nowMin - startHour*60)/slotMins)*slotH;
+  const vis = lineTop >= 0 && lineTop <= slots*slotH;
+  lines.forEach(el => { el.style.display = vis ? '' : 'none'; if (vis) el.style.top = lineTop + 'px'; });
+}
+function startCalNowLine() { if (_calNowTimer) return; _calNowTimer = setInterval(updateCalNowLine, 30000); }
 
 // ── Sync ──────────────────────────────────────────
 async function calSilentSync() {
   if (!gapi?.client?.getToken()?.access_token) return;
+  // Keep the token alive on the foreground sync tick too (self-heals the read loop if the
+  // proactive refresh timer was throttled). If it's expired and can't refresh, bail to error.
+  if (!_tokenFresh(0)) { try { await ensureFreshToken(); } catch (e) { setCalSyncIndicator('error'); return; } }
   try {
     setCalSyncIndicator('syncing');
-    const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
-    const newEvents = {};
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { newEvents[cal.id] = _calEvents[cal.id] || []; } }));
+    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
+    const newEvents = {}; let anyFail = false;
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); newEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
     _calEvents = newEvents;
     // Preserve the user's scroll position on a silent refresh — calRenderGrid()
     // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
     if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGridPreserveScroll();
     renderTodaysAppointments();
-    setCalSyncIndicator('ok');
+    // A per-cal failure keeps that column's stale events; flag the pill 'error' so a frozen
+    // column isn't masked by a healthy green pill.
+    setCalSyncIndicator(anyFail ? 'error' : 'ok');
   } catch (e) { setCalSyncIndicator('error'); }
 }
 function startCalSync() { if (_calSyncTimer) return; setCalSyncIndicator('ok'); _calSyncTimer = setInterval(() => calSilentSync(), CAL_SYNC_INTERVAL); }
@@ -562,7 +955,7 @@ function applyCalOrder() {
   _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
   _calCalendars = ordered;
 }
-function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('turndesk_gcal_order', JSON.stringify(_calOrder)); }
+function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('gcal_order', JSON.stringify(_calOrder)); }
 export function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
@@ -594,7 +987,7 @@ export function calSelectorSave() {
     }
   });
   _calHidden = newHidden; _calOffPeek = newPeek;
-  localStorage.setItem('turndesk_gcal_hidden', JSON.stringify([..._calHidden]));
+  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
   _calSelectorDraft = null;
   const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
   renderCalSelectorList(); calRenderGridPreserveScroll();
@@ -642,11 +1035,26 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   const noShow = ev.extendedProperties?.private?.museNoShow === '1';
-  let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
-  if (!queueMatch && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
-  if (!queueMatch) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
+  let queueMatch = _queueByEventIds(_bookingEventIds(ev)) || _phoneQueueMatch(rawPhone, startDt.getTime());
+  // Read-only services + staff summary for the whole booking (every guest in the group).
+  const svcSummaryHtml = (() => {
+    const uCal = unassignedCalId();
+    const blocks = _gatherParty(calId, eventId).map(p => ({
+      name: p.name,
+      lines: _parseApptLines(p.ev, p.calId).map(l => {
+        const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
+        if (!svc) return '';
+        const tech = (!l.calId || l.calId === uCal) ? 'Unassigned' : (_calCalendars.find(c => c.id === l.calId)?.name || 'Unassigned');
+        return `${svc} — ${tech}`;
+      }).filter(Boolean),
+    })).filter(b => b.lines.length);
+    if (!blocks.length) return '';
+    const multi = blocks.length > 1;
+    return `<div class="mt-2 rounded-xl bg-surface-container px-3 py-2"><div class="text-[10px] font-body font-bold uppercase tracking-widest text-outline mb-1">Services &amp; Staff</div>${blocks.map(b => `${multi ? `<div class="text-xs font-body font-bold text-on-surface mt-1.5">${_escHtml(b.name)}</div>` : ''}${b.lines.map(l => `<div class="text-xs font-body text-on-surface mt-0.5">${_escHtml(l)}</div>`).join('')}`).join('')}</div>`;
+  })();
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };   // tap outside closes
   let statusBadge = '';
   if (['complete','paid','done'].includes(queueMatch?.status)) statusBadge = '<span style="color:#6b7280;font-size:11px;font-weight:700">✓ Completed</span>';
   else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
@@ -655,8 +1063,8 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   if (noShow) statusBadge = '<span style="color:#dc2626;font-size:11px;font-weight:700">⊘ No Show</span>';
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(cal?.name||'')}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${ev.created?`<p class="text-xs opacity-60">🗓 Booked ${new Date(ev.created).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     <div class="space-y-2">
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
@@ -665,7 +1073,6 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Appointment</button>` : `
       <button onclick="this.closest('.fixed').remove(); showConvertToApptModal('${calId}','${eventId}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_available</span> Convert to Appointment</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Event</button>`}
-      ${isAppt && cfg().square_config ? `<button onclick="squarePushBooking('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full border border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Sync to Square Bookings</button>` : ''}
       <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${calId}','${eventId}'); this.closest('.fixed').remove(); }" class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Cancel / Delete</button>
     </div></div>`;
   document.body.appendChild(modal);
@@ -673,16 +1080,106 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
 
 // Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it
 // syncs through Google Calendar; shown as a ✓ on the bubble + popup).
+// Match a live-queue visit to an appointment by phone, but ONLY when the visit's
+// check-in time is near the appointment time. Without the window, a customer's earlier
+// same-day visit (e.g. a paid morning walk-in) would wrongly stamp its status onto a
+// different appointment they booked for later the same day. The explicit calEventId link
+// (set when checking in *from* the appointment) is matched separately and always wins.
+function _phoneQueueMatch(rawPhone, apptStartMs) {
+  if (!rawPhone || !isFinite(apptStartMs)) return null;
+  const before = 2 * 3600 * 1000, after = 4 * 3600 * 1000;   // up to 2h early … 4h late/mid-service
+  return queue().find(x => {
+    if ((x.phone || '').replace(/\D/g, '') !== rawPhone) return false;
+    // A completed/paid earlier visit (e.g. a morning walk-in on a shared household phone)
+    // cannot be THIS later appointment — exclude finished entries so it can't stamp its
+    // status onto the appt or wrongly drop it from Turns. The explicit calEventId link is
+    // checked first at every call site and always wins, so a real check-in is unaffected.
+    if (['complete', 'paid', 'done'].includes(x.status)) return false;
+    const t = x.checkinTime ? new Date(x.checkinTime).getTime() : NaN;
+    return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
+  }) || null;
+}
+
+// Did a PAST-day appointment actually result in a visit? The live queue only holds
+// today, so for previous days we look in the records (transaction history): a paid
+// record linked to one of the booking's calendar event ids (strong), else matched by
+// phone within a window around the appointment time. Returns the record or null.
+// A null with a phone present = no-show; a null with NO phone = unknowable (caller
+// leaves it neutral rather than falsely flagging a served name-only booking).
+function _pastRecordMatch(eventIds, rawPhone, apptStartMs) {
+  const recs = records();
+  const linked = recs.find(r => r.calEventId && eventIds.has(String(r.calEventId)));
+  if (linked) return linked;
+  if (!rawPhone || !isFinite(apptStartMs)) return null;
+  const before = 2 * 3600 * 1000, after = 6 * 3600 * 1000;   // up to 2h early … 6h late
+  return recs.find(r => {
+    if ((r.phone || '').replace(/\D/g, '') !== rawPhone) return false;
+    const t = r.checkinTime ? new Date(r.checkinTime).getTime()
+            : r.completedAt ? new Date(r.completedAt).getTime() : NaN;
+    return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
+  }) || null;
+}
+
+// ── Booking ↔ queue matching across calendar copies ──────────────────────────
+// A check-in stores ONE copy's id as the queue entry's calEventId — whichever copy it
+// went through — but a booking has a copy per calendar (each tech + Unassigned). Any
+// queue lookup must therefore match against a SET of ids, or sibling copies read as
+// "not checked in" after check-in/payment (the Melissa-Smith bug: Paid on the tech's
+// column, orange on Unassigned). Booking-wide set = the status badge; person-scoped
+// set = the per-guest "already checked in" guards (a party member must not be blocked
+// by ANOTHER member's entry). Pure on (ev, eventsMap) — exported for unit tests.
+export function _bookingEventIds(ev, eventsMap = _calEvents) {
+  const ids = new Set([String(ev.id)]);
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (gid) Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid) ids.add(String(e.id));
+  }));
+  return ids;
+}
+const _evPersonName = e => (e.extendedProperties?.private?.museName || (e.summary || '').split(' — ')[0] || '').trim().toLowerCase();
+export function _personEventIds(ev, eventsMap = _calEvents) {
+  const ids = new Set([String(ev.id)]);
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (!gid) return ids;
+  const pname = _evPersonName(ev);
+  Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid && _evPersonName(e) === pname) ids.add(String(e.id));
+  }));
+  return ids;
+}
+export function _queueEntryForEventIds(queueArr, ids) {
+  return (queueArr || []).find(x => x.calEventId && ids.has(String(x.calEventId))) || null;
+}
+const _queueByEventIds = ids => _queueEntryForEventIds(queue(), ids);
+
+// Every calendar copy of a booking. A multi-staff/party appointment is stored as one
+// Google event per staff column, all sharing museGroupId — so confirm / no-show must
+// hit ALL copies, else only the clicked staff column reflects the change. Solo event
+// (no groupId) → just itself.
+function _eventGroupRefs(calId, eventId) {
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return [];
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (!gid) return [{ calId, eventId }];
+  const refs = [];
+  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid) refs.push({ calId: cid, eventId: e.id });
+  }));
+  return refs.length ? refs : [{ calId, eventId }];
+}
 export async function calToggleConfirmed(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
   const nowConfirmed = ev.extendedProperties?.private?.museConfirmed === '1';
+  const target = nowConfirmed ? null : '1';
+  const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
-    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museConfirmed: nowConfirmed ? null : '1' } } } });
+    await ensureFreshToken();
+    await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museConfirmed: target } } } }); _gcalNoteWritten(r.calId, p.result); }));
     showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
     await calLoadAndRender(true);
-  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Update'); }
 }
 
 // Mark an appointment "No Show" (museNoShow flag in extendedProperties, synced via
@@ -693,9 +1190,11 @@ export async function calMarkNoShow(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
   const isNoShow = ev.extendedProperties?.private?.museNoShow === '1';
+  const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
-    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } });
+    await ensureFreshToken();
+    await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } }); _gcalNoteWritten(r.calId, p.result); }));
     showToast(isNoShow ? 'No-show cleared' : 'Marked No Show');
     await calLoadAndRender(true);
     if (isNoShow) return;
@@ -705,14 +1204,62 @@ export async function calMarkNoShow(calId, eventId) {
     const cust = raw ? customerDirectory.find(c => (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1') === raw) : null;
     if (cust) showEditCustomer(cust.squareId);
     else showToast('No matching customer in directory to note');
-  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Update'); }
+}
+
+// ── (removed) Auto no-show ──────────────────────────────────────────────────────
+// We used to auto-PATCH museNoShow='1' onto any appointment 60+ min past its start
+// that wasn't matched to the live queue. That permanently mis-flagged served-but-
+// unlinked customers (kiosk / walk-in / name-only check-ins never set calEventId) as
+// No Show — filling past days with false no-shows. The "drop very-late appts off the
+// Turns strip" intent now lives in apptsForTurns() (STALE_APPT_DROP_MIN), computed
+// live and never written. No-shows are now ONLY set by the manual button (calMarkNoShow).
+
+// ── One-time cleanup: clear past No-Show flags ──────────────────────────────────
+// Operator-triggered (Settings → Data Recovery). Clears the museNoShow flag from every
+// appointment between `sinceDateStr` (YYYY-MM-DD) and the START OF TODAY — past days
+// only, so today's real no-shows are untouched. Auto- and manually-set flags are
+// identical (no marker), so this also clears any genuine past no-shows; that's
+// operationally harmless (history) and was confirmed by the owner.
+export async function clearPastNoShowFlags(sinceDateStr) {
+  if ((!localStorage.getItem('gcal_token') && !cfg().gcal_token) || typeof gapi === 'undefined' || !gapi.client?.calendar) { showToast('Connect Google Calendar on this device first'); return; }
+  const since = new Date((sinceDateStr || '') + 'T00:00:00');
+  if (isNaN(since)) { showToast('Pick a valid start date'); return; }
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  if (since >= todayStart) { showToast('Start date must be before today'); return; }
+  showToast('Scanning calendar…');
+  try { await ensureFreshToken(); } catch { showToast('Calendar auth failed — reconnect and retry'); return; }
+  const hits = [];   // { calId, eventId }
+  for (const cal of _calCalendars) {
+    let pageToken;
+    do {
+      let r;
+      try { r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: since.toISOString(), timeMax: todayStart.toISOString(), singleEvents: true, maxResults: 250, pageToken }); }
+      catch { break; }
+      (r.result.items || []).forEach(ev => { if ((ev.extendedProperties?.private || {}).museNoShow === '1') hits.push({ calId: cal.id, eventId: ev.id }); });
+      pageToken = r.result.nextPageToken;
+    } while (pageToken);
+  }
+  if (!hits.length) { showToast('No past no-show flags found in that range'); return; }
+  window.showWarnModal?.('Clear past No-Show flags?',
+    `${hits.length} past appointment${hits.length > 1 ? 's' : ''} flagged No Show between ${since.toLocaleDateString()} and today will be cleared. This also clears any you marked by hand in that range (history only — today is untouched). Proceed?`,
+    async () => {
+      let cleared = 0;
+      for (const h of hits) {
+        try { const p = await gapi.client.calendar.events.patch({ calendarId: h.calId, eventId: h.eventId, resource: { extendedProperties: { private: { museNoShow: null } } } }); _gcalNoteWritten(h.calId, p.result); cleared++; }
+        catch { /* skip one, keep going */ }
+      }
+      await calLoadAndRender(true);
+      showToast(`Cleared ${cleared} past no-show flag${cleared !== 1 ? 's' : ''} ✓`);
+    },
+    'Clear flags');
 }
 
 // Build a queue entry from one calendar event (returns null if that person is
 // already checked in). queueGroupId links party members in the queue.
 function _buildCheckinEntry(ev, fallbackCalId, queueGroupId) {
   const title = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest';
-  const already = queue().find(x => x.calEventId === ev.id || (x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done'));
+  const already = _queueByEventIds(_personEventIds(ev)) || queue().find(x => x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done');
   if (already) return null;
   const rawP = _apptPhone(ev).replace(/\D/g,'');
   const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
@@ -745,7 +1292,7 @@ function _gatherParty(calId, eventId) {
   } else {
     party = [{ ev, calId, name: ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest', groupId: '' }];
   }
-  party.forEach(p => { p.already = !!queue().find(x => x.calEventId === p.ev.id || (x.isAppointment && x.name === p.name && x.status !== 'paid' && x.status !== 'done')); });
+  party.forEach(p => { p.already = !!(_queueByEventIds(_personEventIds(p.ev)) || queue().find(x => x.isAppointment && x.name === p.name && x.status !== 'paid' && x.status !== 'done')); });
   return party;
 }
 // Check in the given party members. All check-ins from one multi-person booking
@@ -762,7 +1309,11 @@ function _doCalCheckin(members, apptGroupId, partySize) {
     added++; if (!firstName) firstName = entry.name;
   });
   if (added === 0) { showToast('Already checked in'); return; }
-  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.showDashPanel?.('queue');
+  // Stay put when the check-in was initiated from the Turns tab (its upcoming-appts
+  // strip) — only jump to the Queue when checking in from elsewhere (e.g. calendar).
+  const onTurns = document.getElementById('panel-turns')?.classList.contains('active');
+  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
+  if (!onTurns) window.showDashPanel?.('queue');
   showToast(added > 1 ? `${added} guests added to queue from calendar ✓` : `${firstName} added to queue from calendar ✓`);
 }
 export function calQuickCheckin(calId, eventId) {
@@ -788,6 +1339,7 @@ function _showQuickCheckinPicker(party) {
   const modal = document.createElement('div');
   modal.id = 'quick-checkin-modal';
   modal.className = 'fixed inset-0 z-[88] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeQuickCheckin(); };   // tap outside closes
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1"><h3 class="font-headline font-bold text-on-surface text-lg">Check in who?</h3><button onclick="closeQuickCheckin()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
     <p class="text-xs font-body text-on-surface-variant mb-3">Select the guests arriving now. The rest can be checked in later.</p>
@@ -808,6 +1360,79 @@ export function confirmQuickCheckin() {
   _doCalCheckin(sel, gid, partySize);
 }
 
+// ── Check-in guard: catch a manual check-in for someone who already has an appointment today ─
+// Matched by phone (digits) or exact full name against today's not-yet-checked-in, not-no-show
+// appointments. Returns null when the calendar isn't loaded on this device (guard degrades silently).
+export function findTodayApptFor(phone, name) {
+  const p = String(phone || '').replace(/\D/g, '');
+  const nm = String(name || '').trim().toLowerCase();
+  if (!p && !nm) return null;
+  const uCal = unassignedCalId();
+  let hit = null;
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => {
+    if (hit || !ev.start?.dateTime) return;
+    const ext = ev.extendedProperties?.private || {};
+    if (ext.museNoShow === '1') return;
+    const evPhone = _apptPhone(ev).replace(/\D/g, '');
+    const evName = (ext.museName || (ev.summary || '').split(' — ')[0] || '').trim().toLowerCase();
+    if (!((p && evPhone && evPhone === p) || (nm && evName && evName === nm))) return;
+    if (_queueByEventIds(_personEventIds(ev, todayApptSource()))) return;   // that appt (any of its copies) is already checked in
+    const lines = _parseApptLines(ev, cid).map(l => {
+      const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
+      if (!svc) return '';
+      const tech = (!l.calId || l.calId === uCal) ? '' : (_calCalendars.find(c => c.id === l.calId)?.name || '');
+      return svc + (tech ? ` with ${tech}` : '');
+    }).filter(Boolean);
+    hit = { calId: cid, eventId: ev.id, name: ext.museName || (ev.summary || '').split(' — ')[0] || name, startMs: new Date(ev.start.dateTime).getTime(), summary: lines.join(', ') };
+  }));
+  return hit;
+}
+// Called by the kiosk submitCheckin + desk submitManualAdd before they create entries.
+// Returns true when a matching appointment was found (the prompt is up; the caller must bail).
+// proceed() re-runs the caller's check-in with the guard bypassed.
+let _guardMatch = null, _guardProceed = null;
+export function checkinApptGuard(guests, proceed) {
+  for (const g of guests || []) {
+    const m = findTodayApptFor(g.phone, g.name);
+    if (m) { _guardMatch = m; _guardProceed = proceed; _showApptGuardModal(m); return true; }
+  }
+  return false;
+}
+function _showApptGuardModal(m) {
+  document.getElementById('appt-guard-modal')?.remove();   // replace any prior prompt WITHOUT clearing the just-set guard state
+  const when = new Date(m.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const modal = document.createElement('div');
+  modal.id = 'appt-guard-modal';
+  modal.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeApptGuardModal(); };   // tap outside = Cancel
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary" style="font-size:22px">event_available</span><h3 class="font-headline font-bold text-on-surface text-lg">Already booked today</h3></div>
+    <p class="text-sm font-body text-on-surface-variant mb-4"><span class="font-semibold text-on-surface">${_escHtml(m.name)}</span> has an appointment today at <span class="font-semibold text-on-surface">${when}</span>${m.summary ? ` — ${_escHtml(m.summary)}` : ''}.</p>
+    <div class="space-y-2">
+      <button onclick="apptGuardUseAppt()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Check In from the Appointment</button>
+      <button onclick="apptGuardProceed()" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Check In Separately — keep the appointment for later</button>
+      <button onclick="closeApptGuardModal()" class="w-full text-on-surface-variant py-2 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+}
+export function closeApptGuardModal() { document.getElementById('appt-guard-modal')?.remove(); _guardMatch = null; _guardProceed = null; }
+export function apptGuardUseAppt() {
+  const m = _guardMatch; closeApptGuardModal();
+  if (!m) return;
+  window.closeManualAdd?.();                       // harmless no-op when the desk modal isn't open
+  calQuickCheckin(m.calId, m.eventId);
+  // Kiosk flow: keep the customer-facing screens — show the confirm screen, then bounce
+  // back to welcome (mirrors submitCheckin). On the desk screen _doCalCheckin already
+  // switched to the Queue panel, so leave it alone.
+  if (!document.getElementById('screen-desk')?.classList.contains('active')) {
+    const cn = document.getElementById('confirm-name'); if (cn) cn.textContent = m.name;
+    window.goTo?.('screen-confirm');
+    clearTimeout(window._confirmResetTimer);
+    window._confirmResetTimer = setTimeout(() => { if (document.getElementById('screen-confirm')?.classList.contains('active')) window.goTo?.('screen-welcome'); }, 5000);
+  }
+}
+export function apptGuardProceed() { const fn = _guardProceed; closeApptGuardModal(); if (fn) fn(); }
+
 // ── Appointment modal ─────────────────────────────
 export function apptAcSearch(input, field) {
   if (field === 'phone') formatPhone(input);
@@ -817,7 +1442,7 @@ export function apptAcSearch(input, field) {
   if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML = ''; return; }
   const matches = squareCustomers.filter(c => { const full = ((c.given_name||'')+' '+(c.family_name||'')).toLowerCase(); const phone = (c.phone_number||c.phone||'').replace(/\D/g,''); if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3; return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val); }).slice(0, 8);
   if (!matches.length) { acBox.classList.add('hidden'); return; }
-  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')"><span class="ac-name">${name}</span>${phone?`<span class="ac-phone">${phone}</span>`:''}</div>`; }).join('');
+  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptAcFill('${_escAttrJs(name)}','${_escAttrJs(phone)}')"><span class="ac-name">${_escHtml(name)}</span>${phone?`<span class="ac-phone">${_escHtml(phone)}</span>`:''}</div>`; }).join('');
   acBox.classList.remove('hidden');
 }
 export function apptAcFill(name, phone) {
@@ -868,7 +1493,7 @@ export function apptExtraAcSearch(input, idx, field) {
   if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML = ''; return; }
   const matches = squareCustomers.filter(c => { const full = ((c.given_name||'')+' '+(c.family_name||'')).toLowerCase(); const phone = (c.phone_number||c.phone||'').replace(/\D/g,''); if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3; return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val); }).slice(0, 6);
   if (!matches.length) { acBox.classList.add('hidden'); return; }
-  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptExtraAcFill(${idx},'${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')"><span class="ac-name">${name}</span>${phone?`<span class="ac-phone">${phone}</span>`:''}</div>`; }).join('');
+  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptExtraAcFill(${idx},'${_escAttrJs(name)}','${_escAttrJs(phone)}')"><span class="ac-name">${_escHtml(name)}</span>${phone?`<span class="ac-phone">${_escHtml(phone)}</span>`:''}</div>`; }).join('');
   acBox.classList.remove('hidden');
 }
 export function apptExtraAcFill(idx, name, phone) {
@@ -1034,6 +1659,7 @@ function _apptEventBody(person, startDt, endDt, notes, groupId, primary) {
 }
 
 export async function saveAppt() {
+  if (_apptSaving) return;   // ignore double-taps while the previous save is still writing to Google
   const first = document.getElementById('appt-first')?.value.trim() || '', last = document.getElementById('appt-last')?.value.trim() || '';
   const name = [first,last].filter(Boolean).join(' ') || document.getElementById('appt-name')?.value.trim() || '';
   const phone = document.getElementById('appt-phone').value.trim(), dateVal = document.getElementById('appt-date').value, timeVal = document.getElementById('appt-time').value;
@@ -1070,8 +1696,20 @@ export async function saveAppt() {
     }));
   }
 
+  // Calendars the booking was ALREADY on before this save (edit path) vs the ones we
+  // insert below — a tech is push-notified only when their calendar newly gains it.
+  const oldCals = new Set();
+  if (_apptEditId) {
+    const oc = document.getElementById('appt-cal-id')?.value; if (oc) oldCals.add(oc);
+    oldGroupRefs.forEach(r => oldCals.add(r.calId));
+  }
+  const wroteCals = new Set();
+
+  const saveBtn = document.querySelector('#appt-modal button[onclick="saveAppt()"]');
+  _apptSaving = true; if (saveBtn) saveBtn.disabled = true;
   try {
     showToast('Saving…');
+    await ensureFreshToken();
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
       const body = _apptEventBody(p, startDt, endDt, notes, groupId, { name: people[0].name, phone: people[0].phone, isPrimary: i === 0 });
@@ -1085,31 +1723,74 @@ export async function saveAppt() {
         const oldCalId = document.getElementById('appt-cal-id').value;
         const newPrimary = cals[0] || oldCalId;
         if (oldCalId && oldCalId !== newPrimary) {
-          await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          const ins = await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          _gcalNoteWritten(newPrimary, ins.result);
+          wroteCals.add(newPrimary);
           try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
+          _gcalNoteDeleted(oldCalId, _apptEditId);
         } else {
-          await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
+          const upd = await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
+          _gcalNoteWritten(oldCalId, upd.result);
         }
-        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); }
+        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) { const ins = await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); _gcalNoteWritten(cid, ins.result); wroteCals.add(cid); } }
       } else {
         const finalCals = cals.length ? cals : [uCal];
-        for (const cid of finalCals) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body });
+        for (const cid of finalCals) { const ins = await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); _gcalNoteWritten(cid, ins.result); wroteCals.add(cid); }
       }
       if (p.phone) squareUpsertCustomer({ name: p.name, phone: p.phone });   // add/refresh each booked customer in Square
     }
     // Remove the booking's stale pre-edit events (old guest events + old extra-cal
     // copies) now that fresh ones are inserted — keeps the calendar duplicate-free.
-    for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} }
+    for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} _gcalNoteDeleted(ref.calId, ref.id); }
+    try { _notifyApptTechs(wroteCals, oldCals, people[0].name, startDt); } catch {}   // best-effort push to newly-booked techs
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
-  } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Save'); }
+  finally { _apptSaving = false; if (saveBtn) saveBtn.disabled = false; }   // re-enable for the error path (success already closed the modal)
 }
+// Push-notify each tech whose Google calendar just RECEIVED this booking (a new
+// appointment, or an edit that moved/added them). Calendar → tech by the same
+// name-match rule as the grid; the unassigned calendar and calendars the booking
+// was already on are skipped. Fire-and-forget — a push failure never blocks a save.
+function _notifyApptTechs(wroteCals, oldCals, custName, startDt) {
+  const uCal = unassignedCalId();
+  const staff = cfg().staff || [];
+  const techIds = [...new Set([...wroteCals]
+    .filter(cid => cid && cid !== uCal && !oldCals.has(cid))
+    .map(cid => {
+      const nm = _calCalendars.find(c => c.id === cid)?.name;
+      return nm ? (staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase())?.id || null) : null;
+    })
+    .filter(Boolean))];
+  if (!techIds.length) return;
+  const when = startDt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    + ', ' + startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  fetch(PUSH_PROXY + '/notify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ techIds, title: 'New appointment 📅', body: `${custName} — ${when}`, tag: 'muse-appt' }),
+  }).catch(() => {});
+}
+
 export async function deleteAppt(calIdParam, eventIdParam) {
   const calId = calIdParam || document.getElementById('appt-cal-id')?.value, eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;
   if (!calIdParam && !confirm('Cancel this appointment?')) return;
-  try { await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(true); showToast('Appointment cancelled'); }
-  catch (err) { showToast('Delete failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  // Cancel EVERY copy of the booking (one event per staff column / unassigned, all sharing
+  // museGroupId) — mirrors confirm/no-show fan-out. A single delete left party/multi-staff
+  // bookings half-cancelled, with the survivors re-appearing on the next sync. allSettled so
+  // an already-missing copy (404) doesn't abort the rest; surface partial failures.
+  try {
+    const refs = _eventGroupRefs(calId, eventId);
+    await ensureFreshToken();
+    const results = await Promise.allSettled(refs.map(r => gapi.client.calendar.events.delete({ calendarId: r.calId, eventId: r.eventId })));
+    // Tombstone every copy that's actually gone (fulfilled, or already-missing 404).
+    results.forEach((res, i) => { if (res.status === 'fulfilled' || res.reason?.status === 404 || res.reason?.result?.error?.code === 404) _gcalNoteDeleted(refs[i].calId, refs[i].eventId); });
+    const failed = results.filter(r => r.status === 'rejected' && r.reason?.status !== 404 && r.reason?.result?.error?.code !== 404);
+    if (!calIdParam) closeApptModal();
+    await calLoadAndRender(true);
+    if (failed.length) { _calWriteError(failed[0].reason, 'Delete'); showToast(`Cancelled ${refs.length - failed.length} of ${refs.length} — ${failed.length} could not be cancelled`); }
+    else showToast(refs.length > 1 ? `Appointment cancelled (${refs.length} entries)` : 'Appointment cancelled');
+  } catch (err) { _calWriteError(err, 'Delete'); }
 }
 
 // ── Google Tasks ──────────────────────────────────
@@ -1119,7 +1800,7 @@ export async function loadTaskLists() {
     const res = await gapi.client.tasks.tasklists.list({ maxResults: 20 });
     _taskLists = res.result.items || [];
     const sel = document.getElementById('tasks-list-select'); if (!sel) return;
-    sel.innerHTML = _taskLists.map(l => `<option value="${l.id}">${l.title}</option>`).join('');
+    sel.innerHTML = _taskLists.map(l => `<option value="${_escHtml(l.id)}">${_escHtml(l.title)}</option>`).join('');
     if (_taskLists.length > 0) { _currentListId = _taskLists[0].id; loadTasksForList(_currentListId); }
     const panel = document.getElementById('cal-tasks-panel'); if (panel) { panel.classList.remove('hidden'); panel.style.display = 'flex'; }
   } catch (e) { console.warn('[Tasks] loadTaskLists failed:', e); }
@@ -1136,7 +1817,7 @@ function renderTasks(tasks) {
   const container = document.getElementById('tasks-list'); if (!container) return;
   if (!tasks.length) { container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>'; return; }
   container.innerHTML = tasks.map(t => { const done = t.status === 'completed', due = t.due ? new Date(t.due) : null, dueStr = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '', overdue = due && due < new Date() && !done, lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button></div>`;
+    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${_escHtml(t.title||'(no title)')}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${_escHtml(t.notes)}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button></div>`;
   }).join('');
 }
 export function toggleTasksPanel() {

@@ -8,10 +8,10 @@
 // Assign & Price. Reuses the a.station field (set on all the customer's assignments).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
-import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
+import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
+import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
 import { serviceTimeInfo } from './servicetime.js';
 
 const cfg = () => getState().config;
@@ -84,19 +84,46 @@ function collectFloor() {
     const at = active.find(a => a.station && stationIds.includes(a.station));
     // A customer's seat = a service's station, else the entry-level station set by dragging on the plan.
     const station = at ? at.station : (e.station && stationIds.includes(e.station) ? e.station : null);
-    if (station) { if (!byStation[station]) byStation[station] = e; }
-    else unplaced.push(e);   // ANY active customer not yet seated — including ones with no service/tech assigned
+    // Keep first-in-queue-order as the seated occupant; route a same-station COLLISION (two
+    // entries claiming one seat — cross-device race, or two dropdown assigns to the same station)
+    // to the tray instead of dropping it, so the second guest stays visible + re-seatable.
+    if (station && !byStation[station]) byStation[station] = e;
+    else unplaced.push(e);   // not seated, OR a station collision loser — kept visible either way
   });
   return { byStation, unplaced };
 }
 function entryInservice(e) { return activeAssignments(e).some(a => getAssignmentStatus(e, a) === 'inservice'); }
+// Small tech avatar for a tile service row: photo if set, else a colored initial; a faint "?" when
+// the service still has no tech (waiting). Deterministic color per tech so it's recognizable.
+const _AV_COLORS = ['#7c5cbf', '#1a7aa8', '#2a7a4f', '#b0612a', '#8f1a5c', '#1a5252', '#7a4f1a'];
+function _techAvatar(tech, fs) {
+  const d = Math.round(15 * fs);
+  const box = `display:inline-flex;align-items:center;justify-content:center;width:${d}px;height:${d}px;border-radius:50%;flex-shrink:0;border:1.5px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.18);font-size:${Math.round(8 * fs)}px;font-weight:700;line-height:1;overflow:hidden`;
+  if (!tech) return `<span style="${box};background:#cfd8d8;color:#8a98a0">?</span>`;
+  if (tech.photo) return `<img src="${escHtml(tech.photo)}" style="${box};object-fit:cover">`;
+  let h = 0; for (const ch of String(tech.id || tech.name || '')) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return `<span style="${box};background:${_AV_COLORS[h % _AV_COLORS.length]};color:#fff">${escHtml((tech.name || '?').charAt(0).toUpperCase())}</span>`;
+}
+// ALL of the customer's services (this seat's + others + still-waiting), each as a row:
+// status dot + tech avatar + service · tech · $ , with the elapsed▸avg badge on the line below.
 function custLines(e, stationId, fs = 1) {
-  return activeAssignments(e).filter(a => a.station === stationId).map(a => {
-    const s = a.serviceId ? svc(a.serviceId) : null, t = a.techId ? staffById(a.techId) : null;
-    const sti = serviceTimeInfo(a);
-    const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color}">${sti.text}</div>` : '';
-    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151">${s ? s.label : 'Service'}${t ? ' · ' + t.name.split(' ')[0] : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
-  }).join('');
+  const assigns = e.assignments || [];
+  const sids = [...new Set([...(e.services || []), ...assigns.map(a => a.serviceId)])];
+  const dotPx = Math.round(9 * fs);
+  return sids.map(sid => {
+    const a = assigns.find(x => x.serviceId === sid);
+    const status = a ? getAssignmentStatus(e, a) : 'waiting';
+    if (a && isPaidStatus(status)) return '';   // drop a paid line (whole entry leaves the floor when all paid)
+    const ls = serviceLineStyle(a ? effectiveServiceStatus(e, a) : status);
+    const s = svc(sid), t = a && a.techId ? staffById(a.techId) : null;
+    const dot = `<span style="display:inline-block;width:${dotPx}px;height:${dotPx}px;border-radius:50%;flex-shrink:0;box-sizing:border-box;${ls.dot}"></span>`;
+    const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
+      ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}${t ? '' : ' · Wait'}</span>
+    </div>`;
+    const sti = a ? serviceTimeInfo(a) : null;
+    const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';
+    return main + stiHtml;
+  }).filter(Boolean).join('');
 }
 
 function stationHtml(id, entry) {
@@ -107,30 +134,32 @@ function stationHtml(id, entry) {
   const live = !!entry && (entryInservice(entry) || entry.status === 'inservice');
   const complete = !!entry && !live && entry.status === 'complete';
   // Empty (or any station while editing the layout) shows the editor's custom color.
-  // In the live view, an occupied seat MATCHES the customer's status:
-  // GREEN in service, BLUE complete (ready to pay), ORANGE waiting.
+  // In the live view, an occupied seat MATCHES the customer's status (C9 palette):
+  // TEAL in service, GREEN complete/done (ready to pay), AMBER waiting.
   const accent = catColor(stationType(id));
   let bg = (L.fill || accent) + '17', border = L.outline || accent;
   if (entry && !floorEditMode) {
-    if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; }
-    else if (complete) { bg = '#cfe3ef'; border = '#1a5c7a'; }
-    else { bg = '#ffe0c2'; border = '#e8730a'; }
+    // C9/D13 (recolored v4.79): In Service = green, Done/complete = blue, Waiting = amber.
+    if (live) { bg = '#d8ecdf'; border = '#2a7a4f'; }
+    else if (complete) { bg = '#d3e4ef'; border = '#1a5c7a'; }
+    else { bg = '#ffe9c4'; border = '#d4860a'; }
   }
   let content;
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
       <div class="flex items-start justify-between gap-1">
         ${entry.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:${Math.round(15*fs)}px;height:${Math.round(15*fs)}px;border-radius:4px;background:${entry.groupColor||'#888'};color:#fff;font-size:${Math.round(9*fs)}px;font-weight:800;flex-shrink:0;margin-top:1px">${_fpLetters.get(entry.groupId)||'•'}</span>` : ''}
-        <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${entry.name}</div>
+        <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${escHtml(entry.name)}</div>
         <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
       </div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
   } else {
-    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${stationLabel(id)}</div>`;
+    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${escHtml(stationLabel(id))}</div>`;
   }
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
     style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
-    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${stationLabel(id)}</div>` : ''}
+    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${escHtml(stationLabel(id))}</div>` : ''}
+    ${entry && !floorEditMode ? `<span class="material-symbols-outlined fp-grip" style="position:absolute;bottom:1px;right:2px">drag_indicator</span>` : ''}
     ${content}
   </div>`;
 }
@@ -141,19 +170,30 @@ function renderFloorStaffRow() {
   const el = document.getElementById('floorplan-staff-row'); if (!el) return;
   const ids = getActiveTurnsOrder();
   if (!ids.length) { el.innerHTML = ''; return; }
+  // Next walk-in: the available tech (live "Available") with the fewest turns; tie → first in order.
+  let nextUpId = null, _nuTurns = Infinity;
+  for (const id of ids) { if (getTechStatusColor(id).label !== 'Available') continue; const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
   const bubbles = ids.map(id => {
     const st = staffById(id); if (!st) return '';
     const c = getTechStatusColor(id);
+    // Off's near-white fill needs a visible ring/initial color.
+    const ringC = c.bg === '#f3f4f6' ? '#c2c8ce' : c.bg;
     // Live view: each tech is draggable onto a station to assign them to a service there that
     // has a seat but no tech yet (handled by the pointer-drag system below). Not in edit mode.
     const drag = floorEditMode ? '' : 'floor-tech';
+    // Outline + soft transparent fill in the status color (photos keep the colored ring).
     const avatar = st.photo
-      ? `<img src="${st.photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${c.bg};box-shadow:0 1px 3px rgba(0,0,0,.18)">`
-      : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
-    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
-      ${avatar}
-      <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${st.name.split(' ')[0]}</span>
-      <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
+      ? `<img src="${st.photo}" draggable="false" style="width:68px;height:68px;box-sizing:border-box;border-radius:50%;object-fit:cover;border:3px solid ${ringC};box-shadow:0 2px 5px rgba(0,0,0,.18)">`
+      : `<div style="display:flex;align-items:center;justify-content:center;width:68px;height:68px;box-sizing:border-box;border-radius:50%;background:${ringC}22;border:3px solid ${ringC};color:${ringC};font-family:var(--font-headline);font-weight:700;font-size:26px;box-shadow:0 2px 5px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
+    const turns = getTechTurns(id).total;
+    const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
+    const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:29px;height:29px;padding:0 4px;border-radius:15px;background:#1a5252;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
+    const nextBadge = (!floorEditMode && id === nextUpId) ? `<span title="Next up" style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:#1a5252;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:2px;box-shadow:0 1px 3px rgba(0,0,0,.25)"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next</span>` : '';
+    const grip = floorEditMode ? '' : `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-2px;left:-6px;background:var(--surface-container-lowest,#fff);border-radius:7px;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
+    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
+      <div style="position:relative">${avatar}${turnsBadge}${nextBadge}${grip}</div>
+      <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
+      <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="flex flex-wrap items-start justify-center gap-3 pt-3 border-t border-surface-container-high">${bubbles}</div>`;
@@ -186,7 +226,7 @@ export function renderFloorPlan() {
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
@@ -311,6 +351,9 @@ export function resetFloorLayout() {
 function seatCustomer(entryId, stationId) {
   const e = q().find(x => String(x.id) === String(entryId));
   if (!e) return;
+  // A 'paid' broadcast (or other edit) from another device can land during the drag; re-dispatching
+  // the whole entry would revert it. Bail if it's already checked out.
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
   const occupant = collectFloor().byStation[stationId];
   if (occupant && String(occupant.id) !== String(e.id)) { showToast(`${stationId} is taken by ${occupant.name}`); return; }
   e.station = stationId;                                    // seat the customer — works with OR without an assigned tech
@@ -334,16 +377,63 @@ function validTechStations() {
 function assignTechToStation(techId, stationId) {
   const e = collectFloor().byStation[stationId];
   if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
-  // Assign to the first service seated here that still needs a tech (pedicures can need several;
-  // drag again for the next). Don't reassign a service that already has a tech.
-  const a = activeAssignments(e).find(x => x.station === stationId && !x.techId);
-  if (!a) { showToast(`No service awaiting a tech at ${stationLabel(stationId)}`); return; }
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
+  // Capacity: how many DISTINCT techs are already on this customer at this station?
+  const techsHere = new Set((e.assignments || []).filter(a => a.station === stationId && a.techId).map(a => a.techId));
+  const cap = categoryMaxTechs(stationType(stationId));
+  if (!techsHere.has(techId) && techsHere.size >= cap) {
+    showToast(`${stationLabel(stationId)} is full (${cap} tech${cap !== 1 ? 's' : ''})`); renderFloorPlan(); return;
+  }
+  // Pool = the customer's services that still need a tech (any — incl. waiting / no station yet).
+  const assignedSids = new Set((e.assignments || []).map(a => a.serviceId));
+  const pool = [
+    ...(e.assignments || []).filter(a => !a.techId && !isPaidStatus(getAssignmentStatus(e, a))).map(a => ({ serviceId: a.serviceId, assignment: a })),
+    ...(e.services || []).filter(sid => !assignedSids.has(sid)).map(sid => ({ serviceId: sid, assignment: null })),
+  ];
+  if (pool.length === 0) { showToast('All services already have a tech'); renderFloorPlan(); return; }
+  if (pool.length === 1) { _assignTechToService(e, techId, stationId, pool[0]); return; }
+  _openServicePicker(e, techId, stationId, pool);   // 2+ → ask which
+}
+// Put `techId` on one of the customer's services at this station + start it (In Service). No price
+// prompt — price is set later. (Front-desk whole-entry write; the queue.upsert per-assignment merge
+// protects a concurrent tech change.)
+function _assignTechToService(e, techId, stationId, item) {
+  if (!e.assignments) e.assignments = [];
+  let a = item.assignment;
+  if (!a) { a = { serviceId: item.serviceId, station: '', status: 'waiting', cost: 0 }; e.assignments.push(a); }
   a.techId = techId;
+  a.station = stationId;
+  applyAssignmentStatus(a, 'inservice');   // start the service + bank timing + stamp a.updatedAt
+  applyEntryStatus(e);                      // recompute entry status + statusSince
   dispatch('queue.upsert', { entry: e });
-  renderFloorPlan();
-  window.renderQueue?.(); window.renderTurns?.();
-  const t = staffById(techId);
-  showToast(`${t ? t.name.split(' ')[0] : 'Tech'} → ${stationLabel(stationId)}`);
+  renderFloorPlan(); window.renderQueue?.(); window.renderTurns?.();
+}
+// Lightweight picker (2+ un-teched services): tap a service to give it to the dragged tech.
+function _openServicePicker(e, techId, stationId, pool) {
+  document.getElementById('_floorSvcPicker')?.remove();
+  const tech = staffById(techId);
+  const m = document.createElement('div');
+  m.id = '_floorSvcPicker';
+  m.className = 'fixed inset-0 z-[80] flex items-center justify-center';
+  m.style.cssText = 'background:rgba(15,26,26,.45)';
+  const btns = pool.map((item, i) => {
+    const s = svc(item.serviceId);
+    return `<button data-i="${i}" class="w-full text-left px-4 py-3 rounded-xl border border-surface-container-high hover:bg-surface-container font-headline font-semibold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-primary" style="font-size:18px">add_task</span>${escHtml(s ? s.label : item.serviceId)}</button>`;
+  }).join('');
+  m.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-72 shadow-2xl fade-up mx-4" onclick="event.stopPropagation()">
+      <div class="text-base font-headline font-bold text-on-surface mb-0.5">Assign ${escHtml((tech?.name || 'tech').split(' ')[0])} to…</div>
+      <div class="text-xs font-body text-on-surface-variant mb-3">${escHtml(e.name || 'Customer')} · ${escHtml(stationLabel(stationId))}</div>
+      <div class="space-y-2">${btns}</div>
+      <button id="_floorSvcCancel" class="w-full mt-3 py-2 rounded-xl text-on-surface-variant font-body">Cancel</button>
+    </div>`;
+  m.addEventListener('click', () => m.remove());
+  m.querySelector('#_floorSvcCancel').addEventListener('click', () => m.remove());
+  m.querySelectorAll('button[data-i]').forEach(btn => btn.addEventListener('click', () => {
+    const item = pool[parseInt(btn.dataset.i, 10)];
+    m.remove();
+    _assignTechToService(e, techId, stationId, item);
+  }));
+  document.body.appendChild(m);
 }
 
 // ── Alignment snapping (snap a dragged station's edges/centers to others) ─────
@@ -397,8 +487,13 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       const st = closest(e.target, '.floor-station');
       if (st) { mode = 'station'; dragStation = st.dataset.station; pending = st; }
       // Empty canvas: desktop draws a marquee; touch lets the gesture scroll natively
-      // (and a touch with no movement is treated as a tap-to-clear in onUp).
-      else { mode = 'marquee'; marqueeStart = canvasPoint(e); }
+      // (and a touch with no movement is treated as a tap-to-clear in onUp). Guard: only when
+      // the pointer is actually on the canvas. A tap on the edit toolbar above it (#floorplan-props
+      // W/H steppers, colors, shape, font — or the zoom tools) is NOT a canvas gesture; without
+      // this, pointerup ran "tap empty → clear selection" BEFORE the control's click, wiping
+      // _selected so resize/recolor/reshape silently no-oped on the now-empty selection.
+      else if (closest(e.target, '#floorplan-grid')) { mode = 'marquee'; marqueeStart = canvasPoint(e); }
+      else return;
     } else {
       const techEl = closest(e.target, '.floor-tech');
       if (techEl) { mode = 'tech'; dragTechId = techEl.dataset.techId; pending = techEl; }

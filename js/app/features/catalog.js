@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, setSwitchVisual } from '../utils.js';
 
 const cfg = () => getState().config;
 
@@ -16,12 +16,12 @@ export function renderServicesMerged() {
   const list = document.getElementById('services-merged-list');
   if (!list) return;
   const svcs = cfg().services;
-  if (!svcs.length) { list.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-4 text-center">No services yet. Add one or sync from Square.</p>'; return; }
+  if (!svcs.length) { list.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-4 text-center">No services yet. Add one to get started.</p>'; return; }
   list.innerHTML = svcs.map(s => {
     const checkin = isServiceVisibleOnCheckin(s.id);
     const dash    = isServiceVisibleOnDash(s.id);
     const toggle = (on, label, fn, title) => `
-      <button onclick="event.stopPropagation();${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
+      <button onclick="event.stopPropagation();${fn}('${s.id}',this)" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
         <span class="text-[9px] font-body uppercase tracking-wider ${on ? 'text-primary' : 'text-outline-variant'}">${label}</span>
         <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on ? 'left-7' : 'left-0.5'}"></div></div>
       </button>`;
@@ -51,10 +51,11 @@ export function renderServicesMerged() {
 
 // ── Customer check-in service visibility (config.hidden_services) ─────────────
 export function isServiceVisibleOnCheckin(id) { return !cfg().hidden_services.includes(id); }
-export function toggleCheckinService(id) {
+export function toggleCheckinService(id, btn) {
   const hidden = cfg().hidden_services;
+  const nowVisible = hidden.includes(id);   // currently hidden → toggling turns it on
   dispatch('config.set', { key: 'hidden_services', value: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
-  renderServicesMerged();
+  if (btn) setSwitchVisual(btn, nowVisible); else renderServicesMerged();
 }
 export function toggleAllCheckinServices() {
   dispatch('config.set', { key: 'hidden_services', value: cfg().hidden_services.length === 0 ? cfg().services.map(s => s.id) : [] });
@@ -113,7 +114,6 @@ export function saveService() {
   closeServiceModal();
   renderServicesMerged();
   showToast(editId ? 'Service updated' : `"${label}" added`);
-  if (cfg().square_config && changedSvc && window.squarePushService) window.squarePushService(changedSvc);
 }
 
 export function deleteService(id) {
@@ -128,11 +128,12 @@ export function deleteService(id) {
 // ── Dashboard service visibility (config.hidden_dash_services) ────────────────
 export function isServiceVisibleOnDash(id) { return !cfg().hidden_dash_services.includes(id); }
 
-export function toggleDashService(id) {
+export function toggleDashService(id, btn) {
   const hidden = cfg().hidden_dash_services;
+  const nowVisible = hidden.includes(id);   // currently hidden → toggling turns it on
   const next = hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id];
   dispatch('config.set', { key: 'hidden_dash_services', value: next });
-  renderServicesMerged();
+  if (btn) setSwitchVisual(btn, nowVisible); else renderServicesMerged();
 }
 
 export function toggleAllDashServices() {
@@ -148,7 +149,6 @@ export function renderSettingsItems() {
   const container = document.getElementById('settings-items-list');
   if (!container) return;
   const items = cfg().items;
-  const hasSquare = !!cfg().square_config;
   container.innerHTML = items.map((item, i) => `
     <div class="flex items-center gap-2 py-2 border-b border-surface-container-high last:border-0">
       <input type="text" value="${item.label}" placeholder="Item name"
@@ -163,9 +163,6 @@ export function renderSettingsItems() {
           onchange="updateItemField(${i},'price',this.value)"
           class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
       </div>
-      ${hasSquare ? `<button onclick="squarePushItem(${i})" title="Push to Square" class="text-outline-variant hover:text-primary transition-colors flex-shrink-0">
-        <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
-      </button>` : ''}
       <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:16px">delete</span>
       </button>
@@ -181,6 +178,8 @@ export function addItemRow() {
   renderSettingsItems();
 }
 export function removeItem(i) {
+  const it = cfg().items[i];
+  if (it && (it.label || it.price) && !confirm(`Remove "${it.label || 'this item'}"?`)) return;
   setItems(cfg().items.filter((_, idx) => idx !== i));
   renderSettingsItems();
 }
@@ -219,6 +218,8 @@ export function addFeeRow() {
   renderSettingsFees();
 }
 export function removeFee(i) {
+  const f = cfg().fees[i];
+  if (f && (f.label || f.value) && !confirm(`Remove "${f.label || 'this fee'}"?`)) return;
   setFees(cfg().fees.filter((_, idx) => idx !== i));
   renderSettingsFees();
 }

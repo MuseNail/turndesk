@@ -14,7 +14,7 @@ import { showToast } from '../utils.js';
 
 const cfg = () => getState().config;
 const ROOT = document.documentElement;
-const FALLBACK_KEY = 'turndesk_theme_fallback';
+const FALLBACK_KEY = 'muse_theme_fallback';
 const DEFAULT_ACCENT = '#1a5252';
 const ACCENT_VARS = ['--primary', '--primary-dim', '--primary-container', '--on-primary', '--on-primary-container'];
 

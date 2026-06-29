@@ -53,7 +53,7 @@ export async function renderActivityLog(skipFetch) {
     _auditEvents = await _fetchMerged();
   }
   // chips + search + list container
-  const chips = _CATS.map(c => `<button onclick="setAuditFilter('${c.id}')" class="px-3 py-1 rounded-full text-xs font-body font-semibold border transition-all" style="${_auditFilter === c.id ? 'background:#1a5252;color:#fff;border-color:#1a5252' : 'background:transparent;border-color:var(--outline-variant,#7a858a);color:var(--on-surface,#0e1a1a)'}">${c.label}</button>`).join('');
+  const chips = _CATS.map(c => `<button onclick="setAuditFilter('${c.id}')" class="chip${_auditFilter === c.id ? ' chip-on' : ''}">${c.label}</button>`).join('');
   el.innerHTML = `<div class="flex flex-wrap gap-1.5 mb-2">${chips}</div>
     <input type="text" placeholder="Search name, action, user…" oninput="auditSearch(this.value)" value="${_esc(_auditSearch)}" class="w-full mb-3 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
     <div id="audit-feed-list" class="space-y-1.5"></div>`;

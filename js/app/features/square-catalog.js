@@ -1,12 +1,14 @@
-// ── Square config modal + catalog pull/push ─────────────────────────────────
-// Square location config is synced (config.square_config). Catalog pull merges
-// into config.services / config.items / config.fees via dispatch.
+// ── Square config modal + Terminal pairing + customer-sync glue ─────────────
+// Square location config is synced (config.square_config). Catalog pull/push was
+// REMOVED (v4.23) — the app is the source of truth for services / items / fees.
+// This module now only handles the Square connection, Terminal pairing, the SMS
+// team-member picker, and the customer-directory sync (until customers move to the DO).
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, escHtml } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
-import { loadSquareCustomers } from './square-customers.js';
+import { importCustomersFromSquare } from './square-customers.js';
 
 const cfg = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -49,15 +51,62 @@ export async function testSquareConnection() {
   } catch (e) { status.textContent = '✗ Could not reach proxy — check Worker is deployed'; status.style.color = '#a83836'; }
 }
 
+// ── Square Terminal pairing ──────────────────────────────────────────────────
+// Create a device code (product_type TERMINAL_API), the operator signs into the
+// Square Terminal with that code, then we poll until it's PAIRED and store the
+// device_id in config.square_config.terminalDeviceId (synced across devices).
+export async function pairTerminal() {
+  const sc = sqConfig();
+  if (!sc?.locationId) { showToast('Save your Location ID first.'); return; }
+  const el = document.getElementById('sq-terminal-status');
+  if (el) el.textContent = 'Requesting a device code…';
+  try {
+    const res = await fetch(`${SQUARE_PROXY}/v2/devices/codes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotency_key: 'devcode-' + Date.now(), device_code: { name: 'Front Desk Terminal', location_id: sc.locationId, product_type: 'TERMINAL_API' } }),
+    });
+    const j = await res.json();
+    if (!res.ok) { if (el) el.textContent = ''; showToast('Square: ' + (j.errors?.[0]?.detail || 'could not create a device code')); return; }
+    const dc = j.device_code || {};
+    if (el) el.innerHTML = `On the Square Terminal: <b>Sign in → Use a device code</b>, then enter:<div style="font-size:30px;font-weight:800;letter-spacing:5px;margin:8px 0;color:var(--primary,#1a5252)">${(dc.code || '').replace(/[^A-Z0-9]/g, '')}</div><span class="text-on-surface-variant">Waiting for the Terminal to pair… (code expires in 5 min)</span>`;
+    _pollDeviceCode(dc.id, Date.now());
+  } catch (e) { if (el) el.textContent = ''; showToast('Could not reach Square.'); }
+}
+function _pollDeviceCode(id, started) {
+  const el = document.getElementById('sq-terminal-status');
+  if (Date.now() - started > 5 * 60 * 1000) { if (el) el.textContent = 'Code expired — tap "Pair Terminal" to try again.'; return; }
+  setTimeout(async () => {
+    let dc = null;
+    try { const r = await fetch(`${SQUARE_PROXY}/v2/devices/codes/${id}`); const j = await r.json(); dc = j.device_code || null; } catch (e) {}
+    if (dc?.status === 'PAIRED' && dc.device_id) {
+      dispatch('config.set', { key: 'square_config', value: { ...(sqConfig() || {}), terminalDeviceId: dc.device_id, terminalName: dc.name || '' } });
+      if (el) el.textContent = '';
+      showToast('Square Terminal paired ✓');
+      renderTerminalStatus();
+      return;
+    }
+    _pollDeviceCode(id, started);
+  }, 3000);
+}
+export function unpairTerminal() {
+  const sc = { ...(sqConfig() || {}) }; delete sc.terminalDeviceId; delete sc.terminalName;
+  dispatch('config.set', { key: 'square_config', value: sc });
+  renderTerminalStatus();
+  showToast('Terminal unpaired.');
+}
+export function renderTerminalStatus() {
+  const el = document.getElementById('sq-terminal-current'); if (!el) return;
+  const id = sqConfig()?.terminalDeviceId;
+  el.innerHTML = id
+    ? `<span style="color:#2a6868;font-weight:700">✓ Terminal paired</span> · <span style="font-family:monospace;font-size:11px">${id}</span> · <button onclick="unpairTerminal()" class="text-error underline" style="font-size:12px">Unpair</button>`
+    : `<span class="text-on-surface-variant">No Terminal paired yet.</span>`;
+}
+
+// Sync the customer directory from Square. (Catalog is app-owned and no longer pulled.)
+// Customers move to the Durable Object in a later step; until then they load from Square.
 export async function syncSquare() {
   if (!sqConfig()) { showSquareModal(); return; }
-  updateSyncLabel('pending', 'Syncing…');
-  showToast('Syncing with Square…');
-  try {
-    await Promise.all([loadSquareCustomers(), squarePullServices()]);
-    updateSyncLabel('ok', 'Square synced');
-    showToast('Square sync complete');
-  } catch (e) { updateSyncLabel('error', 'Sync failed'); showToast('Square sync failed. Check settings.'); }
+  await importCustomersFromSquare();   // one-time/again-safe import of Square customers into the DO
 }
 
 export function updateSyncLabel(state, label) {
@@ -65,149 +114,6 @@ export function updateSyncLabel(state, label) {
   const lbl = document.getElementById('sync-label');
   if (dot) dot.className = `sync-dot ${state}`;
   if (lbl) lbl.textContent = label;
-}
-
-// Pull Square catalog (ITEM type) → classify into services / items / fees.
-export async function squarePullServices() {
-  if (!sqConfig()) return;
-  try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail; } catch {}
-      showToast(`Square catalog: ${detail}`); return;
-    }
-    const data = await res.json();
-    const services = [...cfg().services];
-    const items    = [...cfg().items];
-    const fees     = [...cfg().fees];
-    let addedSvc = 0, addedItems = 0;
-
-    (data.objects || []).forEach(item => {
-      const name = item.item_data?.name;
-      if (!name) return;
-      const lname = name.toLowerCase();
-      const productType = item.item_data?.product_type;
-      const isService = !productType || productType === 'APPOINTMENTS_SERVICE';
-
-      if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
-        const id = `sq-fee-${item.id}`;
-        if (!fees.find(f => f.id === id || f.label.toLowerCase() === lname)) {
-          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-          fees.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
-        }
-        return;
-      }
-      if (isService) {
-        const id = `sq-${item.id}`;
-        if (!services.find(s => s.id === id || s.label.toLowerCase() === lname)) {
-          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-          const variationId = item.item_data?.variations?.[0]?.id || null;
-          services.push({ id, label: name, abbr, squareItemId: item.id, squareVariationId: variationId });
-          addedSvc++;
-        }
-      } else {
-        if (services.find(s => s.label.toLowerCase() === lname)) return;
-        const id = `sq-item-${item.id}`;
-        if (!items.find(i => i.id === id || i.label.toLowerCase() === lname)) {
-          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-          items.push({ id, label: name, abbr, price: price ? price / 100 : 0, squareItemId: item.id });
-          addedItems++;
-        }
-      }
-    });
-
-    if (addedSvc)   dispatch('config.set', { key: 'services', value: services });
-    if (addedItems) dispatch('config.set', { key: 'items', value: items });
-    if (fees.length !== cfg().fees.length) dispatch('config.set', { key: 'fees', value: fees });
-
-    if (addedSvc > 0)   showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
-    if (addedItems > 0) showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
-    if (addedSvc === 0 && addedItems === 0) showToast('Catalog already up to date');
-    window.renderServicesMerged?.();
-  } catch (e) { console.warn('Could not pull Square catalog:', e); }
-}
-
-// Push a service to the Square catalog (create or update). Updates config.services
-// with the returned Square ids on create.
-export async function squarePushService(svc) {
-  if (!sqConfig() || !svc) return;
-  try {
-    if (svc.squareItemId) {
-      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${svc.squareItemId}`);
-      if (!getRes.ok) { showToast('Square: could not fetch existing service.'); return; }
-      const obj = (await getRes.json()).object;
-      if (!obj) return;
-      obj.item_data.name = svc.label;
-      if (obj.item_data.variations?.[0]?.item_variation_data) {
-        const vd = obj.item_data.variations[0].item_variation_data;
-        vd.pricing_type = svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
-        if (svc.baseCost > 0) vd.price_money = { amount: Math.round(svc.baseCost * 100), currency: 'USD' }; else delete vd.price_money;
-      }
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `turndesk-svc-upd-${svc.id}-${Date.now()}`, object: obj }) });
-      if (res.ok) showToast(`"${svc.label}" updated in Square ✓`);
-    } else {
-      const tempId = `#turndesk-${svc.id}`;
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `turndesk-svc-${svc.id}-${Date.now()}`, batches: [{ objects: [{
-          type: 'ITEM', id: tempId,
-          item_data: { name: svc.label, product_type: 'APPOINTMENTS_SERVICE', variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(svc.baseCost > 0 ? { price_money: { amount: Math.round(svc.baseCost * 100), currency: 'USD' } } : {}) } }] },
-        }] }] }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const itemMapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
-        const varMapping  = (data.id_mappings || []).find(m => m.client_object_id === `${tempId}-var`);
-        if (itemMapping?.object_id) {
-          const services = cfg().services.map(s => s.id === svc.id ? { ...s, squareItemId: itemMapping.object_id, squareVariationId: varMapping?.object_id } : s);
-          dispatch('config.set', { key: 'services', value: services });
-        }
-        showToast(`"${svc.label}" added to Square ✓`);
-      }
-    }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); }
-}
-
-// Push a retail item to Square (create or update). itemIndex is the index in config.items.
-export async function squarePushItem(itemIndex) {
-  const item = cfg().items[itemIndex];
-  if (!sqConfig() || !item) return;
-  try {
-    if (item.squareItemId) {
-      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${item.squareItemId}`);
-      if (!getRes.ok) { showToast('Square: could not fetch existing item.'); return; }
-      const obj = (await getRes.json()).object;
-      if (!obj) return;
-      obj.item_data.name = item.label;
-      if (obj.item_data.variations?.[0]?.item_variation_data) {
-        const vd = obj.item_data.variations[0].item_variation_data;
-        vd.pricing_type = item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
-        if (item.price > 0) vd.price_money = { amount: Math.round(item.price * 100), currency: 'USD' }; else delete vd.price_money;
-      }
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `turndesk-item-upd-${item.id}-${Date.now()}`, object: obj }) });
-      if (res.ok) showToast(`"${item.label}" updated in Square ✓`);
-    } else {
-      const tempId = `#turndesk-${item.id}`;
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `turndesk-item-${item.id}-${Date.now()}`, batches: [{ objects: [{
-          type: 'ITEM', id: tempId,
-          item_data: { name: item.label, variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(item.price > 0 ? { price_money: { amount: Math.round(item.price * 100), currency: 'USD' } } : {}) } }] },
-        }] }] }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const mapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
-        if (mapping?.object_id) {
-          const items = cfg().items.map(i => i.id === item.id ? { ...i, squareItemId: mapping.object_id } : i);
-          dispatch('config.set', { key: 'items', value: items });
-        }
-        showToast(`"${item.label}" added to Square ✓`);
-      }
-    }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); }
 }
 
 // Load bookings-eligible team members into the Square modal picker.
@@ -222,7 +128,7 @@ export async function loadSquareBookingTeamMembers() {
     sel.innerHTML = '<option value="">— None (no SMS reminders) —</option>' + members.map(m => {
       const name = [m.given_name, m.family_name].filter(Boolean).join(' ');
       const selected = m.id === sqConfig()?.bookingTeamMemberId ? 'selected' : '';
-      return `<option value="${m.id}" ${selected}>${name}</option>`;
+      return `<option value="${escHtml(m.id)}" ${selected}>${escHtml(name)}</option>`;
     }).join('');
     if (members.length === 0) showToast('No active team members found in Square.');
   } catch (e) { showToast('Could not load team members from Square.'); }

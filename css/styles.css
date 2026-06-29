@@ -8,7 +8,7 @@
     --primary: #1a5252; --primary-dim: #0f3d3d; --primary-container: #8fd4d3;
     --on-primary: #ffffff; --on-primary-container: #0a2e2e;
     --secondary: #5c4010; --secondary-container: #f5c870; --on-secondary-container: #3a2800;
-    --surface: #e8ecee; --surface-container-lowest: #f5f7f8; --surface-container-low: #dde2e5;
+    --surface: #ffffff; --surface-container-lowest: #ffffff; --surface-container-low: #dde2e5;
     --surface-container: #d0d6da; --surface-container-high: #c2cacd; --surface-container-highest: #b4bec2;
     --on-surface: #000000; --on-surface-variant: #1a1a1a;
     --outline: #4a5258; --outline-variant: #7a858a;
@@ -24,6 +24,22 @@
     --secondary-container: #5c4010; --on-secondary-container: #f5c870;
   }
   html[data-appearance="dark"] body { background: var(--surface); }
+
+  /* White + soft cards: body + cards are now white (tokens above), so cards no longer sit on
+     grey. A subtle shadow restores the card/header lift. Light mode only — shadows read as
+     dirty smudges on dark surfaces, and dark keeps its own elevated greys. */
+  html:not([data-appearance="dark"]) header.bg-surface-container-lowest.border-surface-container-high {
+    box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.05);
+  }
+  html:not([data-appearance="dark"]) .bg-surface-container-lowest.border-surface-container-high:not(header) {
+    box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05);
+  }
+
+  /* Turns waiting/active columns fill down to the viewport bottom instead of stopping at
+     content height. The side panel is a sticky flex row; giving it a definite height (same
+     calc the left tech-grid already uses) lets its two columns stretch (align-items:stretch)
+     and their inner lists (flex:1) fill the space below each header. */
+  #turns-side-panel { height: calc(100vh - var(--turns-offset, 210px)); }
 
   * { box-sizing: border-box; }
   body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -63,12 +79,12 @@
   }
   .fade-up { animation: fadeUp 0.4s ease forwards; }
 
-  /* Status badges */
+  /* Status badges — C9/D13 filled palette (recolored v4.79): Waiting amber · In Service green · Done blue · Paid slate */
   .badge-waiting { background: #f5c870; color: #3a2800; }
-  .badge-inservice { background: #8fd4d3; color: #0a2e2e; }
-  .badge-complete { background: #cfe3ef; color: #0a3a52; }
-  .badge-done { background: #b4bec2; color: #000000; }
-  .badge-appointment { background: #1a5252; color: #ffffff; }
+  .badge-inservice { background: #2a7a4f; color: #ffffff; }
+  .badge-complete { background: #1a5c7a; color: #ffffff; }
+  .badge-done { background: #5b6166; color: #ffffff; }
+  .badge-appointment { background: #6f5fb0; color: #ffffff; }   /* violet — distinct from the teal In Service pill */
   .badge-refund { background: rgba(139,28,26,0.12); color: #8b1c1a; }
 
   /* Dashboard top nav tabs */
@@ -77,8 +93,50 @@
   .dash-tab.active { background:#1a5252; color:#ffffff; }
   .dash-tab.active .material-symbols-outlined { color:#ffffff; }
 
+  /* Sub-view switcher for grouped tabs (Floor / Sales / Reports). The pill renders INTO the
+     active panel's first toolbar row via a .subnav-slot flex item — centered in the free middle
+     (date picker stays left, panel buttons stay right), wrapping gracefully when the row is
+     tight. Panels without a slot (Customers — its search bar needs the width) fall back to the
+     global #dash-subnav row under the header. */
+  #dash-subnav { display:flex; justify-content:center; padding:10px 12px 0; }
+  #dash-subnav.hidden { display:none; }
+  .subnav-slot { flex:1 1 auto; display:flex; justify-content:center; min-width:0; }
+  .subnav-slot:empty { display:none; }   /* inactive slots must not absorb row space */
+  .subnav-seg { display:inline-flex; background:#e4e8ea; border-radius:12px; padding:3px; gap:2px; box-shadow:0 1px 3px rgba(0,0,0,0.07); }
+  .subnav-btn { display:inline-flex; align-items:center; gap:6px; border:none; background:transparent; font-family:'Inter',sans-serif; font-size:13px; font-weight:700; padding:7px 18px; border-radius:10px; cursor:pointer; color:#5b6166; transition:all 0.15s; white-space:nowrap; }
+  .subnav-btn.on { background:#ffffff; color:#1a5252; box-shadow:0 1px 4px rgba(0,0,0,0.14); }
+  /* iPad-width: compact the pill to icons so busy toolbars don't wrap */
+  @media (max-width: 1280px) {
+    .subnav-btn .subnav-label { display:none; }
+    .subnav-btn { padding:8px 14px; }
+    .subnav-btn .material-symbols-outlined { font-size:19px !important; }
+  }
+
   /* Report range buttons */
   .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
+
+  /* Update-available badge (E2): gentle pulse so the ↻ is discoverable */
+  .update-pulse { color:#1a5252 !important; font-weight:700; animation:updatePulse 2s ease-in-out infinite; }
+  @keyframes updatePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+
+  /* Turns board "Large" text (C8) — per-device toggle (Settings → Workflow → Turns Board
+     Display). Bumps the bubble + side-list type and widens the slots so the text fits. */
+  #panel-turns.turns-large .text-\[9px\]  { font-size: 11px !important; }
+  #panel-turns.turns-large .text-\[10px\] { font-size: 12px !important; }
+  #panel-turns.turns-large .text-\[11px\] { font-size: 13px !important; }
+  #panel-turns.turns-large .turns-filled-slot,
+  #panel-turns.turns-large .turns-drop-zone { width: 172px !important; }
+
+  /* Turns board "$ billed" totals — per-device show/hide (Totals button in the Turns
+     toolbar). Turn counts stay visible; only each tech's billed dollar line hides. */
+  #panel-turns.turns-hide-totals .turns-billed { display: none !important; }
+
+  /* Queue filter chips (D13): filters are OUTLINED buttons — visually distinct from the
+     color-FILLED status pills they used to mimic. Active = teal outline + light teal wash. */
+  .tab-btn { border:1.5px solid #b9c2c7; background:transparent; color:#4a5055; }
+  .tab-btn:hover { background:#eef1f3; }
+  .tab-btn.fchip-on { border-color:#1a5252; color:#1a5252; background:#eaf2f2; }
+  .tab-btn.fchip-on::before { content:'✓ '; font-weight:800; }
 
   /* Tablet / iPad responsive scaling */
   @media (max-width: 1024px) {
@@ -126,7 +184,7 @@
     /* Service buttons in check-in: 3-col → 2-col */
     #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     /* Sync indicators: hide both text labels */
-    #sheets-sync-text { display: none !important; }
+    #conn-text { display: none !important; }
   }
   @media (max-width: 768px) {
     #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }
@@ -189,11 +247,13 @@
      Must come AFTER the manipulation rule above to win; descendants included because
      the touch lands on the inner button/text, not the wrapper. */
   .floor-bubble, .floor-bubble *, .floor-station, .floor-station *,
+  .floor-tech, .floor-tech *,
   .tech-drag-handle {
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    -webkit-user-drag: none;   /* desktop: stop the native image/element drag (ghost img) from hijacking the custom pointer drag */
   }
   /* Turns bubbles drag via tap-and-hold (see initTurnsDrag), so they MUST still allow
      native panning — otherwise a swipe can't scroll a tech's overflowing turn row or the
@@ -210,7 +270,7 @@
 
   /* Queue action buttons — large touch targets */
   .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
-  .q-action-btn:active { transform:scale(0.92); }
+  .q-action-btn:active { filter:brightness(0.92); }
 
   /* Dashboard panels */
   .dash-panel { display:none; }
@@ -279,45 +339,39 @@
      softer depth, and a compact-density pass so long lists scroll less.
      ══════════════════════════════════════════════════════════════════ */
 
-  /* Tactile press feedback on interactive controls */
+  /* Press feedback on interactive controls — FLAT press (v5.35): shadow +
+     background only, NO scale. The old global `:active { scale(.975) }` shrank
+     every button on press and eased it back over .08s — that eased return was a
+     "bounce" felt app-wide, and it forced a string of patch rules (overlays,
+     list cards, numpad) whose only job was to undo the scale where it propagated
+     up onclick parents. Dropping the scale kills the bounce everywhere and lets
+     all of those patches go with it. Primary buttons keep a shadow dip (below). */
   button, [onclick], [role="button"], .dash-tab {
-    transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
+    transition: box-shadow .15s ease, background-color .15s ease, color .15s ease;
   }
-  button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
-  /* …but NEVER a full-screen pop-up overlay. Every modal/menu backdrop carries an
-     onclick (tap-outside-to-close), so :active propagating up from a tapped button made
-     the whole overlay — and the panel inside it — scale/bounce on every tap (the same
-     bug the numpad had). Kill the transform on the overlay; buttons inside still scale. */
-  .fixed.inset-0:active { transform: none !important; }
   /* Number inputs are type-only (e.g. the payroll Check field) — no up/down spinners. */
   input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; appearance: textfield; }
-  /* …but NOT the numpad keys. The cosmetic button transition above animated a
-     background/transform flash on every tap → "flicker + jump" on iPad during rapid
-     amount entry. Kill ALL motion on the keys: no transition, no transform, no shadow
-     change — just an instant (un-animated) :active background for crisp feedback.
-     touch-action:none + the onpointerdown handlers register taps on touch-down. */
-  .numpad-key { transition: none !important; transform: none !important; box-shadow: none !important; touch-action: none !important; }
-  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { transform: none !important; box-shadow: none !important; }
+  /* Numpad keys still want INSTANT, un-animated feedback during rapid amount
+     entry — kill the transition flash and any shadow change so the :active
+     background snaps. touch-action:none + onpointerdown register taps on
+     touch-down. */
+  .numpad-key { transition: none !important; box-shadow: none !important; touch-action: none !important; }
+  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { box-shadow: none !important; }
   /* The whole numpad never scrolls — stops a stray touch from rubber-banding the page
      behind the bottom sheet. Taps/clicks still work. */
   #numpad-modal { touch-action: none; overscroll-behavior: contain; }
   #numpad-modal, #numpad-modal * { transition: none !important; }
-  /* THE jump fix: the backdrop (#numpad-modal, onclick=closeNumpad) and panel
-     (onclick=stopPropagation) both match the cosmetic `[onclick]:active{scale(.975)}`,
-     and :active propagates up from the pressed key — so the whole numpad scaled/snapped
-     on every tap. Kill any transform on the numpad and its descendants while active. */
-  #numpad-modal, #numpad-modal *, #numpad-modal:active, #numpad-modal *:active { transform: none !important; }
   /* Keep the amount on one line so a wide number can't reflow the panel. */
   #numpad-display { white-space: nowrap; overflow: hidden; }
 
   /* Slick pill switch — shared by services / active-staff / role-permission
      toggles (identical markup: a track div + an absolutely-positioned knob div).
      On-state keeps its bg-primary class → we layer a gradient + inset shadow;
-     the knob gets a lift + a springy slide. */
+     the knob gets a lift + a smooth (non-overshooting) slide. */
   .mswitch { box-shadow: inset 0 1px 3px rgba(0,0,0,.18); }
   .mswitch.bg-primary { background-image: linear-gradient(180deg, #237370, var(--primary)); }
-  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .22s cubic-bezier(.4,1.3,.5,1) !important; }
+  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .18s cubic-bezier(.4,0,.2,1) !important; }
 
   /* Unified drag drop-marker — a glowing teal insert-line, used everywhere a
      reorder happens (turns slots, tech order, calendar selector, floor plan). */
@@ -348,7 +402,7 @@
   .data-table tbody tr:nth-child(even) .sticky-col, .data-table tbody tr:nth-child(odd) .sticky-col { background: var(--surface-container, #d0d6da); }
   .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
   .data-table .section-row td { background: var(--surface-container, #d0d6da); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--on-surface-variant, #46555a); }
-  .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  .data-table .sticky-col { width: 120px; max-width: 120px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
   /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
   /* Thick solid divider between staff column-groups; thin dashed divider between This and
      Last. Both run up through the header — but the header is teal, so use a light border
@@ -404,6 +458,55 @@
   button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
   button.border-2.border-primary.text-primary { background-color: rgba(26,82,82,0.08); }
 
+  /* ── D11: unified button system ───────────────────────────────────────────
+     Three intents + a pill chip — ONE visual identity for every panel-toolbar
+     button (replaces ~10 ad-hoc Tailwind combos). Layout utilities (w-full,
+     flex-1, hidden, ml-auto, mb-*) still ride alongside on the element, and
+     JS state toggles (bg-primary, border-primary, inline styles) layer on top
+     because the Tailwind CDN stylesheet is generated after this one loads. */
+  .btn-primary, .btn-secondary, .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 8px 16px; border-radius: 12px; border: 1px solid transparent;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; line-height: 1.2;
+    white-space: nowrap; cursor: pointer;
+  }
+  .btn-primary .material-symbols-outlined, .btn-secondary .material-symbols-outlined,
+  .btn-ghost .material-symbols-outlined { font-size: 18px; }
+  .btn-primary {
+    background-color: var(--primary);
+    background-image: linear-gradient(180deg, #237370, var(--primary));
+    color: var(--on-primary);
+    box-shadow: 0 4px 12px -3px rgba(26,82,82,.45);
+  }
+  .btn-primary:hover { background-image: linear-gradient(180deg, var(--primary-dim), var(--primary-dim)); }
+  .btn-primary:active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
+  .btn-secondary {
+    border-color: var(--surface-container-high, #c2cacd);
+    background-color: var(--surface-container-lowest, #ffffff);
+    color: var(--on-surface, #1a1a1a);
+  }
+  .btn-secondary:hover { background-color: var(--surface-container, #d0d6da); }
+  .btn-ghost { background: transparent; color: var(--on-surface-variant, #1a1a1a); }
+  .btn-ghost:hover { background: var(--surface-container, #d0d6da); }
+  /* Pill chip — small toggles/filters. Active state = .chip-on (matches the
+     D13 outlined queue-filter look so all chips read as one family). */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 13px; border-radius: 999px;
+    border: 1.5px solid var(--outline-variant, #b9c2c7);
+    background: transparent; color: var(--on-surface-variant, #4a5055);
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; line-height: 1.2;
+    white-space: nowrap; cursor: pointer;
+  }
+  .chip .material-symbols-outlined { font-size: 15px; }
+  .chip:hover { background: var(--surface-container-low, #eef1f3); }
+  .chip.chip-on { border-color: var(--primary); color: var(--primary); background: rgba(26,82,82,.08); }
+
+  /* ── E5: drag-handle affordance (floor plan) — a subtle grip glyph on the
+     draggable things in the live view: occupied seats, the Not-seated tray
+     bubbles, and the tech avatars. Display-only; drags hit the parent. */
+  .fp-grip { font-size: 14px !important; color: rgba(31,41,55,.38); pointer-events: none; flex-shrink: 0; }
+
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }
   .rpt-delta:empty { display:none; }
@@ -432,6 +535,9 @@
   .dp-day.dp-range { background:rgba(26,82,82,.14); border-radius:8px; }
   .dp-day.today { box-shadow:inset 0 0 0 1.5px var(--primary,#1a5252); }
   .dp-day.sel { background:var(--primary,#1a5252); color:#fff; }
+  .dp-day.dp-rstart, .dp-day.dp-rend { background:var(--primary,#1a5252); color:#fff; border-radius:999px; }
+  /* Hide Square-only UI (legacy POS deep-link, etc.) when Helcim is the active card processor. */
+  body.proc-helcim .square-only { display: none !important; }
 
   /* ── Reports: performance-by-hour chart ───────────────────────────────── */
   .perf-plot { display:flex; gap:8px; align-items:stretch; }
@@ -449,3 +555,86 @@
   .cmp-opt { display:block; width:100%; text-align:left; padding:11px 16px; font-size:14px; font-weight:600; color:var(--md-on-surface,#1c1b1f); background:transparent; border:none; cursor:pointer; }
   .cmp-opt:hover { background:var(--md-surface-container,#f1f1f4); }
   .cmp-opt.active { color:var(--primary,#1a5252); }
+
+  /* ── Date-picker value: constant width across all tabs (Turns/Queue/Reports/Transactions/Calendar) ─ */
+  .date-pick-val { display:inline-block; min-width:138px; text-align:center; }
+
+  /* ── Staff chat (Team + DMs) — panel rendered by features/chat.js ─────────── */
+  .chat-panel { position:fixed; z-index:75; top:56px; right:12px; flex-direction:column;
+    max-width:calc(100vw - 24px); max-height:calc(100vh - 80px);
+    background:var(--surface-container-lowest,#fff); border:1px solid var(--outline-variant,#c2cacd);
+    border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.22); overflow:hidden; }
+  .chat-head { display:flex; align-items:center; gap:6px; padding:10px 12px; flex-shrink:0;
+    border-bottom:1px solid var(--outline-variant,#c2cacd); }
+  .chat-title { flex:1; min-width:0; display:flex; align-items:center; gap:7px;
+    font-weight:800; font-size:15px; color:var(--on-surface,#16201f); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chat-hbtn { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    color:var(--on-surface-variant,#46555a); background:none; border:none; cursor:pointer; flex-shrink:0; }
+  .chat-hbtn:hover { background:var(--surface-container,#eef2f2); }
+  .chat-body { flex:1; overflow-y:auto; background:#f7f9f9; min-height:0; }
+  .chat-seclbl { font-size:10px; font-weight:800; letter-spacing:.7px; text-transform:uppercase;
+    color:#9aa4a8; padding:10px 13px 4px; }
+  .chat-conv { display:flex; align-items:center; gap:11px; padding:11px 13px; border-bottom:1px solid #eceff0; cursor:pointer; }
+  .chat-conv:hover { background:#eef4f4; }
+  .chat-av { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:15px; color:#fff; flex-shrink:0; }
+  .chat-av.sm { width:26px; height:26px; font-size:11px; }
+  .chat-cmid { flex:1; min-width:0; }
+  .chat-cname { font-weight:700; font-size:14px; color:var(--on-surface,#16201f); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chat-cprev { font-size:12px; color:#6a767b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chat-cright { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+  .chat-ctime { font-size:10px; color:#9aa4a8; }
+  .chat-unread { min-width:18px; height:18px; border-radius:999px; background:#d11a2a; color:#fff; font-size:10px;
+    font-weight:800; display:flex; align-items:center; justify-content:center; padding:0 5px; flex-shrink:0; }
+  .chat-role { margin-left:auto; font-size:10px; color:#9aa4a8; flex-shrink:0; }
+  .chat-empty { font-size:12px; color:#7a858a; font-style:italic; text-align:center; padding:30px 16px; }
+  .chat-dmhint { text-align:center; font-size:10px; color:#9aa4a8; padding:6px 4px; }
+  .chat-msgs { padding:12px; }
+  .chat-msg { display:flex; flex-direction:column; align-items:flex-start; margin-bottom:9px; }
+  .chat-msg.me { align-items:flex-end; }
+  .chat-meta { font-size:10px; color:var(--on-surface-variant,#46555a); margin:0 7px 2px; }
+  .chat-bub { max-width:82%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.4;
+    white-space:pre-wrap; word-break:break-word; }
+  .chat-bub.other { background:#d6dde0; color:#0e1a1a; }
+  .chat-bub.mine { background:var(--primary,#1a5252); color:#fff; }
+  .chat-tag { background:#ede7f6; color:#42306b; font-weight:700; border-radius:5px; padding:0 3px; }
+  .chat-bub.mine .chat-tag { background:rgba(255,255,255,.22); color:#fff; }
+  .chat-composer { display:flex; align-items:center; gap:8px; padding:10px; flex-shrink:0; position:relative;
+    border-top:1px solid var(--outline-variant,#c2cacd); background:var(--surface-container-lowest,#fff); }
+  /* font-size MUST be >=16px: iOS Safari auto-zooms the page when a smaller-text input
+     is focused (the "chat zooms in on open" bug). 16px keeps it from zooming. */
+  .chat-input { flex:1; min-width:0; border:1px solid var(--outline-variant,#c2cacd); border-radius:999px;
+    padding:8px 14px; font-size:16px; outline:none; background:var(--surface,#fff); color:var(--on-surface,#16201f); }
+  .chat-input:focus { border-color:var(--primary,#1a5252); }
+  .chat-cbtn { width:38px; height:38px; border-radius:50%; border:none; display:flex; align-items:center;
+    justify-content:center; cursor:pointer; flex-shrink:0; }
+  .chat-cbtn.at { background:var(--surface-container,#eef2f2); color:var(--primary,#1a5252); }
+  .chat-cbtn.send { background:var(--primary,#1a5252); color:#fff; }
+  .chat-cbtn.send:active { filter:brightness(.9); }
+  .chat-atpop { position:absolute; left:10px; right:58px; bottom:56px; background:#fff;
+    border:1px solid var(--outline-variant,#c2cacd); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.18);
+    overflow:hidden; max-height:240px; overflow-y:auto; }
+  .chat-atrow { display:flex; align-items:center; gap:9px; padding:8px 11px; cursor:pointer; font-size:13px;
+    color:var(--on-surface,#16201f); }
+  .chat-atrow:hover { background:#eef4f4; }
+  .chat-emojipop { position:absolute; left:10px; right:10px; bottom:56px; background:#fff;
+    border:1px solid var(--outline-variant,#c2cacd); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.18);
+    padding:8px; display:flex; flex-wrap:wrap; gap:2px; max-height:200px; overflow-y:auto; }
+  .chat-emoji { width:38px; height:38px; border:none; background:none; cursor:pointer; font-size:21px;
+    line-height:1; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .chat-emoji:hover { background:#eef4f4; }
+  .chat-notifbar { display:flex; align-items:center; gap:8px; margin:8px; padding:9px 12px; cursor:pointer;
+    background:var(--surface-container,#eef2f2); color:var(--primary,#1a5252); border:1px solid var(--primary,#1a5252);
+    border-radius:10px; font-size:13px; font-weight:600; }
+  .chat-notifbar:hover { background:#e3edec; }
+  /* Staff-app chat FAB */
+  .chat-fab { position:fixed; right:16px; bottom:16px; z-index:70; width:56px; height:56px; border-radius:50%;
+    background:var(--primary,#1a5252); color:#fff; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 14px rgba(26,82,82,.45); border:none; cursor:pointer; }
+  .chat-fab .chat-badge { position:absolute; top:-2px; right:-2px; min-width:20px; height:20px; border-radius:999px;
+    background:#d11a2a; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center;
+    justify-content:center; padding:0 5px; border:2px solid #fff; }
+  /* The .chat-fab .chat-badge rule above (2 classes) outranks Tailwind's .hidden (1 class),
+     so the badge stayed visible (showing a stale "0") even when hidden. Higher-specificity
+     hide rule wins. */
+  .chat-fab .chat-badge.hidden { display:none; }

@@ -2,20 +2,21 @@
   "name": "TurnDesk Staff",
   "short_name": "TurnDesk Staff",
   "description": "Technician view — your assigned customers, pricing & status",
-  "start_url": "/turndesk/staff.html",
-  "scope": "/turndesk/",
+  "start_url": "/musedashboard/staff.html",
+  "scope": "/musedashboard/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#e8ecee",
   "theme_color": "#1a5252",
   "icons": [
     {
-      "src": "/turndesk/icons/icon-192.png",
+      "src": "/musedashboard/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/turndesk/icons/icon-512.png",
+      "src": "/musedashboard/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

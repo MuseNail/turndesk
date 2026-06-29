@@ -11,7 +11,7 @@ import { getActiveUser } from '../session.js';
 
 const cfg = () => getState().config;
 const ALL_LEADS = [5, 15, 30, 60];           // minutes offered in the settings menu
-const FIRED_KEY = 'turndesk_appt_reminded';      // device-local; { day, keys[] }
+const FIRED_KEY = 'muse_appt_reminded';      // device-local; { day, keys[] }
 const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export function reminderLeads() {
@@ -61,7 +61,8 @@ function showApptBanner(a, L) {
   el.style.cssText = 'pointer-events:auto;display:flex;align-items:center;gap:12px;background:#1a5252;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.28);max-width:96vw;font-family:Inter,sans-serif';
   el.innerHTML = `<span class="material-symbols-outlined" style="font-size:22px;flex-shrink:0">notifications_active</span>`
     + `<div style="min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(a.name)} — appointment in ${_leadLabel(L)}</div>`
-    + `<div style="font-size:12px;opacity:.85">Starts ${_fmtTime(a.startMs)}</div></div>`
+    + `<div style="font-size:12px;opacity:.85">Starts ${_fmtTime(a.startMs)}</div>`
+    + `${(a.svc || a.techName) ? `<div style="font-size:11.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc([a.svc, a.techName].filter(Boolean).join(' · '))}</div>` : ''}</div>`
     + `<button style="flex-shrink:0;background:#fff;color:#1a5252;border:none;border-radius:8px;padding:7px 16px;font-weight:700;font-size:13px;cursor:pointer">OK</button>`;
   el.querySelector('button').onclick = () => el.remove();
   host.appendChild(el);
@@ -73,7 +74,7 @@ export function renderApptReminderSettings() {
   const on = reminderLeads();
   host.innerHTML = ALL_LEADS.map(L => {
     const active = on.includes(L);
-    return `<button onclick="toggleApptReminderLead(${L})" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold border transition-all" style="${active ? 'background:#1a5252;color:#fff;border-color:#1a5252' : 'background:transparent;border-color:var(--outline-variant,#7a858a);color:var(--on-surface,#0e1a1a)'}">${_leadLabel(L)} before</button>`;
+    return `<button onclick="toggleApptReminderLead(${L})" class="chip${active ? ' chip-on' : ''}">${_leadLabel(L)} before</button>`;
   }).join('');
 }
 export function toggleApptReminderLead(L) {
