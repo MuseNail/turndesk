@@ -223,6 +223,7 @@ async function appAuthOk(request, url, env, salonId) {
   if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return true;   // migration mode
   const path = url.pathname;
   if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
+  if (path === '/auth/owner-set') return true;                  // setup/seed route — self-gated by RESTORE_TOKEN
   if (path === '/terminal/webhook') return true;                // Helcim → HMAC-verified instead
   if (path === '/r')                return true;                // public review-QR redirect (customers scan it)
   if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
@@ -308,7 +309,7 @@ export default {
     // ── PIN sign-in (§13 sessions) — forwarded to the DO, which owns the PINs ──
     // Only login/logout are public; /auth/check is internal (the gate calls the
     // DO stub directly and it never appears here).
-    if (path === '/auth/login' || path === '/auth/logout') {
+    if (path === '/auth/login' || path === '/auth/logout' || path === '/auth/owner-set') {
       if (method !== 'POST') return json({ error: 'Method not allowed' }, 405);
       const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
       const doRes = await stub.fetch(request);
@@ -769,6 +770,28 @@ export default {
 // During the v2.00 transition the DO ALSO relays any legacy message verbatim
 // (the current production client sends {type:'queue'|'config'}), so the live app
 // keeps working until the new client cuts over. Remove the legacy relay after cutover.
+
+// ── Password hashing (owner/manager sign-in) — PBKDF2-SHA256 via WebCrypto ─────
+// No deps, no build step. Stored as { salt, hash, iters } (base64); plaintext is
+// never persisted or returned. Failed-login slow-down lives in authLogin.
+const PBKDF2_ITERS = 100000;
+function _b64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function _unb64(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+async function hashPassword(password, saltB64, iters = PBKDF2_ITERS) {
+  const salt = saltB64 ? _unb64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const key  = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' }, key, 256);
+  return { salt: _b64(salt), hash: _b64(bits), iters };
+}
+async function verifyPassword(password, rec) {
+  if (!rec || !rec.salt || !rec.hash) return false;
+  const { hash } = await hashPassword(password, rec.salt, rec.iters || PBKDF2_ITERS);
+  if (hash.length !== rec.hash.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hash.length; i++) diff |= hash.charCodeAt(i) ^ rec.hash.charCodeAt(i);
+  return diff === 0;
+}
+
 export class TurnDeskDO {
   constructor(state, env) {
     this.state = state;
@@ -796,6 +819,7 @@ export class TurnDeskDO {
     if (url.pathname === '/auth/login'  && request.method === 'POST') return this.authLogin(request);
     if (url.pathname === '/auth/logout' && request.method === 'POST') return this.authLogout(request);
     if (url.pathname === '/auth/check'  && request.method === 'POST') return this.authCheck(request);
+    if (url.pathname === '/auth/owner-set' && request.method === 'POST') return this.authOwnerSet(request);
 
     // Current destination for the public review-QR redirect (the Worker's /r route
     // calls this). Single config key, written by Settings via the normal config.set op.
@@ -1238,6 +1262,23 @@ export class TurnDeskDO {
       const waitSec = fail.n + 1 >= 3 ? Math.ceil(this._authDelayMs(fail.n + 1) / 1000) : 0;
       return this._authJson({ error: 'bad_pin', ...(waitSec ? { retryInSec: waitSec } : {}) }, 401);
     };
+    // Owner / manager sign-in: email + password (PBKDF2-hashed, stored in THIS
+    // salon's DO). Checked only here, so identical PINs/emails across salons never
+    // collide. Shares the per-IP slow-down above.
+    const email = String(body.email || '').trim().toLowerCase();
+    if (email || body.password != null) {
+      const password = String(body.password || '');
+      if (!email || !password) return reject();
+      const rec = await this.state.storage.get('owner:' + email);
+      if (!rec || !(await verifyPassword(password, rec))) return reject();
+      await this.state.storage.delete(failKey);
+      const user2   = { kind: 'owner', id: rec.id || email, name: rec.name || 'Owner', role: rec.role || 'owner', email };
+      const token2  = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
+      const expires2 = Date.now() + 30 * 24 * 3600 * 1000;
+      await this.state.storage.put('sess:' + token2, { ...user2, created: Date.now(), expires: expires2, device: String(body.device || '').slice(0, 40) });
+      return this._authJson({ token: token2, expires: expires2, user: user2 });
+    }
+
     if (!/^\d{4,8}$/.test(pin)) return reject();
 
     const fdUsers  = (await this.state.storage.get('config:fd_users')) || [];
@@ -1271,6 +1312,23 @@ export class TurnDeskDO {
     return this._authJson({ ok: true });
   }
 
+  // Set/replace an owner-or-manager credential (email + PBKDF2-hashed password).
+  // Setup/seed-only: gated by RESTORE_TOKEN. Never broadcasts (owner: keys are not
+  // a snapshot prefix, so they never reach clients), never echoes the password.
+  async authOwnerSet(request) {
+    let body = {}; try { body = await request.json(); } catch {}
+    if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return this._authJson({ error: 'unauthorized' }, 403);
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    if (!email || !email.includes('@') || password.length < 6) return this._authJson({ error: 'bad_request' }, 400);
+    const cred = await hashPassword(password);
+    await this.state.storage.put('owner:' + email, {
+      email, name: String(body.name || 'Owner'), role: body.role === 'manager' ? 'manager' : 'owner',
+      ...cred, updated: Date.now(),
+    });
+    return this._authJson({ ok: true });
+  }
+
   async authCheck(request) {
     let body = {}; try { body = await request.json(); } catch {}
     const token = String(body.token || '');
@@ -1280,7 +1338,10 @@ export class TurnDeskDO {
     // Removing a front-desk user / removing-or-deactivating a tech revokes their
     // sessions automatically (within the Worker's ~60s cache) — no extra UI needed.
     if (sess.id !== 'fallback') {
-      if (sess.kind === 'fd') {
+      if (sess.kind === 'owner') {
+        const rec = sess.email ? await this.state.storage.get('owner:' + sess.email) : null;
+        if (!rec) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
+      } else if (sess.kind === 'fd') {
         const fd = (await this.state.storage.get('config:fd_users')) || [];
         if (!fd.some(u => u.id === sess.id)) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
       } else {
