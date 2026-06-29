@@ -567,7 +567,7 @@ async function checkAppVersion() {
   badge.classList.remove('update-pulse');
   badge.onclick = () => showWhatsNew();
   try {
-    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch('/turndesk/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION) {
@@ -584,7 +584,7 @@ async function checkAppVersion() {
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/musedashboard/sw.js').catch(e => console.warn('[SW] registration failed:', e));
+  navigator.serviceWorker.register('/turndesk/sw.js').catch(e => console.warn('[SW] registration failed:', e));
 }
 
 // ── Daily rollover (self-healing, midnight boundary) ──────────────────────────

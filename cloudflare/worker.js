@@ -36,7 +36,7 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Salon',
   // Authorization on every request makes them non-simple → a CORS preflight each;
   // cache the preflight a day so the app isn't paying 2 round-trips per call.
   'Access-Control-Max-Age':       '86400',

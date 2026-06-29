@@ -11,7 +11,7 @@ const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/r
 // Server-side refresh-token auth: the Worker holds the Google refresh token and mints access
 // tokens on demand, so the iPad never depends on Safari/Chrome silent renewal. gapi (below) is
 // still loaded for the Calendar/Tasks API calls; the access token comes from the Worker, not GIS.
-const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
+const GCAL_PROXY = 'https://turndesk.musenailandspa.workers.dev/gcal';
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;

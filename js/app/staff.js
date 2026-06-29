@@ -831,7 +831,7 @@ async function unregisterPush() {
 // reloads to the freshest files (no data touched — all state lives in the Durable Object).
 async function checkStaffVersion() {
   try {
-    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch('/turndesk/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) {
@@ -849,7 +849,7 @@ function boot() {
   store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate
   chat.onChatSync();   // baseline the chat unread badge from cache on load
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/turndesk/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkStaffVersion(); chat.updateChatBadge(); } });   // re-check + recompute the chat badge (clears a stale count) on reopen
   setInterval(() => { if (!document.hidden) checkStaffVersion(); }, 20 * 60 * 1000);   // and poll so an always-open app self-updates

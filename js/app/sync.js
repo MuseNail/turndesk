@@ -8,7 +8,7 @@
 import { hydrate, applyChange, setConnection, loadCache } from './store.js';
 import { withAuth } from './apptoken.js';
 
-const PROD_ORIGIN = 'https://musedashboard.musenailandspa.workers.dev';
+const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
 // When served from localhost (a static server in front of `wrangler dev`), talk to
 // the local Worker on :8787; otherwise the production Worker.
 const ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))

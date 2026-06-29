@@ -315,7 +315,7 @@ export function proceedSquarePayment() {
     // callback_url must EXACTLY match the Web Callback URL registered in the Square
     // Developer Console (Point of Sale API). Pinned to the app scope.
     amount_money: { amount: _pendingPay.cents, currency_code: 'USD' },
-    callback_url: location.origin + '/musedashboard/',
+    callback_url: location.origin + '/turndesk/',
     client_id: appId,
     version: '1.3',
     notes: `Muse${_pendingPay.names ? ' · ' + _pendingPay.names : ''}`,

@@ -229,7 +229,7 @@ window.rappLogout = (rerender = true) => {
 let _updateVer = null;
 async function checkReportsVersion() {
   try {
-    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch('/turndesk/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) {
@@ -244,7 +244,7 @@ function boot() {
   sync.start();
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/turndesk/sw.js').catch(() => {});
   checkReportsVersion();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkReportsVersion(); });
   setInterval(() => { if (!document.hidden) checkReportsVersion(); }, 20 * 60 * 1000);   // poll so an always-open app self-updates

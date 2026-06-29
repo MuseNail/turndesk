@@ -159,7 +159,7 @@ function _fireDeskNotification(who, msg, nch) {
   try {
     const n = new Notification(who, {
       body: (msg.text || '').slice(0, 140), tag: 'muse-chat', renotify: true,
-      icon: '/musedashboard/icons/icon-192.png',
+      icon: '/turndesk/icons/icon-192.png',
     });
     n.onclick = () => {
       try { window.focus(); } catch (e) {}

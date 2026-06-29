@@ -2,13 +2,13 @@
   "name": "TurnDesk Reports",
   "short_name": "TurnDesk Reports",
   "description": "Reports & payroll on your phone — read-only",
-  "start_url": "/musedashboard/reports.html",
-  "scope": "/musedashboard/",
+  "start_url": "/turndesk/reports.html",
+  "scope": "/turndesk/",
   "display": "standalone",
   "background_color": "#e8ecee",
   "theme_color": "#1a5252",
   "icons": [
-    { "src": "/musedashboard/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/musedashboard/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/turndesk/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/turndesk/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
