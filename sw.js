@@ -1,62 +1,63 @@
 // ── Service Worker (v4.85 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'turndesk-v0.11';
+const CACHE_NAME = 'turndesk-v0.12';
 
 const PRECACHE_URLS = [
-  '/musedashboard/',
-  '/musedashboard/index.html',
-  '/musedashboard/staff.html',
-  '/musedashboard/reports.html',
-  '/musedashboard/css/styles.css',
-  '/musedashboard/manifest.json',
-  '/musedashboard/manifest-staff.json',
-  '/musedashboard/manifest-reports.json',
+  '/turndesk/',
+  '/turndesk/index.html',
+  '/turndesk/staff.html',
+  '/turndesk/reports.html',
+  '/turndesk/operator.html',
+  '/turndesk/css/styles.css',
+  '/turndesk/manifest.json',
+  '/turndesk/manifest-staff.json',
+  '/turndesk/manifest-reports.json',
   // App core
-  '/musedashboard/js/app/main.js',
-  '/musedashboard/js/app/staff.js',
-  '/musedashboard/js/app/reports-app.js',
-  '/musedashboard/js/app/store.js',
-  '/musedashboard/js/app/sync.js',
-  '/musedashboard/js/app/config.js',
-  '/musedashboard/js/app/modal-guard.js',
-  '/musedashboard/js/app/session.js',
-  '/musedashboard/js/app/utils.js',
+  '/turndesk/js/app/main.js',
+  '/turndesk/js/app/staff.js',
+  '/turndesk/js/app/reports-app.js',
+  '/turndesk/js/app/store.js',
+  '/turndesk/js/app/sync.js',
+  '/turndesk/js/app/config.js',
+  '/turndesk/js/app/modal-guard.js',
+  '/turndesk/js/app/session.js',
+  '/turndesk/js/app/utils.js',
   // Feature modules
-  '/musedashboard/js/app/features/auth.js',
-  '/musedashboard/js/app/features/photos.js',
-  '/musedashboard/js/app/features/catalog.js',
-  '/musedashboard/js/app/features/square-customers.js',
-  '/musedashboard/js/app/features/square-catalog.js',
-  '/musedashboard/js/app/features/square-pos.js',
-  '/musedashboard/js/app/features/staff.js',
-  '/musedashboard/js/app/features/checkin.js',
-  '/musedashboard/js/app/features/status.js',
-  '/musedashboard/js/app/features/queue.js',
-  '/musedashboard/js/app/features/turns.js',
-  '/musedashboard/js/app/features/reports.js',
-  '/musedashboard/js/app/features/giftcards.js',
-  '/musedashboard/js/app/features/settings.js',
-  '/musedashboard/js/app/features/calendar.js',
-  '/musedashboard/js/app/features/floorplan.js',
-  '/musedashboard/js/app/features/appearance.js',
-  '/musedashboard/js/app/features/servicetime.js',
-  '/musedashboard/js/app/features/chat.js',
-  '/musedashboard/js/app/features/appt-reminders.js',
-  '/musedashboard/js/app/features/recovery.js',
-  '/musedashboard/js/app/features/audit.js',
-  '/musedashboard/js/app/features/cashdrawer.js',
-  '/musedashboard/js/app/features/sms.js',
-  '/musedashboard/js/app/features/timeclock.js',
-  '/musedashboard/js/app/features/fd-schedule.js',
-  '/musedashboard/js/app/features/helcim.js',
-  '/musedashboard/js/app/features/quicksale.js',
-  '/musedashboard/js/app/features/search.js',
-  '/musedashboard/js/app/features/guide.js',
-  '/musedashboard/js/app/features/receipt.js',
-  '/musedashboard/js/app/features/review-qr.js',
+  '/turndesk/js/app/features/auth.js',
+  '/turndesk/js/app/features/photos.js',
+  '/turndesk/js/app/features/catalog.js',
+  '/turndesk/js/app/features/square-customers.js',
+  '/turndesk/js/app/features/square-catalog.js',
+  '/turndesk/js/app/features/square-pos.js',
+  '/turndesk/js/app/features/staff.js',
+  '/turndesk/js/app/features/checkin.js',
+  '/turndesk/js/app/features/status.js',
+  '/turndesk/js/app/features/queue.js',
+  '/turndesk/js/app/features/turns.js',
+  '/turndesk/js/app/features/reports.js',
+  '/turndesk/js/app/features/giftcards.js',
+  '/turndesk/js/app/features/settings.js',
+  '/turndesk/js/app/features/calendar.js',
+  '/turndesk/js/app/features/floorplan.js',
+  '/turndesk/js/app/features/appearance.js',
+  '/turndesk/js/app/features/servicetime.js',
+  '/turndesk/js/app/features/chat.js',
+  '/turndesk/js/app/features/appt-reminders.js',
+  '/turndesk/js/app/features/recovery.js',
+  '/turndesk/js/app/features/audit.js',
+  '/turndesk/js/app/features/cashdrawer.js',
+  '/turndesk/js/app/features/sms.js',
+  '/turndesk/js/app/features/timeclock.js',
+  '/turndesk/js/app/features/fd-schedule.js',
+  '/turndesk/js/app/features/helcim.js',
+  '/turndesk/js/app/features/quicksale.js',
+  '/turndesk/js/app/features/search.js',
+  '/turndesk/js/app/features/guide.js',
+  '/turndesk/js/app/features/receipt.js',
+  '/turndesk/js/app/features/review-qr.js',
   // Assets
-  '/musedashboard/assets/muse-wordmark.png',
+  '/turndesk/assets/muse-wordmark.png',
 ];
 
 self.addEventListener('install', event => {
@@ -80,7 +81,7 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;            // proxies/CDN → network
-  if (!url.pathname.startsWith('/musedashboard/')) return;
+  if (!url.pathname.startsWith('/turndesk/')) return;
   if (req.cache === 'no-store' || req.cache === 'no-cache') return;
 
   // Network-first for EVERYTHING same-origin (shell, JS modules, CSS, assets):
@@ -107,19 +108,19 @@ async function networkFirst(req) {
     // Offline cache-miss: fall back to the app shell for navigations so the user lands
     // in the app instead of a raw browser network error.
     if (req.mode === 'navigate') {
-      const shell = await caches.match('/musedashboard/index.html');
+      const shell = await caches.match('/turndesk/index.html');
       if (shell) return shell;
     }
     return Response.error();
   }
 }
 
-// ── Web Push (Muse Staff) ────────────────────────────────────────────────────
+// ── Web Push (TurnDesk Staff) ────────────────────────────────────────────────────
 // Payload-less pushes show the generic assignment text; encrypted payloads
 // ({title, body, tag} — e.g. new-appointment alerts) override it. Distinct tags
 // keep an appointment alert from replacing an unread assignment alert.
 self.addEventListener('push', event => {
-  let title = 'Muse Staff', body = 'New customer assigned — tap to open', tag = 'muse-assign';
+  let title = 'TurnDesk Staff', body = 'New customer assigned — tap to open', tag = 'turndesk-assign';
   try {
     if (event.data) {
       const d = event.data.json();
@@ -130,8 +131,8 @@ self.addEventListener('push', event => {
   } catch {}
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: '/musedashboard/icons/icon-192.png',
-    badge: '/musedashboard/icons/icon-192.png',
+    icon: '/turndesk/icons/icon-192.png',
+    badge: '/turndesk/icons/icon-192.png',
     tag,
     renotify: true,
   }));
@@ -140,8 +141,8 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      for (const c of list) { if (c.url.includes('/musedashboard/staff') && 'focus' in c) return c.focus(); }
-      return clients.openWindow('/musedashboard/staff.html');
+      for (const c of list) { if (c.url.includes('/turndesk/staff') && 'focus' in c) return c.focus(); }
+      return clients.openWindow('/turndesk/staff.html');
     })
   );
 });

@@ -219,8 +219,24 @@ function originAllowed(request, env) {
 // Validation round-trips to the DO's /auth/check with a short per-isolate cache —
 // so deactivating/removing a user kills their sessions within ~a minute.
 const _sessCache = new Map();   // token → { ok, exp }
+const _regCache  = new Map();   // salonId → { disabled, exp }
+// A salon explicitly marked status:'disabled' in the registry is locked out of
+// EVERY route (incl. login). A salon with no registry entry (e.g. the demo, seeded
+// directly) is treated as active. Cached ~60s; fails OPEN on a registry blip so a
+// transient error never locks out a paying salon.
+async function isSalonDisabled(env, salonId) {
+  const hit = _regCache.get(salonId);
+  if (hit && hit.exp > Date.now()) return hit.disabled;
+  let disabled = false;
+  try { const entry = await registryGet(env, salonId); disabled = !!(entry && entry.status === 'disabled'); }
+  catch { disabled = false; }
+  _regCache.set(salonId, { disabled, exp: Date.now() + 60000 });
+  if (_regCache.size > 2000) _regCache.clear();
+  return disabled;
+}
 async function appAuthOk(request, url, env, salonId) {
   if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return true;   // migration mode
+  if (salonId && await isSalonDisabled(env, salonId)) return false;            // disabled salon → locked out everywhere
   const path = url.pathname;
   if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
   if (path === '/auth/owner-set') return true;                  // setup/seed route — self-gated by RESTORE_TOKEN
@@ -281,6 +297,11 @@ export default {
     // Origin gate (no-op unless ORIGIN_GATE_ENABLED = "true"). Covers /ws, /state,
     // /square, /photos, /backup — all share the same allow-list.
     if (!originAllowed(request, env)) return json({ error: 'forbidden origin' }, 403);
+
+    // ── Operator console (cross-salon; self-gated by OPERATOR_TOKEN) ────────────
+    // Provisioning + salon management. Not tied to any one salon, and exempt from
+    // the salon guard + §13 app-auth below (it carries its own operator token).
+    if (path.startsWith('/operator/')) return handleOperator(request, env, url, method, path);
 
     // Require an explicit salon slug on every route except the two inherently
     // salon-agnostic public callbacks. Replaces the old silent 'muse' default so
@@ -796,6 +817,105 @@ async function verifyPassword(password, rec) {
   return diff === 0;
 }
 
+// ── Salon registry + operator console ──────────────────────────────────────────
+// The registry is a single reserved DO instance ('__registry__') holding one
+// `salon:<slug>` key per salon. It's the only cross-salon index; salon clients
+// never see it (registry keys aren't a buildSnapshot prefix, and the instance is
+// reached only by operator routes). Reserved slugs can never be real salons.
+const REGISTRY_NAME = '__registry__';
+const RESERVED_SLUGS = new Set([REGISTRY_NAME, 'admin', 'operator', 'api', 'assets', 'icons', 'www', 'app', 'static', 'demo-reserved']);
+// Default nail-salon menu a new salon starts with (owner edits in Settings).
+const STARTER_SERVICES = [
+  { id: 'svc-mani',  label: 'Classic Manicure', abbr: 'MANI', baseCost: 25 },
+  { id: 'svc-gel',   label: 'Gel Manicure',     abbr: 'GEL',  baseCost: 38 },
+  { id: 'svc-pedi',  label: 'Classic Pedicure', abbr: 'PEDI', baseCost: 35 },
+  { id: 'svc-gpedi', label: 'Gel Pedicure',     abbr: 'GPED', baseCost: 50 },
+  { id: 'svc-dip',   label: 'Dip Powder',       abbr: 'DIP',  baseCost: 45 },
+  { id: 'svc-acrf',  label: 'Acrylic Full Set', abbr: 'ACRF', baseCost: 55 },
+  { id: 'svc-acrl',  label: 'Acrylic Fill',     abbr: 'FILL', baseCost: 40 },
+  { id: 'svc-pol',   label: 'Polish Change',    abbr: 'POL',  baseCost: 15 },
+];
+const STARTER_ITEMS = [
+  { id: 'item-oil',   label: 'Cuticle Oil', abbr: 'OIL',   price: 12 },
+  { id: 'item-cream', label: 'Hand Cream',  abbr: 'CREAM', price: 15 },
+];
+function validateSlug(slug) {
+  const s = String(slug || '').trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/.test(s)) return { ok: false, error: 'slug must be 3–32 chars, lowercase letters/digits/hyphens, no leading/trailing hyphen' };
+  if (RESERVED_SLUGS.has(s)) return { ok: false, error: 'that slug is reserved' };
+  return { ok: true, slug: s };
+}
+function registryStub(env) { return env.SALON_DO.get(env.SALON_DO.idFromName(REGISTRY_NAME)); }
+async function registryGet(env, slug) {
+  try {
+    const r = await registryStub(env).fetch(new Request('https://do/registry/get?slug=' + encodeURIComponent(slug)));
+    if (!r.ok) return null;
+    return (await r.json()).entry || null;
+  } catch { return null; }
+}
+
+// Operator routes: gated by the OPERATOR_TOKEN secret (Bearer or ?op=). All are
+// cross-salon. Returns a Response.
+async function handleOperator(request, env, url, method, path) {
+  const auth = request.headers.get('Authorization') || '';
+  const tok  = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (url.searchParams.get('op') || '');
+  if (!env.OPERATOR_TOKEN || tok !== env.OPERATOR_TOKEN) return json({ error: 'unauthorized' }, 401);
+
+  // GET /operator/salons → list
+  if (path === '/operator/salons' && method === 'GET') {
+    const r = await registryStub(env).fetch(new Request('https://do/registry/list'));
+    return json(await r.json().catch(() => ({ salons: [] })));
+  }
+  // POST /operator/salons → provision { slug, name, ownerEmail, ownerPassword, plan }
+  if (path === '/operator/salons' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const v = validateSlug(b.slug);
+    if (!v.ok) return json({ error: v.error }, 400);
+    const slug = v.slug;
+    const existing = await registryGet(env, slug);
+    if (existing && !b.force) return json({ error: 'slug already exists' }, 409);
+    if (!b.ownerEmail || !String(b.ownerEmail).includes('@') || String(b.ownerPassword || '').length < 6) {
+      return json({ error: 'ownerEmail + ownerPassword (≥6 chars) required' }, 400);
+    }
+    const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(slug));
+    // 1) seed starter config (DO internal route), 2) set owner credential, 3) registry entry LAST
+    await salonStub.fetch(new Request('https://do/provision/seed', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: b.name || slug, template: b.template !== false }),
+    }));
+    await salonStub.fetch(new Request('https://do/auth/owner-set', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: env.RESTORE_TOKEN, email: b.ownerEmail, password: b.ownerPassword, name: b.name ? b.name + ' Owner' : 'Owner', role: 'owner' }),
+    }));
+    const entry = { slug, name: b.name || slug, status: 'active', ownerEmail: String(b.ownerEmail).toLowerCase(), plan: b.plan || '', createdAt: new Date().toISOString() };
+    await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    return json({ ok: true, slug, entry });
+  }
+  // POST /operator/salons/<slug>/status { status } → enable/disable
+  let m = path.match(/^\/operator\/salons\/([a-z0-9-]+)\/status$/);
+  if (m && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const entry = await registryGet(env, m[1]);
+    if (!entry) return json({ error: 'no such salon' }, 404);
+    entry.status = b.status === 'disabled' ? 'disabled' : 'active';
+    await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    return json({ ok: true, entry });
+  }
+  // POST /operator/salons/<slug>/owner { email, password } → reset owner credential
+  m = path.match(/^\/operator\/salons\/([a-z0-9-]+)\/owner$/);
+  if (m && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    if (!b.email || String(b.password || '').length < 6) return json({ error: 'email + password (≥6) required' }, 400);
+    const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(m[1]));
+    const r = await salonStub.fetch(new Request('https://do/auth/owner-set', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: env.RESTORE_TOKEN, email: b.email, password: b.password, name: b.name || 'Owner', role: b.role === 'manager' ? 'manager' : 'owner' }),
+    }));
+    return json(await r.json().catch(() => ({ ok: r.ok })), r.status);
+  }
+  return json({ error: 'not found' }, 404);
+}
+
 export class TurnDeskDO {
   constructor(state, env) {
     this.state = state;
@@ -824,6 +944,28 @@ export class TurnDeskDO {
     if (url.pathname === '/auth/logout' && request.method === 'POST') return this.authLogout(request);
     if (url.pathname === '/auth/check'  && request.method === 'POST') return this.authCheck(request);
     if (url.pathname === '/auth/owner-set' && request.method === 'POST') return this.authOwnerSet(request);
+
+    // ── Salon registry (only the reserved '__registry__' instance uses these) ───
+    // Internal routes called by the Worker's operator handler. Keys are `salon:<slug>`.
+    if (url.pathname === '/registry/get') {
+      const slug = url.searchParams.get('slug') || '';
+      return this._authJson({ entry: (await this.state.storage.get('salon:' + slug)) || null });
+    }
+    if (url.pathname === '/registry/list') {
+      const map = await this.state.storage.list({ prefix: 'salon:' });
+      return this._authJson({ salons: [...map.values()] });
+    }
+    if (url.pathname === '/registry/put' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (!b.entry || !b.entry.slug) return this._authJson({ error: 'bad entry' }, 400);
+      await this.state.storage.put('salon:' + b.entry.slug, b.entry);
+      return this._authJson({ ok: true });
+    }
+    // ── Provision: seed a brand-new salon's starter config ──────────────────────
+    if (url.pathname === '/provision/seed' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      return this.provisionSeed(b);
+    }
 
     // Current destination for the public review-QR redirect (the Worker's /r route
     // calls this). Single config key, written by Settings via the normal config.set op.
@@ -1333,6 +1475,17 @@ export class TurnDeskDO {
       email, name: String(body.name || 'Owner'), role: body.role === 'manager' ? 'manager' : 'owner',
       ...cred, updated: Date.now(),
     });
+    return this._authJson({ ok: true });
+  }
+
+  // Seed a brand-new salon's starter config. Never overwrites existing config (so a
+  // re-provision can't wipe a live salon's menu); only fills keys that are absent.
+  async provisionSeed(opts) {
+    if (opts && opts.template !== false) {
+      if ((await this.state.storage.get('config:services')) == null) await this.state.storage.put('config:services', STARTER_SERVICES);
+      if ((await this.state.storage.get('config:items'))    == null) await this.state.storage.put('config:items', STARTER_ITEMS);
+      if ((await this.state.storage.get('config:fees'))     == null) await this.state.storage.put('config:fees', []);
+    }
     return this._authJson({ ok: true });
   }
 

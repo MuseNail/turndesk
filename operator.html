@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>TurnDesk — Operator</title>
+<style>
+  :root { --bg:#f4f6f7; --card:#fff; --line:#d7dde0; --ink:#16201f; --muted:#5b6166; --teal:#1a5252; --teal2:#237370; --red:#a32d2d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Inter',-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--teal); color:#fff; padding:14px 20px; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:16px; margin:0; font-weight:700; }
+  header .sub { font-size:12px; opacity:.8; }
+  main { max-width:1000px; margin:0 auto; padding:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; }
+  .card h2 { font-size:14px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+  input, select { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:#fff; color:var(--ink); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { cursor:pointer; border:none; border-radius:8px; padding:9px 16px; font-size:13px; font-weight:700; }
+  .btn-primary { background:linear-gradient(180deg,var(--teal2),var(--teal)); color:#fff; }
+  .btn-ghost { background:transparent; border:1px solid var(--line); color:var(--ink); }
+  .btn-danger { background:#fbeaea; color:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .pill { font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; }
+  .pill.active { background:#e1f5ee; color:#0f6e56; }
+  .pill.disabled { background:#f1efe8; color:#5f5e5a; }
+  .msg { font-size:13px; padding:8px 12px; border-radius:8px; margin-top:10px; }
+  .msg.err { background:#fbeaea; color:var(--red); } .msg.ok { background:#e1f5ee; color:#0f6e56; }
+  a { color:var(--teal); }
+  .muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TurnDesk Operator</h1>
+  <span class="sub">salon provisioning &amp; management</span>
+</header>
+<main>
+  <div class="card" id="auth-card">
+    <h2>Operator access</h2>
+    <p class="muted">Enter your operator token (the <code>OPERATOR_TOKEN</code> secret). Stored only in this browser.</p>
+    <label>Operator token</label>
+    <input id="op-token" type="password" placeholder="operator token" autocomplete="off">
+    <div style="margin-top:12px"><button class="btn-primary" id="op-connect">Connect</button></div>
+    <div id="auth-msg"></div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <h2>Create a salon</h2>
+      <div class="row">
+        <div><label>Slug (the salon's link id)</label><input id="f-slug" placeholder="glamx" autocomplete="off"></div>
+        <div><label>Business name</label><input id="f-name" placeholder="GlamX Nails &amp; Spa"></div>
+      </div>
+      <div class="row">
+        <div><label>Owner email</label><input id="f-email" type="email" placeholder="owner@glamx.com" autocomplete="off"></div>
+        <div><label>Owner password (≥6 chars)</label><input id="f-pass" type="text" placeholder="set a starter password" autocomplete="off"></div>
+      </div>
+      <div class="row">
+        <div><label>Plan (optional)</label>
+          <select id="f-plan"><option value="">—</option><option>Starter</option><option>Pro</option><option>Multi</option></select>
+        </div>
+        <div style="display:flex;align-items:flex-end"><button class="btn-primary" id="f-create" style="width:100%">Create salon</button></div>
+      </div>
+      <div id="create-msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Salons</h2>
+      <div id="salons">Loading…</div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+const ORIGIN = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://localhost:8787' : 'https://turndesk.musenailandspa.workers.dev';
+const TOKEN_KEY = 'td_operator';
+const $ = id => document.getElementById(id);
+let token = '';
+try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch {}
+
+async function api(path, opts = {}) {
+  const r = await fetch(ORIGIN + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...(opts.headers || {}) },
+  });
+  let body = null; try { body = await r.json(); } catch {}
+  return { ok: r.ok, status: r.status, body };
+}
+function msg(el, text, kind) { el.innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : ''; }
+
+async function connect() {
+  token = $('op-token').value.trim() || token;
+  if (!token) { msg($('auth-msg'), 'Enter the operator token.', 'err'); return; }
+  const res = await api('/operator/salons');
+  if (!res.ok) { msg($('auth-msg'), res.status === 401 ? 'Invalid token.' : ('Error ' + res.status), 'err'); return; }
+  try { localStorage.setItem(TOKEN_KEY, token); } catch {}
+  $('auth-card').style.display = 'none';
+  $('app').style.display = 'block';
+  renderSalons(res.body.salons || []);
+}
+
+function renderSalons(salons) {
+  if (!salons.length) { $('salons').innerHTML = '<p class="muted">No salons yet. Create one above.</p>'; return; }
+  salons.sort((a, b) => (a.slug || '').localeCompare(b.slug || ''));
+  const rows = salons.map(s => `<tr>
+    <td><strong>${esc(s.name || s.slug)}</strong><div class="muted">${esc(s.slug)}</div></td>
+    <td>${esc(s.ownerEmail || '')}</td>
+    <td>${esc(s.plan || '—')}</td>
+    <td><span class="pill ${s.status === 'disabled' ? 'disabled' : 'active'}">${s.status === 'disabled' ? 'disabled' : 'active'}</span></td>
+    <td style="text-align:right;white-space:nowrap">
+      <a href="./?salon=${encodeURIComponent(s.slug)}" target="_blank">open</a>
+      &nbsp;<button class="btn-ghost" data-act="toggle" data-slug="${esc(s.slug)}" data-status="${s.status === 'disabled' ? 'active' : 'disabled'}">${s.status === 'disabled' ? 'enable' : 'disable'}</button>
+      &nbsp;<button class="btn-ghost" data-act="pw" data-slug="${esc(s.slug)}">reset pw</button>
+    </td></tr>`).join('');
+  $('salons').innerHTML = `<table><thead><tr><th>Salon</th><th>Owner</th><th>Plan</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('salons').querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', onAction));
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+async function refresh() { const r = await api('/operator/salons'); if (r.ok) renderSalons(r.body.salons || []); }
+
+async function onAction(e) {
+  const slug = e.target.dataset.slug, act = e.target.dataset.act;
+  if (act === 'toggle') {
+    const status = e.target.dataset.status;
+    if (!confirm(`Set ${slug} to ${status}?`)) return;
+    await api(`/operator/salons/${slug}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+    refresh();
+  } else if (act === 'pw') {
+    const email = prompt(`Owner email for ${slug}:`); if (!email) return;
+    const password = prompt('New password (≥6 chars):'); if (!password || password.length < 6) { alert('Password too short.'); return; }
+    const r = await api(`/operator/salons/${slug}/owner`, { method: 'POST', body: JSON.stringify({ email, password }) });
+    alert(r.ok ? 'Owner password set.' : ('Failed: ' + (r.body?.error || r.status)));
+  }
+}
+
+$('op-connect').addEventListener('click', connect);
+$('op-token').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+$('f-create').addEventListener('click', async () => {
+  const payload = { slug: $('f-slug').value.trim(), name: $('f-name').value.trim(), ownerEmail: $('f-email').value.trim(), ownerPassword: $('f-pass').value, plan: $('f-plan').value };
+  if (!payload.slug || !payload.ownerEmail || !payload.ownerPassword) { msg($('create-msg'), 'Slug, owner email, and owner password are required.', 'err'); return; }
+  const r = await api('/operator/salons', { method: 'POST', body: JSON.stringify(payload) });
+  if (r.ok) {
+    msg($('create-msg'), `Created “${esc(payload.name || payload.slug)}”. Owner: ${esc(payload.ownerEmail)}. Link: ${ORIGIN.replace('.workers.dev','')} → open with ?salon=${esc(payload.slug)}`, 'ok');
+    ['f-slug','f-name','f-email','f-pass'].forEach(id => $(id).value = '');
+    refresh();
+  } else {
+    msg($('create-msg'), 'Error: ' + (r.body?.error || r.status), 'err');
+  }
+});
+
+if (token) connect();
+</script>
+</body>
+</html>
