@@ -1559,6 +1559,7 @@ tailwind.config = {
     <input id="pin-keyboard-input" type="password" inputmode="numeric" maxlength="6"
       class="opacity-0 absolute w-0 h-0 pointer-events-none"
       oninput="onPinKeyboard(this.value)" autocomplete="off">
+    <div id="pin-entry-view">
     <div class="flex gap-3 justify-center mb-6">
       <div id="pin-dots" class="flex gap-2">
         <div class="pin-dot w-4 h-4 rounded-full bg-surface-container-highest transition-all"></div>
@@ -1587,6 +1588,18 @@ tailwind.config = {
       </button>
     </div>
     <p id="pin-error" class="text-xs text-error text-center font-body hidden">Incorrect PIN. Try again.</p>
+    <button onclick="showOwnerLogin()" class="mt-4 w-full text-xs font-body text-on-surface-variant hover:text-primary underline">Owner sign-in</button>
+    </div>
+    <div id="owner-login-view" class="hidden">
+      <input id="owner-email" type="email" autocomplete="username" placeholder="owner@email.com"
+        class="w-full mb-3 px-3 h-11 rounded-xl bg-surface-container text-sm font-body text-on-surface outline-none focus:ring-2 focus:ring-primary">
+      <input id="owner-password" type="password" autocomplete="current-password" placeholder="Password"
+        class="w-full mb-4 px-3 h-11 rounded-xl bg-surface-container text-sm font-body text-on-surface outline-none focus:ring-2 focus:ring-primary"
+        onkeydown="if(event.key==='Enter')ownerLogin()">
+      <button onclick="ownerLogin()" class="w-full h-11 rounded-xl bg-primary text-on-primary text-sm font-headline font-semibold hover:opacity-90">Sign in</button>
+      <p id="owner-error" class="text-xs text-error text-center font-body hidden mt-3">Incorrect email or password.</p>
+      <button onclick="showPinEntry()" class="mt-4 w-full text-xs font-body text-on-surface-variant hover:text-primary underline">Use a staff PIN</button>
+    </div>
   </div>
 </div>
 

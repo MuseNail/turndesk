@@ -44,6 +44,7 @@ export function showPinModal() {
   document.getElementById('pin-matched-user').textContent = '';
   const m = document.getElementById('pin-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
+  showPinEntry();   // always open on the PIN view (not a stale owner form)
   setTimeout(() => { const kb = document.getElementById('pin-keyboard-input'); if (kb) { kb.value = ''; kb.focus(); } }, 100);
 }
 
@@ -106,6 +107,47 @@ function _showPinError() {
   updatePinDots();
   const matchedEl = document.getElementById('pin-matched-user'); if (matchedEl) matchedEl.textContent = '';
   setTimeout(() => document.getElementById('pin-error')?.classList.add('hidden'), 2000);
+}
+
+// ── Owner / manager sign-in (email + password) — toggles within the PIN modal ──
+// The salon slug is already fixed by the per-salon link; serverLogin() scopes the
+// request to it. Owners get full ('admin') access; the credential is verified
+// server-side against this salon's DO only.
+export function showOwnerLogin() {
+  document.getElementById('pin-entry-view')?.classList.add('hidden');
+  document.getElementById('owner-login-view')?.classList.remove('hidden');
+  document.getElementById('owner-error')?.classList.add('hidden');
+  setTimeout(() => document.getElementById('owner-email')?.focus(), 50);
+}
+
+export function showPinEntry() {
+  document.getElementById('owner-login-view')?.classList.add('hidden');
+  document.getElementById('pin-entry-view')?.classList.remove('hidden');
+  const e = document.getElementById('owner-email'); if (e) e.value = '';
+  const p = document.getElementById('owner-password'); if (p) p.value = '';
+  document.getElementById('owner-error')?.classList.add('hidden');
+}
+
+let _ownerLoginBusy = false;
+export async function ownerLogin() {
+  if (_ownerLoginBusy) return;
+  const email = (document.getElementById('owner-email')?.value || '').trim();
+  const password = document.getElementById('owner-password')?.value || '';
+  const errEl = document.getElementById('owner-error');
+  const showErr = (msg) => { if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); } };
+  if (!email || !password) { showErr('Enter your email and password.'); return; }
+  _ownerLoginBusy = true;
+  try {
+    const res = await serverLogin({ email, password, device: 'dashboard' });
+    if (res.ok) { _finishPinLogin(res.user); resync(); return; }
+    showErr(
+      res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+      res.error === 'offline'   ? 'Offline — check your connection.' :
+      res.error === 'no_salon'  ? 'No salon selected.' :
+                                  'Incorrect email or password.'
+    );
+    const p = document.getElementById('owner-password'); if (p) p.value = '';
+  } finally { _ownerLoginBusy = false; }
 }
 
 // §13 server login on a FRESH browser (no synced data yet, so the local list

@@ -1272,7 +1272,10 @@ export class TurnDeskDO {
       const rec = await this.state.storage.get('owner:' + email);
       if (!rec || !(await verifyPassword(password, rec))) return reject();
       await this.state.storage.delete(failKey);
-      const user2   = { kind: 'owner', id: rec.id || email, name: rec.name || 'Owner', role: rec.role || 'owner', email };
+      // Map to the app's existing role vocabulary: owner -> full 'admin' access,
+      // manager -> 'manager'. (The owner: record keeps its own owner/manager label.)
+      const role2   = rec.role === 'manager' ? 'manager' : 'admin';
+      const user2   = { kind: 'owner', id: rec.id || email, name: rec.name || 'Owner', role: role2, email };
       const token2  = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
       const expires2 = Date.now() + 30 * 24 * 3600 * 1000;
       await this.state.storage.put('sess:' + token2, { ...user2, created: Date.now(), expires: expires2, device: String(body.device || '').slice(0, 40) });
