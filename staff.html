@@ -106,6 +106,26 @@ tailwind.config = {
     </div>
   </div>
 
+  <!-- ── Note editor (customer note / visit note) ─────────── -->
+  <div id="snote-modal" class="hidden fixed inset-0 z-[92] items-end sm:items-center justify-center bg-black/50 p-4" style="display:none" onclick="if(event.target===this)staffCloseNote()">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm p-5 fade-up">
+      <div class="flex items-start justify-between mb-1">
+        <div>
+          <div id="snote-title" class="font-headline font-bold text-xl text-on-surface leading-tight">Note</div>
+          <div id="snote-sub" class="text-xs font-body text-on-surface-variant mt-0.5"></div>
+        </div>
+        <button onclick="staffCloseNote()" class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <textarea id="snote-ta" rows="4" class="w-full mt-2 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-body text-on-surface focus:border-primary outline-none resize-none" placeholder="Type a note…"></textarea>
+      <div class="flex gap-2 mt-4">
+        <button onclick="staffSaveNote()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3.5 rounded-xl font-headline font-bold text-lg active:scale-95 transition-all">Save note</button>
+        <button onclick="staffCloseNote()" class="px-6 bg-surface-container hover:bg-surface-container-high text-on-surface-variant py-3.5 rounded-xl font-headline font-bold active:scale-95 transition-all">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Toast (used by utils.showToast) ─────────── -->
   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
     <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>

@@ -126,8 +126,8 @@ export function syncSquareFromSettings() {
 
 // ── Google Calendar (Integrations leaf) ───────────
 function gcalConnected() {
-  try { const l = JSON.parse(localStorage.getItem('turndesk_gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
-  const s = cfg().turndesk_gcal_token;
+  try { const l = JSON.parse(localStorage.getItem('turndesk_turndesk_gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
+  const s = cfg().turndesk_turndesk_gcal_token;
   return !!(s && Date.now() < s.expires - 60000);
 }
 export function renderGcalSettings() {

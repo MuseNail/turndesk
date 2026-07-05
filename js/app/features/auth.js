@@ -112,7 +112,8 @@ function _showPinError() {
 // ── Owner / manager sign-in (email + password) — toggles within the PIN modal ──
 // The salon slug is already fixed by the per-salon link; serverLogin() scopes the
 // request to it. Owners get full ('admin') access; the credential is verified
-// server-side against this salon's DO only.
+// server-side against this salon's DO only. (TurnDesk-specific — re-applied after
+// the Muse v5.36–v5.38 resync overlaid this file.)
 export function showOwnerLogin() {
   document.getElementById('pin-entry-view')?.classList.add('hidden');
   document.getElementById('owner-login-view')?.classList.remove('hidden');
@@ -192,7 +193,19 @@ function checkPin() {
       _finishPinLogin(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
       // Background §13 session mint/refresh — the server reads the same PIN list,
       // so this normally just succeeds silently; resync makes the WS pick it up.
-      serverLogin({ pin, userId: user?.id, device: 'dashboard' }).then(r => { if (r.ok) resync(); });
+      // But if the server WON'T issue a session for this code (e.g. the manager/fallback
+      // code, or a PIN that isn't a registered front-desk user), the device unlocks
+      // locally yet can never sync — so say that plainly instead of silently going offline.
+      serverLogin({ pin, userId: user?.id, device: 'dashboard' }).then(r => {
+        if (r.ok) { resync(); return; }
+        // Only warn if the device GENUINELY can't sync: with enforcement off, a code the
+        // server rejects still syncs tokenless, so don't cry wolf. Give the WS/snapshot a
+        // moment to settle, then check the real connection state.
+        if (r.error === 'bad_pin') setTimeout(() => {
+          const st = getState();
+          if (!st.connected || st.authNeeded) showToast('You’re in, but this code can’t sync. Sign in with your front-desk PIN to connect.');
+        }, 3000);
+      });
     }, 300);
   } else if (!fd.length) {
     // Fresh browser: nothing synced yet — the server owns the PIN check (§13).

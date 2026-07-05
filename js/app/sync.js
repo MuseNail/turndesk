@@ -5,7 +5,7 @@
 // persistent outbox, so the front desk keeps working through wifi drops; the
 // outbox replays on reconnect and the DO dedupes by mutationId.
 
-import { hydrate, applyChange, setConnection, loadCache } from './store.js';
+import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache } from './store.js';
 import { withAuth } from './apptoken.js';
 
 const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
@@ -131,6 +131,7 @@ function connect() {
     if (_ws !== ws) { try { ws.close(); } catch {} return; }   // superseded by a newer socket
     _connected = true;
     _lastRecv = Date.now();
+    setAuthNeeded(false);   // the WS upgrade only succeeds with a valid session
     setConnection(true, _outbox.length);
     send({ type: 'hello' });
     _ping = setInterval(() => {
@@ -223,6 +224,7 @@ export function dispatch(op, payload) {
 let _lastAuthToast = 0;
 function notifyUnauthorized() {
   console.warn('[sync] 401 — no valid sign-in session on this browser');
+  setAuthNeeded(true);   // flips the indicator to "Sign in needed" (not a plain "Offline")
   if (Date.now() - _lastAuthToast < 60000) return;
   _lastAuthToast = Date.now();
   try { window.showToast?.('Sign in needed — enter your PIN to reconnect this device.'); } catch {}
@@ -233,6 +235,7 @@ async function httpSnapshot() {
     const res = await fetch(STATE + '/snapshot', { cache: 'no-store' });
     if (res.status === 401) { notifyUnauthorized(); return; }
     if (!res.ok) return;
+    setAuthNeeded(false);   // a 200 means the session is valid again
     hydrate(await res.json());
     reapplyOutbox();
     replayOutbox();

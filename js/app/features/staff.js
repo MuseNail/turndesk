@@ -133,6 +133,12 @@ function _setStaffAppFields(app) {
   set('staff-app-pdf', app.pdf !== false);
   set('staff-app-history', app.history !== false);
   set('staff-app-histnames', app.histNames !== false);
+  // Note permissions default to "view visit note only" (undefined → that state):
+  // customer note + all editing start off; view-visit stays on to match today.
+  set('staff-app-viewcust', app.viewCustNote === true);
+  set('staff-app-editcust', app.editCustNote === true);
+  set('staff-app-viewvisit', app.viewVisitNote !== false);
+  set('staff-app-editvisit', app.editVisitNote === true);
   staffAppHistChanged();
 }
 export function staffAppHistChanged() {
@@ -189,6 +195,10 @@ export function saveStaff() {
     pdf: !!document.getElementById('staff-app-pdf')?.checked,
     history: !!document.getElementById('staff-app-history')?.checked,
     histNames: !!document.getElementById('staff-app-histnames')?.checked,
+    viewCustNote:  !!document.getElementById('staff-app-viewcust')?.checked,
+    editCustNote:  !!document.getElementById('staff-app-editcust')?.checked,
+    viewVisitNote: !!document.getElementById('staff-app-viewvisit')?.checked,
+    editVisitNote: !!document.getElementById('staff-app-editvisit')?.checked,
   };
   const staff = [...cfg().staff];
   if (editId) {

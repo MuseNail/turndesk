@@ -11,7 +11,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey } from './square-customers.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -1221,6 +1221,7 @@ export function renderGroupAssignContent() {
   document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);   // Split only shown for a party
   // Load this tab's transaction note into the side notes panel (per active entry).
   const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = entry.txnNote || '';
+  _setAssignCustNote(entry.phone);   // + the customer's saved note (persistent, read-only)
 }
 
 // Today's-transaction note (the side panel) — saves to the active entry as you type.
@@ -1228,6 +1229,37 @@ export function saveAssignTxnNote() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   const el = document.getElementById('assign-txn-note');
   if (entry && el) entry.txnNote = el.value;
+}
+
+// Load the editable "Customer note" field in the assign/price notes panel from the
+// customer's saved (phone-keyed) note. No phone on file → disabled with a hint.
+function _setAssignCustNote(phone) {
+  const el = document.getElementById('assign-cust-note');
+  if (!el) return;
+  const key = notePhoneKey(phone);
+  el.value = key ? (customerNote(phone) || '') : '';
+  el.disabled = !key;
+  el.placeholder = key ? 'Add allergies, preferences, anything that should follow this customer…'
+                       : 'Add a phone number to save a customer note';
+}
+// Editable customer note in the assign/price panel — debounced save to the synced,
+// phone-keyed config.customer_notes (the same store the check-in popup + Customers
+// tab use), so an edit here follows the customer everywhere.
+let _assignCustNoteTimer = null;
+export function saveAssignCustNote() {
+  clearTimeout(_assignCustNoteTimer);
+  _assignCustNoteTimer = setTimeout(_persistAssignCustNote, 600);
+}
+function _persistAssignCustNote() {
+  const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
+  const el = document.getElementById('assign-cust-note');
+  if (!entry || !el) return;
+  const key = notePhoneKey(entry.phone);
+  if (!key) return;                                  // no phone → nothing to key the note by
+  const val = el.value.trim();
+  const notes = { ...(cfg().customer_notes || {}) };
+  if (val) notes[key] = val; else delete notes[key];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
 }
 
 // ── Gift card sold on a service ticket (Phase 3 "B") — same liability-line model as Quick Sale.
@@ -1433,6 +1465,7 @@ function _renderAssignOneList() {
   updateGroupTotal();
   document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);
   const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = party[0].txnNote || '';
+  _setAssignCustNote(party[0].phone);   // + the customer's saved note (persistent, read-only)
 }
 
 export function assignToggleExtras() {

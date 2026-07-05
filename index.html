@@ -1782,6 +1782,15 @@ tailwind.config = {
           <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Download today's transactions PDF</span><input id="staff-app-pdf" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
           <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View transaction history</span><input id="staff-app-history" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="staffAppHistChanged()"></label>
           <label class="flex items-center justify-between gap-3 cursor-pointer" id="staff-app-histnames-row"><span class="text-sm font-body text-on-surface">Show customer names in history</span><input id="staff-app-histnames" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+          <div class="border-t border-surface-container-high mt-1 pt-2.5">
+            <div class="text-[11px] font-body font-semibold text-outline mb-2">Notes on the assigned-customer card</div>
+            <div class="space-y-2.5">
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View customer note <span class="text-outline">· sticks with the customer</span></span><input id="staff-app-viewcust" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Edit customer note</span><input id="staff-app-editcust" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="if(this.checked){var v=document.getElementById('staff-app-viewcust');if(v)v.checked=true;}"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View this visit's note</span><input id="staff-app-viewvisit" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Edit this visit's note</span><input id="staff-app-editvisit" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="if(this.checked){var v=document.getElementById('staff-app-viewvisit');if(v)v.checked=true;}"></label>
+            </div>
+          </div>
         </div>
         <p class="text-[11px] font-body text-on-surface-variant mt-1">What this tech sees in the Muse Staff app on their phone.</p>
       </div>
@@ -1939,15 +1948,25 @@ tailwind.config = {
       </div>
     </div>
   </div>
-  <!-- Today's transaction note — a separate panel beside the assign modal (does not obstruct it) -->
+  <!-- Notes panel beside the assign modal: the customer's saved note (read-only) + today's visit note -->
   <div id="assign-notes-panel" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col flex-shrink-0" style="width:300px">
     <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
       <span class="material-symbols-outlined text-secondary" style="font-size:18px">sticky_note_2</span>
-      <h3 class="font-headline font-bold text-on-surface text-base">Today's Note</h3>
+      <h3 class="font-headline font-bold text-on-surface text-base">Notes</h3>
+    </div>
+    <div class="p-4 border-b border-surface-container-high flex-shrink-0" style="background:rgba(26,82,82,0.06)">
+      <div class="flex items-center gap-1.5 mb-1">
+        <span class="material-symbols-outlined text-primary" style="font-size:15px">favorite</span>
+        <span class="text-[11px] font-body font-bold text-primary uppercase tracking-wide">Customer note · always</span>
+      </div>
+      <textarea id="assign-cust-note" oninput="saveAssignCustNote()" class="w-full bg-surface-container-lowest border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:70px;max-height:140px"></textarea>
     </div>
     <div class="flex-grow flex flex-col p-4 min-h-0">
-      <p class="text-[11px] font-body text-on-surface-variant mb-2">For this transaction today — separate from the customer's saved note.</p>
-      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:200px"></textarea>
+      <div class="flex items-center gap-1.5 mb-2">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:15px">schedule</span>
+        <span class="text-[11px] font-body font-bold text-on-surface-variant uppercase tracking-wide">Today's visit</span>
+      </div>
+      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:160px"></textarea>
     </div>
   </div>
   </div>

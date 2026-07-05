@@ -125,6 +125,15 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.38', items: [
+    { icon: 'login', t: '“Sign in needed” is now clear, not a mystery “Offline”', d: 'If a device can’t sync because it needs a sign-in — a manager/fallback code that can’t sync, an expired session, or a removed user — it now shows “Sign in needed” (tap it to enter your PIN) instead of looking like a network problem. And if you unlock the app with a code that can’t sync, it tells you to sign in with your front-desk PIN.' },
+  ] },
+  { v: 'v5.37', items: [
+    { icon: 'sticky_note_2', t: 'Customer note now shows in Assign & Price', d: 'When you open Assign & Price for a checked-in customer, the notes panel now shows the customer’s saved note (allergies, preferences) right above today’s visit note — so you see both while you price the ticket.' },
+  ] },
+  { v: 'v5.36', items: [
+    { icon: 'sticky_note_2', t: 'Customer + visit notes in the Staff app', d: 'On the Staff app, a tech’s assigned-customer card can now show two notes: a Customer note that stays with the customer every visit (allergies, preferences), and a note for just today’s visit. Tap to edit in a pop-up. You control this per tech in Settings → Staff — view or edit the customer note, view or edit the visit note. Everyone starts able to see the visit note only; turn the rest on per tech.' },
+  ] },
   { v: 'v5.33', items: [
     { icon: 'point_of_sale', t: 'Phone Reports app: drawer shows bill counts, hides cash-outs', d: 'In the phone Reports app, the Drawer view now lists the opening and closing bill counts for each drawer, and no longer shows cash-out entries. The main dashboard drawer view is unchanged.' },
   ] },
@@ -455,7 +464,11 @@ Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleV
 
 // Live-sync status pill: tapping it forces a reconnect + fresh snapshot (catches up any
 // changes missed while the socket was asleep), then reports state.
-window.forceSyncNow = () => { sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…'); };
+window.forceSyncNow = () => {
+  // If the block is a missing sign-in, retrying the sync just 401s again — open the PIN screen instead.
+  if (store.getState().authNeeded) { window.showPinModal?.(); return; }
+  sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…');
+};
 
 // ── Square auto-paid ──────────────────────────────
 // The Square return tab writes turndesk_sq_paid on a successful charge; this (main)
@@ -510,7 +523,18 @@ function updateSyncIndicator(state) {
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
   const pill = dot.parentElement;
-  // A server-rejected/dead-lettered write is the most urgent state — surface it instead of a green "Synced".
+  // "Sign in needed" is NOT the same as "Offline" — the server rejected this device for
+  // lack of a valid session (wrong/fallback code, expired, or removed user). Say so, and
+  // make the pill open the PIN screen, so nobody chases a network problem that isn't there.
+  // Checked BEFORE failed-ops: signing in is the prerequisite to recovering anything, so the
+  // label matches what a tap does (forceSyncNow opens the PIN screen when authNeeded).
+  if (state.authNeeded) {
+    dot.style.background = '#e8730a';   // amber — distinct from the red "Offline"
+    if (text) text.textContent = 'Sign in needed';
+    if (pill) pill.title = 'This device needs a sign-in — enter your front-desk PIN to reconnect. Tap to sign in.';
+    return;
+  }
+  // A server-rejected/dead-lettered write is the next most urgent state — surface it instead of a green "Synced".
   const failed = (sync.failedOps?.() || []).length;
   if (failed > 0) { dot.style.background = '#fa746f'; if (text) text.textContent = `${failed} failed`; if (pill) pill.title = 'A change failed to save — open Settings → Data Recovery'; return; }
   const n = state.pendingCount || 0, queued = n === 1 ? '1 change queued' : `${n} changes queued`;
@@ -524,11 +548,19 @@ function updateSyncIndicator(state) {
     if (pill) pill.title = n > 0 ? `${queued} — they'll send automatically when the connection returns. Tap to retry now.` : 'No connection — changes will queue and send when it returns. Tap to retry.';
   }
 }
+// One-time cleanup of a stray inert config key ('x') left by an ops probe on 2026-07-02.
+// Nothing reads it; neutralize it to null once per session (self-heals across devices).
+let _cfgXPurged = false;
+function _purgeStrayConfigX() {
+  if (_cfgXPurged) return;
+  const c = store.getState().config || {};
+  if (c.x != null) { _cfgXPurged = true; sync.dispatch('config.set', { key: 'x', value: null }); }
+}
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
   if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
-  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
+  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab

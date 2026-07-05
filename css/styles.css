@@ -638,3 +638,18 @@
      so the badge stayed visible (showing a stale "0") even when hidden. Higher-specificity
      hide rule wins. */
   .chat-fab .chat-badge.hidden { display:none; }
+
+  /* ── Staff-app notes (customer note + visit note on the active card) ─────────
+     Neutral container so it reads in light AND dark; the customer note gets a faint
+     teal wash + teal label so an allergy/preference note stands out. */
+  .snote { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:12px;
+    background:var(--surface-container-low); margin-bottom:8px; }
+  .snote-tap { cursor:pointer; }
+  .snote-cust { background:rgba(26,82,82,0.09); }
+  .snote-ic { font-size:20px; flex-shrink:0; color:var(--on-surface-variant); margin-top:1px; }
+  .snote-cust .snote-ic, .snote-cust .snote-k { color:var(--primary); }
+  .snote-body { flex:1; min-width:0; }
+  .snote-k { font-size:11px; font-weight:700; color:var(--on-surface-variant); margin-bottom:1px; }
+  .snote-v { font-size:16px; color:var(--on-surface); line-height:1.35; white-space:pre-line; overflow-wrap:anywhere; }
+  .snote-v.snote-empty { color:var(--outline-variant); }
+  .snote-pen, .snote-lock { font-size:18px; color:var(--outline-variant); flex-shrink:0; margin-top:1px; }

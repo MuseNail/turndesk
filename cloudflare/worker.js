@@ -1265,6 +1265,18 @@ export class TurnDeskDO {
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }
+        case 'queue.entryPatch': {
+          // Entry-level field merge (e.g. the staff app's visit note): apply ONLY the provided
+          // fields onto the CURRENT stored entry, so it can't clobber a concurrent front-desk
+          // fees/items/discount edit the way a whole-entry queue.upsert would. (Muse v5.36 resync.)
+          const e = await this.state.storage.get('queue:' + payload.entryId);
+          if (!e) break;
+          if (e.status === 'paid' || e.status === 'done') break;   // don't touch a closed ticket
+          const patch = payload.patch || {};
+          for (const k of Object.keys(patch)) e[k] = patch[k];
+          await this.state.storage.put('queue:' + payload.entryId, e);
+          break;
+        }
         case 'queue.remove':
           await this.state.storage.delete('queue:' + payload.id);
           break;

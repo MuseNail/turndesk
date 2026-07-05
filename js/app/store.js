@@ -183,6 +183,18 @@ export function applyChange(op, payload, seq) {
       deriveEntryStatusFields(e);
       break;
     }
+    case 'queue.entryPatch': {
+      // Entry-level field merge (e.g. the staff app's visit note): apply ONLY the provided
+      // fields onto the CURRENT stored entry, so it can't clobber a concurrent front-desk
+      // fees/items/discount edit the way a whole-entry queue.upsert would. Sibling of
+      // assignmentPatch, for entry-level fields.
+      const e = state.queue.find(x => String(x.id) === String(payload.entryId));
+      if (!e) return;
+      if (e.status === 'paid' || e.status === 'done') return;   // don't let a stale device touch a closed ticket
+      const patch = payload.patch || {};
+      for (const k of Object.keys(patch)) e[k] = patch[k];
+      break;
+    }
     case 'queue.remove':  removeById(state.queue, payload.id); break;
     case 'record.save':
       // Never revive a deleted transaction: a stale paid queue copy on another device can re-fire
@@ -251,6 +263,15 @@ export function applyChange(op, payload, seq) {
 export function setConnection(connected, pendingCount) {
   state.connected = connected;
   if (typeof pendingCount === 'number') state.pendingCount = pendingCount;
+  notify('connection');
+}
+// Distinguish "no valid sign-in session" (the Worker returned 401) from a plain
+// network outage — otherwise a device that just needs a PIN reads as "Offline" and
+// sends people chasing wifi. Set by sync.js on 401, cleared on a good connection.
+export function setAuthNeeded(v) {
+  const nv = !!v;
+  if (state.authNeeded === nv) return;
+  state.authNeeded = nv;
   notify('connection');
 }
 

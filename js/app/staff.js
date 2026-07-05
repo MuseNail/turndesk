@@ -81,6 +81,18 @@ const me = () => (cfg().staff || []).find(s => s.id === myId) || null;
 // Per-tech staff-app feature switches (set in the dashboard's technician editor).
 // `app[key] !== false` so techs without the field (legacy) keep every feature ON.
 const appPerm = k => { const s = me(); return !s || !s.app || s.app[k] !== false; };
+// Note permissions (separate from appPerm because their defaults differ). Default =
+// "view visit note only" — matches the pre-v5.36 behavior (techs already saw the
+// visit note read-only); customer note + all editing stay off until enabled per tech.
+const noteFlag = (k, def) => { const s = me(); const v = s && s.app ? s.app[k] : undefined; return v === undefined ? def : !!v; };
+const canViewCust  = () => noteFlag('viewCustNote',  false);
+const canEditCust  = () => canViewCust()  && noteFlag('editCustNote',  false);
+const canViewVisit = () => noteFlag('viewVisitNote', true);
+const canEditVisit = () => canViewVisit() && noteFlag('editVisitNote', false);
+// Customer notes are app-owned + synced, keyed by PHONE. This mirrors square-customers.js
+// notePhoneKey() (the single canonical normalization) so the staff app reads/writes the same key.
+const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+const custNoteFor  = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
 const meFd = () => (cfg().fd_users || []).find(u => u.id === myFdId) || null;
 const fdByPin = pin => { const p = String(pin == null ? '' : pin).trim(); return p ? ((cfg().fd_users || []).find(u => u.pin && String(u.pin) === p) || null) : null; };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -325,12 +337,36 @@ function renderActiveHtml() {
 function cardHtml(entry, assignments) {
   const live = assignments.some(a => a.status === 'inservice');
   const ring = live ? 'border-primary' : 'border-surface-container-high';
-  const note = (entry.txnNote || '').trim();
-  const noteHtml = note ? `<div class="text-lg text-on-surface-variant mb-3 whitespace-pre-line">${esc(note)}</div>` : '';
+  const notesHtml = noteRowHtml(entry, 'cust') + noteRowHtml(entry, 'visit');
   return `<div class="bg-surface-container-lowest rounded-2xl border-2 ${ring} p-4 mb-3 shadow-sm">
-    <div class="font-headline font-extrabold text-2xl text-on-surface ${note ? 'mb-1' : 'mb-3'} leading-tight">${esc(entry.name || 'Guest')}</div>
-    ${noteHtml}
-    <div class="space-y-4">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
+    <div class="font-headline font-extrabold text-2xl text-on-surface ${notesHtml ? 'mb-2' : 'mb-3'} leading-tight">${esc(entry.name || 'Guest')}</div>
+    ${notesHtml}
+    <div class="space-y-4 ${notesHtml ? 'mt-3' : ''}">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
+  </div>`;
+}
+
+// One note row on the staff card — the persistent customer note ('cust') or this
+// visit's note ('visit'). Shown only with view permission; a pencil (→ modal) only
+// with edit permission, else a read-only lock. Empty + read-only renders nothing.
+function noteRowHtml(entry, kind) {
+  const isCust  = kind === 'cust';
+  const canView = isCust ? canViewCust() : canViewVisit();
+  if (!canView) return '';
+  const canEdit = isCust ? canEditCust() : canEditVisit();
+  const val = isCust ? custNoteFor(entry.phone) : (entry.txnNote || '').trim();
+  if (!val && !canEdit) return '';
+  const label = isCust ? 'Customer · always' : 'Today · this visit';
+  const icon  = isCust ? 'favorite' : 'schedule';
+  const tint  = isCust ? 'cust' : 'visit';
+  const body  = val ? `<div class="snote-v">${esc(val)}</div>` : `<div class="snote-v snote-empty">＋ Add a note</div>`;
+  const right = canEdit
+    ? `<span class="material-symbols-outlined snote-pen">edit</span>`
+    : `<span class="material-symbols-outlined snote-lock" title="View only">lock</span>`;
+  const tap = canEdit ? `onclick="staffEditNote('${entry.id}','${kind}')"` : '';
+  return `<div class="snote snote-${tint}${canEdit ? ' snote-tap' : ''}" ${tap}>
+    <span class="material-symbols-outlined snote-ic">${icon}</span>
+    <div class="snote-body"><div class="snote-k">${label}</div>${body}</div>
+    ${right}
   </div>`;
 }
 
@@ -612,6 +648,51 @@ window.staffSavePrice = (entryId, serviceId) => {
   showToast('Price sent ✓');
 };
 window.staffTab = (v) => { _view = (v === 'history' || v === 'appts') ? v : 'active'; render(); };
+
+// ── Note editing (customer note + visit note) ─────────────────────────────────
+// Tapping an editable note on a card opens this modal. Customer note → synced
+// config.customer_notes (keyed by phone); visit note → the queue entry's txnNote
+// via a fresh-clone queue.upsert (the stale-write guard rejects a racing write, so
+// a concurrent front-desk edit is never clobbered).
+let _noteEdit = null;   // { entryId, kind }
+window.staffEditNote = (entryId, kind) => {
+  const entry = queue().find(e => String(e.id) === String(entryId));
+  if (!entry) return;
+  const isCust = kind === 'cust';
+  if (isCust ? !canEditCust() : !canEditVisit()) return;   // permission guard (defense in depth)
+  _noteEdit = { entryId: String(entryId), kind };
+  const val = isCust ? custNoteFor(entry.phone) : (entry.txnNote || '');
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('snote-title', isCust ? 'Customer note' : 'Visit note');
+  set('snote-sub', isCust ? `Sticks with ${entry.name || 'this customer'} every visit` : 'Just for today’s visit');
+  const ta = document.getElementById('snote-ta'); if (ta) ta.value = val;
+  const m = document.getElementById('snote-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+  setTimeout(() => { const t = document.getElementById('snote-ta'); if (t) t.focus(); }, 80);
+};
+window.staffCloseNote = () => { const m = document.getElementById('snote-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } _noteEdit = null; };
+window.staffSaveNote = () => {
+  if (!_noteEdit) return;
+  const { entryId, kind } = _noteEdit;
+  const entry = queue().find(e => String(e.id) === String(entryId));
+  if (!entry) { window.staffCloseNote(); return; }
+  const val = (document.getElementById('snote-ta')?.value || '').trim();
+  if (kind === 'cust') {
+    if (!canEditCust()) return;
+    const key = notePhoneKey(entry.phone);
+    if (!key) { showToast('No phone on file — can’t save a customer note'); return; }
+    const notes = { ...(cfg().customer_notes || {}) };
+    if (val) notes[key] = val; else delete notes[key];
+    sync.dispatch('config.set', { key: 'customer_notes', value: notes });
+  } else {
+    if (!canEditVisit()) return;
+    // Patch ONLY txnNote onto the stored entry (never a whole-entry upsert) so a concurrent
+    // front-desk fees/items/discount edit on the same ticket is never clobbered.
+    sync.dispatch('queue.entryPatch', { entryId: String(entryId), patch: { txnNote: val } });
+  }
+  window.staffCloseNote();
+  showToast('Note saved');
+  render();
+};
 
 // ── Inline price calculator ───────────────────────
 // Tap the calc button next to a service's price → a basic calculator. Pressing OK

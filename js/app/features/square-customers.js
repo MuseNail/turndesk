@@ -13,9 +13,9 @@ const cfg = () => getState().config;
 // app-owned note is what the check-in popup shows. Notes are keyed by PHONE
 // (normalized digits) so a Square customer-ID change (merge/recreate) can't
 // orphan them; notePhoneKey() is the single canonical normalization.
-const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+export const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
 const isPhoneKey   = key => /^\d{7,15}$/.test(key);
-const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
+export const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
 
 export let squareCustomers   = [];
 export let customerDirectory = [];
