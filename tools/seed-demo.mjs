@@ -2,18 +2,27 @@
 //
 // Populates the `demo` salon ("Lush Nails & Spa") with ~a month of believable
 // history so Reports/Payroll/Customers/Turns look like a real, busy salon for
-// sales demos. Idempotent: ids are deterministic, so re-running REPLACES rather
-// than duplicates (writes go through the same upsert-by-id path the app uses).
+// sales demos. Re-running RE-ANCHORS the whole window to end *today* (today is a
+// partial, in-shift day), so the demo never looks stale. Ids are deterministic
+// (rec-1..rec-N, cust-1..cust-320, gc-1..gc-6), so a re-run REPLACES by id rather
+// than duplicating — and it always covers the existing id range, leaving zero
+// stale orphans. It never calls record.delete (a deletion marker would permanently
+// block that id from ever being re-seeded).
 //
 // Usage (PowerShell):
-//   $env:RESTORE_TOKEN="<token>"; node tools/seed-demo.mjs
-// Optional env: WORKER, SALON, OWNER_EMAIL, OWNER_PASSWORD, DAYS, CONCURRENCY.
+//   node tools/seed-demo.mjs                       # signs in with SEED_PIN (default 1111)
+//   $env:RESTORE_TOKEN="<token>"; node ...         # also (re)sets the owner email/password
+// Optional env: WORKER, SALON, SEED_PIN, SESSION_TOKEN, OWNER_EMAIL, OWNER_PASSWORD,
+//               RESTORE_TOKEN, DAYS, CONCURRENCY.
 //
-// Requires the Worker deployed with AUTH_ENFORCED unset/false during seeding
-// (so /state/mutate is open) and RESTORE_TOKEN set (gates /auth/owner-set).
+// Works with AUTH_ENFORCED="true": every write carries a session token minted from
+// SEED_PIN via /auth/login (that route is always auth-exempt). RESTORE_TOKEN is
+// only needed to (re)set the owner credential — omit it to leave the owner as-is.
 
 const WORKER   = process.env.WORKER       || 'https://turndesk.musenailandspa.workers.dev';
 const SALON    = process.env.SALON        || 'demo';
+const SEED_PIN = process.env.SEED_PIN     || '1111';   // a front-desk PIN → session token
+let   TOKEN    = process.env.SESSION_TOKEN || '';       // reuse an existing token if provided
 const OWNER_EMAIL = process.env.OWNER_EMAIL || 'owner@demo.turndesk.app';
 const RESTORE_TOKEN = process.env.RESTORE_TOKEN || '';
 const DAYS     = parseInt(process.env.DAYS || '35', 10);
@@ -75,11 +84,18 @@ function buildCustomers(n) {
   return out;
 }
 
-// One paid sale. checkinTime (ms) is the date field Reports buckets by.
-function buildRecord(idx, dayMs, customers) {
+// One paid sale. checkinTime (ms) is the date field Reports buckets by. When capMs
+// is given (today), the start is clamped to [9am, capMs] so a sale can't begin in
+// the future — today reads as a salon mid-shift, not booked out to closing.
+function buildRecord(dayMs, customers, capMs) {
   const cust = pick(customers);
   const open = new Date(dayMs); open.setHours(ri(9, 18), pick([0, 15, 30, 45]), 0, 0);
-  const checkinTime = open.getTime();
+  let checkinTime = open.getTime();
+  if (capMs && checkinTime > capMs) {
+    const dayStart = new Date(dayMs); dayStart.setHours(9, 0, 0, 0);
+    const lo = dayStart.getTime();
+    checkinTime = capMs > lo ? lo + Math.floor(rnd() * (capMs - lo)) : lo;
+  }
   const tech = pick(STAFF);
   const assignments = [];
   const nSvc = chance(0.30) ? 2 : 1;
@@ -101,9 +117,10 @@ function buildRecord(idx, dayMs, customers) {
   if (roll < 0.60) { tenders = { card: totalCost, cash: 0, gift: 0, zelle: 0 }; tip = Math.round(totalCost * pick([0.15, 0.18, 0.20, 0.20, 0.25])); }
   else if (roll < 0.93) { tenders = { card: 0, cash: totalCost, gift: 0, zelle: 0 }; if (chance(0.4)) tip = pick([3, 5, 5, 10]); }
   else { tenders = { card: 0, cash: 0, gift: totalCost, zelle: 0 }; }
-  const completedAt = checkinTime + ri(25, 70) * 60000;
+  let completedAt = checkinTime + ri(25, 70) * 60000;
+  if (capMs && completedAt > capMs) completedAt = capMs;    // today: just wrapped up
   return {
-    id: `rec-${idx}`, status: 'paid', checkinTime, completedAt,
+    id: '', status: 'paid', checkinTime, completedAt,       // id assigned by the caller
     name: `${cust.given_name} ${cust.family_name}`, phone: cust.phone, customer: cust.id,
     assignments, items, fees: [], discount: 0, totalCost, tip, tenders,
   };
@@ -147,9 +164,26 @@ function buildDrawerHistory(records) {
 // ── HTTP helpers ───────────────────────────────────────────────────────────────
 const base = `${WORKER}`;
 let _mid = 0;
+function authHeaders(extra) { return { ...(extra || {}), ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}) }; }
+async function login() {
+  if (TOKEN) return TOKEN;
+  const r = await fetch(`${base}/auth/login?salon=${SALON}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: SEED_PIN, device: 'seed-script' }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.token) throw new Error(`login failed -> ${r.status} ${JSON.stringify(j)} (is SEED_PIN a valid front-desk PIN?)`);
+  TOKEN = j.token;
+  return TOKEN;
+}
+async function readSnapshot() {
+  const r = await fetch(`${base}/state/snapshot?salon=${SALON}`, { headers: authHeaders() });
+  if (!r.ok) return null;
+  return r.json().catch(() => null);
+}
 async function mutate(op, payload) {
   const r = await fetch(`${base}/state/mutate?salon=${SALON}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ op, payload, mutationId: `seed-${Date.now()}-${_mid++}` }),
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`mutate ${op} -> ${r.status} ${t}`); }
@@ -164,7 +198,20 @@ async function pool(items, worker, conc) {
 }
 
 async function main() {
-  console.log(`Seeding "${SALON}" at ${base} — ${DAYS} days …`);
+  console.log(`Seeding "${SALON}" at ${base} — ${DAYS} days ending today …`);
+  await login();
+  console.log('  signed in ✓');
+
+  // Existing id range: overwrite every id that already exists so no stale record
+  // from a prior (differently-sized) run is left behind as an orphan.
+  let existingMaxRec = 0;
+  const before = await readSnapshot();
+  if (before) {
+    const recs = (before.state || before).records || [];
+    for (const r of recs) { const m = /^rec-(\d+)$/.exec(r.id || ''); if (m) existingMaxRec = Math.max(existingMaxRec, +m[1]); }
+    console.log(`  existing: ${recs.length} records (max rec-${existingMaxRec})`);
+  }
+
   // 1) Config (one call per key)
   await mutate('config.set', { key: 'services', value: SERVICES });
   await mutate('config.set', { key: 'items', value: ITEMS });
@@ -181,18 +228,34 @@ async function main() {
   await mutate('customer.bulkUpsert', { customers });
   console.log(`  customers ✓ (${customers.length})`);
 
-  // 3) Records across the last DAYS days (weekend-heavier)
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  // 3) Records across the last DAYS days (weekend-heavier). Today is PARTIAL — only
+  //    the elapsed share of the 9am–7pm business day, capped to the current time —
+  //    so the live board + Today report look like a salon mid-shift.
+  const nowMs   = Date.now();
+  const today   = new Date(); today.setHours(0, 0, 0, 0);
+  const bizStart = new Date(today); bizStart.setHours(9, 0, 0, 0);
+  const bizEnd   = new Date(today); bizEnd.setHours(19, 0, 0, 0);
+  const todayFrac = Math.max(0, Math.min(1, (nowMs - bizStart.getTime()) / (bizEnd.getTime() - bizStart.getTime())));
   const records = [];
-  let ridx = 1;
   for (let d = DAYS - 1; d >= 0; d--) {
     const day = new Date(today); day.setDate(day.getDate() - d);
     const dow = day.getDay();
-    const n = (dow === 0) ? ri(8, 14) : (dow === 5 || dow === 6) ? ri(20, 26) : ri(12, 19);
-    for (let k = 0; k < n; k++) records.push(buildRecord(ridx++, day.getTime(), customers));
+    let n = (dow === 0) ? ri(8, 14) : (dow === 5 || dow === 6) ? ri(20, 26) : ri(12, 19);
+    const capMs = (d === 0) ? nowMs : undefined;
+    if (d === 0) n = Math.round(n * todayFrac);
+    for (let k = 0; k < n; k++) records.push(buildRecord(day.getTime(), customers, capMs));
   }
+  // Pad so the new id set (rec-1..rec-N) fully covers the existing max — clean
+  // overwrite, zero orphans, and NO record.delete (a deletion marker would block
+  // that id from re-seeding forever).
+  while (records.length < existingMaxRec) {
+    const d = ri(1, DAYS - 1);                    // a random past (full) business day
+    const day = new Date(today); day.setDate(day.getDate() - d);
+    records.push(buildRecord(day.getTime(), customers));
+  }
+  records.forEach((r, i) => { r.id = `rec-${i + 1}`; });
   const okCount = await pool(records, (rec) => mutate('record.save', { record: rec }), CONC);
-  console.log(`  records ✓ (${okCount})`);
+  console.log(`  records ✓ (${okCount}; covers existing max rec-${existingMaxRec})`);
 
   // 4) Gift cards
   for (const card of buildGiftcards()) await mutate('giftcard.save', { card });
@@ -203,20 +266,29 @@ async function main() {
   await mutate('config.set', { key: 'cash_drawer', value: null });
   console.log('  cash drawer history ✓');
 
-  // 6) Owner credential (email + password) — server-hashed, RESTORE_TOKEN-gated
-  const r = await fetch(`${base}/auth/owner-set?salon=${SALON}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: RESTORE_TOKEN, email: OWNER_EMAIL, password: OWNER_PASSWORD, name: 'Lush Owner', role: 'owner' }),
-  });
-  if (!r.ok) { console.error(`  owner-set FAILED -> ${r.status} ${await r.text().catch(()=> '')}`); }
-  else console.log('  owner credential ✓');
+  // 6) Owner credential (email + password) — server-hashed, RESTORE_TOKEN-gated.
+  //    Skipped unless RESTORE_TOKEN is set, so a routine re-seed leaves the owner
+  //    login untouched.
+  if (RESTORE_TOKEN) {
+    const r = await fetch(`${base}/auth/owner-set?salon=${SALON}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: RESTORE_TOKEN, email: OWNER_EMAIL, password: OWNER_PASSWORD, name: 'Lush Owner', role: 'owner' }),
+    });
+    if (!r.ok) console.error(`  owner-set FAILED -> ${r.status} ${await r.text().catch(()=> '')}`);
+    else console.log('  owner credential ✓');
+  } else {
+    console.log('  owner credential — skipped (RESTORE_TOKEN not set; owner login unchanged)');
+  }
 
   const revenue = records.reduce((s, x) => s + x.totalCost, 0);
+  const times = records.map(r => r.checkinTime).sort((a, b) => a - b);
+  const fmt = ms => new Date(ms).toISOString().slice(0, 10);
   console.log('\n──────── Demo seeded ────────');
   console.log(`Salon link : ${base.replace('.workers.dev','')}  →  open the TurnDesk client with ?salon=${SALON}`);
   console.log(`Records    : ${records.length}  ·  Revenue ~$${revenue.toLocaleString()}  ·  Customers ${customers.length}`);
-  console.log(`Staff PINs : Front Desk 1111 · Manager Mia 2222`);
-  console.log(`OWNER LOGIN: ${OWNER_EMAIL}  /  ${OWNER_PASSWORD}`);
+  console.log(`Window     : ${fmt(times[0])} → ${fmt(times[times.length - 1])} (today partial, ${Math.round(todayFrac * 100)}% of the day)`);
+  console.log(`Staff PINs : Front Desk 1111 · Manager Mia 2222 · Techs 1001–1008`);
+  if (RESTORE_TOKEN) console.log(`OWNER LOGIN: ${OWNER_EMAIL}  /  ${OWNER_PASSWORD}`);
   console.log('─────────────────────────────');
 }
 
