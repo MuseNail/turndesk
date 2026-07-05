@@ -52,7 +52,7 @@ const FEES = [];   // none for the demo
 const TECH_NAMES = ['Lily', 'Mai', 'Tina', 'Kevin', 'Sophia', 'Anna', 'Jenny', 'David'];
 const STAFF = TECH_NAMES.map((name, i) => ({
   id: `staff-${i + 1}`, name, legalName: '', commission: pick([50, 55, 60]),
-  services: SERVICES.map(s => s.id), pin: '', checkType: 'variable', checkValue: null,
+  services: SERVICES.map(s => s.id), pin: String(1001 + i), checkType: 'variable', checkValue: null,
   cashDeductPct: null, cashDeductThreshold: null, app: { pdf: true, history: true, histNames: true },
 }));
 const FD_USERS = [
