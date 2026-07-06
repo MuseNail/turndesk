@@ -153,11 +153,20 @@ export function renderAppInfo() {
     ['Google Calendar', gcalConnected() ? 'Connected' : 'Not connected'],
     ['Server sign-in', getAppToken() ? `Active${getSessionUser()?.name ? ` · ${getSessionUser().name}` : ''}` : 'None yet — minted on the next PIN entry'],
   ];
+  let kiosk = false; try { kiosk = localStorage.getItem('turndesk_kiosk_device') === '1'; } catch {}
+  const kioskRow = `
+    <div class="flex items-center justify-between px-4 py-3 border-t border-surface-container-high">
+      <div class="pr-4">
+        <div class="text-sm font-body font-semibold text-on-surface">Front-desk kiosk mode</div>
+        <div class="text-xs font-body text-on-surface-variant mt-0.5">${kiosk ? 'This device opens to customer check-in.' : 'This device opens to the business sign-in.'}</div>
+      </div>
+      <button onclick="toggleKioskDevice()" class="flex-shrink-0 px-4 h-9 rounded-full text-xs font-body font-semibold transition-colors ${kiosk ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant border border-surface-container-high'}">${kiosk ? 'On' : 'Off'}</button>
+    </div>`;
   el.innerHTML = rows.map(([k, v]) => `
     <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high last:border-0">
       <span class="text-sm font-body text-on-surface-variant">${k}</span>
       <span class="text-sm font-body font-semibold text-on-surface text-right break-all ml-4">${v}</span>
-    </div>`).join('');
+    </div>`).join('') + kioskRow;
 }
 
 // ── Pay period (config.pay_period) — drives the Reports/Transactions quick button ─

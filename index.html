@@ -133,6 +133,60 @@ tailwind.config = {
 
 
 <!-- ═══════════════════════════════════════════════
+     SCREEN 1b: BUSINESS SIGN-IN (owner/manager)
+     The default front door on any device NOT marked as the front-desk kiosk.
+═══════════════════════════════════════════════ -->
+<div id="screen-signin" class="screen items-center justify-center bg-surface px-6 py-10 text-center">
+  <div class="w-full max-w-sm">
+
+    <div class="flex flex-col items-center mb-6 fade-up">
+      <img id="logo-signin" src="" alt="" class="h-20 md:h-24 w-auto object-contain mb-3" style="border-radius:8px"
+           onerror="this.style.display='none'">
+      <h1 class="text-2xl font-headline font-bold text-on-surface">Sign in to your business</h1>
+      <p class="text-xs font-body text-on-surface-variant mt-1 tracking-wide">Manage your salon — sales, staff, and reports</p>
+    </div>
+
+    <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 shadow-sm fade-up text-left" style="animation-delay:0.05s">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Email</label>
+      <input id="signin-email" type="email" autocomplete="username" placeholder="you@yoursalon.com"
+             class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm font-body text-on-surface outline-none focus:ring-2 focus:ring-primary">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Password</label>
+      <input id="signin-password" type="password" autocomplete="current-password" placeholder="••••••••"
+             class="w-full mt-1 mb-4 px-4 h-12 rounded-xl bg-surface-container text-sm font-body text-on-surface outline-none focus:ring-2 focus:ring-primary"
+             onkeydown="if(event.key==='Enter')businessSignin()">
+      <button onclick="businessSignin()"
+              class="w-full h-12 rounded-xl bg-primary text-on-primary text-base font-headline font-semibold hover:opacity-90 transition-opacity">Sign in</button>
+      <p id="signin-error" class="text-xs text-error text-center font-body hidden mt-3">Incorrect email or password.</p>
+
+      <div class="flex items-center gap-3 my-5">
+        <div class="flex-1 h-px bg-surface-container-high"></div>
+        <span class="text-[11px] font-body text-on-surface-variant whitespace-nowrap">on the front-desk iPad</span>
+        <div class="flex-1 h-px bg-surface-container-high"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="showPinModal()"
+                class="flex flex-col items-center gap-1.5 py-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors">
+          <span class="material-symbols-outlined text-primary">lock</span>
+          <span class="text-xs font-body font-semibold text-on-surface">Staff PIN</span>
+        </button>
+        <button onclick="goTo('screen-welcome')"
+                class="flex flex-col items-center gap-1.5 py-4 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors">
+          <span class="material-symbols-outlined text-primary">how_to_reg</span>
+          <span class="text-xs font-body font-semibold text-on-surface">Customer check-in</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="text-center mt-5 fade-up" style="animation-delay:0.1s">
+      <button onclick="makeThisDeviceKiosk()" class="text-xs font-body text-on-surface-variant hover:text-primary underline">Set up this device as the front-desk kiosk</button>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
      SCREEN 2: CHECK-IN FORM (Customer-Facing)
 ═══════════════════════════════════════════════ -->
 <div id="screen-checkin" class="screen flex-col items-center bg-surface">

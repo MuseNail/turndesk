@@ -765,6 +765,7 @@ window.addEventListener('unhandledrejection', e => { try { console.warn('[unhand
 function boot() {
   if (handleSquarePosReturn()) return; // don't boot a 2nd live app in the Square return tab
   reporter.initReporter();            // flush any queued error reports + re-flush on reconnect
+  auth.routeSignedOut();              // land on the business sign-in, or the kiosk on a front-desk device
   setupBackHandler();                 // OS back returns to the previous screen, never reloads the PWA
   sync.start();                       // connect to the DO, hydrate from cache + snapshot
   store.subscribe(onStateChange);

@@ -43,9 +43,10 @@ function photoUrlFor(type, id) {
 // ── Logo ──────────────────────────────────────────
 export function setLogo() {
   const logoSrc = cfg().logo || LOGO_PATH;
-  ['logo-welcome','logo-checkin','logo-desk'].forEach(id => {
+  ['logo-welcome','logo-checkin','logo-desk','logo-signin'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
+    if (id === 'logo-signin' && !logoSrc) { el.style.display = 'none'; return; }   // no logo → heading carries the sign-in screen
     el.style.display = '';
     el.src = logoSrc;
     if (id === 'logo-welcome') { const t = document.getElementById('logo-text-welcome'); if (t) t.style.display = 'none'; }

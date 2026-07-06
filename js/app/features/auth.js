@@ -48,11 +48,21 @@ export function showPinModal() {
   setTimeout(() => { const kb = document.getElementById('pin-keyboard-input'); if (kb) { kb.value = ''; kb.focus(); } }, 100);
 }
 
-// Log out the current front-desk user: confirm, clear the session, return to the welcome
-// screen, then prompt for a PIN. (showPinModal also clears activeUser + opens the keypad.)
+// Log out the current user: confirm, clear the session, then return to THIS device's
+// signed-out landing — the customer kiosk (+ PIN keypad) on a front-desk device, or the
+// business sign-in everywhere else.
 export function logout() {
-  const doLogout = () => { setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
-  if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to re-enter your PIN.', doLogout);
+  const doLogout = () => {
+    setActiveUser(null);
+    if (isKioskDevice()) { window.goTo?.('screen-welcome'); showPinModal(); }
+    else {
+      const e = document.getElementById('signin-email');    if (e) e.value = '';
+      const p = document.getElementById('signin-password'); if (p) p.value = '';
+      document.getElementById('signin-error')?.classList.add('hidden');
+      window.goTo?.('screen-signin');
+    }
+  };
+  if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to sign in again.', doLogout);
   else doLogout();
 }
 
@@ -149,6 +159,63 @@ export async function ownerLogin() {
     );
     const p = document.getElementById('owner-password'); if (p) p.value = '';
   } finally { _ownerLoginBusy = false; }
+}
+
+// ── Business sign-in screen (owner/manager email + password — the dedicated front door) ──
+// Same server credential as ownerLogin(), but from the full-screen sign-in (screen-signin)
+// that non-kiosk devices land on, instead of the keypad-modal toggle.
+let _bizLoginBusy = false;
+export async function businessSignin() {
+  if (_bizLoginBusy) return;
+  const email = (document.getElementById('signin-email')?.value || '').trim();
+  const password = document.getElementById('signin-password')?.value || '';
+  const errEl = document.getElementById('signin-error');
+  const showErr = (msg) => { if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); } };
+  if (errEl) errEl.classList.add('hidden');
+  if (!email || !password) { showErr('Enter your email and password.'); return; }
+  _bizLoginBusy = true;
+  try {
+    const res = await serverLogin({ email, password, device: 'dashboard' });
+    if (res.ok) { _finishPinLogin(res.user); resync(); return; }
+    showErr(
+      res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+      res.error === 'offline'   ? 'Offline — check your connection.' :
+      res.error === 'no_salon'  ? 'No salon selected.' :
+                                  'Incorrect email or password.'
+    );
+    const p = document.getElementById('signin-password'); if (p) p.value = '';
+  } finally { _bizLoginBusy = false; }
+}
+
+// ── Device mode: front-desk kiosk vs business sign-in (per-device, NEVER synced) ──
+// One TurnDesk salon link serves two contexts: the owner's own laptop/phone → the
+// business sign-in, and the in-salon iPad customers walk up to → the check-in kiosk.
+// A device flagged as the kiosk opens to the customer welcome (with the staff lock);
+// every other device opens to the business sign-in. Device-local, like the session.
+const KIOSK_KEY = 'turndesk_kiosk_device';
+export function isKioskDevice() { try { return localStorage.getItem(KIOSK_KEY) === '1'; } catch { return false; } }
+function setKioskFlag(on) { try { on ? localStorage.setItem(KIOSK_KEY, '1') : localStorage.removeItem(KIOSK_KEY); } catch {} }
+
+// From the sign-in screen (signed out): turn this device into the kiosk and go there now.
+export function makeThisDeviceKiosk() {
+  setKioskFlag(true);
+  showToast('This device is now the front-desk kiosk');
+  window.goTo?.('screen-welcome');
+}
+// From Settings (usually signed in): flip the mode; it takes effect on the next sign-out/reload.
+export function toggleKioskDevice() {
+  const on = !isKioskDevice();
+  setKioskFlag(on);
+  showToast(on ? 'Kiosk mode on — this device will open to customer check-in'
+               : 'Kiosk mode off — this device opens to the business sign-in');
+  window.renderAppInfo?.();
+}
+
+// The signed-out landing for THIS device. Called on boot and after logout. A live
+// session (activeUser) is left untouched so a reload mid-shift doesn't bounce anyone out.
+export function routeSignedOut() {
+  if (getActiveUser()) return;
+  window.goTo?.(isKioskDevice() ? 'screen-welcome' : 'screen-signin');
 }
 
 // §13 server login on a FRESH browser (no synced data yet, so the local list
