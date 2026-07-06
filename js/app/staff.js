@@ -8,6 +8,7 @@
 // separation only — the open transport still sends full state; true per-tech
 // isolation is the server-auth item, intentionally out of scope here.)
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import * as reporter from './reporter.js';   // automatic error reporting (staff app shares the salon /report log)
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
@@ -926,6 +927,10 @@ window.staffUpdateNow = () => { showToast('Updating…'); hardReloadApp(); };
 
 // ── Boot ──────────────────────────────────────────
 function boot() {
+  reporter.initReporter();
+  window.reportError = reporter.reportError;   // let feature code log silent failures
+  window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
+  window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
   sync.start();
   store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate

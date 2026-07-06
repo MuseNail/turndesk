@@ -8,6 +8,7 @@
 // Access: front-desk PIN, allowed only when the account's role has the
 // viewReports permission (admins always pass) — same canDo() the dashboard uses.
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import * as reporter from './reporter.js';   // automatic error reporting (reports app shares the salon /report log)
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
@@ -241,6 +242,10 @@ async function checkReportsVersion() {
 
 // ── Boot ──────────────────────────────────────────
 function boot() {
+  reporter.initReporter();
+  window.reportError = reporter.reportError;
+  window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
+  window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
   sync.start();
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate

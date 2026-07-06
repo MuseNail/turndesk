@@ -72,6 +72,8 @@ function deadLetter(id, error) {
   if (i >= 0) { _outbox.splice(i, 1); saveOutbox(); }
   // Make a rejected write VISIBLE — it's recoverable in Settings → Data Recovery, not silently dropped.
   try { window.showToast?.('A change could not be saved — open Settings → Data Recovery.'); } catch (e) {}
+  // …and log it to Diagnostics + alert the owner: a rejected write is data-loss-adjacent.
+  try { window.reportError?.('sync.rejected-write', (msg?.op || 'write') + ' rejected: ' + String(error || 'rejected'), { serious: true }); } catch (e) {}
 }
 export function failedOps() { try { return JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); } catch { return []; } }
 export function outboxPending() { return _outbox.slice(); }

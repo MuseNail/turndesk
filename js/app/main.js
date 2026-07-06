@@ -4,6 +4,7 @@
 // store to re-render on remote changes, and runs startup.
 
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import * as reporter from './reporter.js';   // automatic error reporting — arm early so it catches boot-time throws
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import * as store from './store.js';
 import * as sync from './sync.js';
@@ -42,12 +43,15 @@ import * as search from './features/search.js';
 import * as boSync from './features/backoffice-sync.js';
 import * as guide from './features/guide.js';
 import * as receipt from './features/receipt.js';
+import * as diagnostics from './features/diagnostics.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
+window.reportError  = reporter.reportError;   // so any module/inline code can log a silent failure
+window.breadcrumb   = reporter.breadcrumb;
 
 // ── Modal registry ────────────────────────────────
 // Single source of truth for every dismissible modal/overlay + its close fn. Drives BOTH the
@@ -125,6 +129,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.39', items: [
+    { icon: 'bug_report', t: 'The app now tells you when something quietly breaks', d: 'TurnDesk now captures errors automatically — even ones that don’t freeze the screen — so a failure you didn’t happen to notice isn’t lost. See them in Settings → Data & System → Diagnostics (newest first, with how many times each happened). Turn on “Bug alerts” there to get a push the moment something new or serious fails (like a card charge or a save that couldn’t reach the server) — deduped so one glitch can’t spam you. Nothing here changes your data; it’s just a safety net so problems surface instead of hiding.' },
+  ] },
   { v: 'v5.38', items: [
     { icon: 'login', t: '“Sign in needed” is now clear, not a mystery “Offline”', d: 'If a device can’t sync because it needs a sign-in — a manager/fallback code that can’t sync, an expired session, or a removed user — it now shows “Sign in needed” (tap it to enter your PIN) instead of looking like a network problem. And if you unlock the app with a code that can’t sync, it tells you to sign in with your front-desk PIN.' },
   ] },
@@ -751,12 +758,13 @@ function _errToast() {
   _lastErrToast = now;
   try { utils.showToast('Something went wrong. If the screen seems stuck, tap the version badge to reload.'); } catch (e) {}
 }
-window.addEventListener('error', e => { try { console.warn('[error]', e?.error || e?.message); _errToast(); } catch (x) {} });
-window.addEventListener('unhandledrejection', e => { try { console.warn('[unhandledrejection]', e?.reason); } catch (x) {} });
+window.addEventListener('error', e => { try { console.warn('[error]', e?.error || e?.message); _errToast(); reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
+window.addEventListener('unhandledrejection', e => { try { console.warn('[unhandledrejection]', e?.reason); reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
 
 // ── Boot ──────────────────────────────────────────
 function boot() {
   if (handleSquarePosReturn()) return; // don't boot a 2nd live app in the Square return tab
+  reporter.initReporter();            // flush any queued error reports + re-flush on reconnect
   setupBackHandler();                 // OS back returns to the previous screen, never reloads the PWA
   sync.start();                       // connect to the DO, hydrate from cache + snapshot
   store.subscribe(onStateChange);

@@ -44,7 +44,7 @@ export async function refundOnHelcim(originalTransactionId, amountDollars, opts 
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j.error) return { ok: false, error: j.error || `Refund failed (${r.status}).` };
     return { ok: true, transactionId: j.transactionId ? String(j.transactionId) : null, amount: j.amount };
-  } catch { return { ok: false, error: 'Could not reach the refund service.' }; }
+  } catch (e) { try { window.reportError?.('helcim.refund', 'Could not reach the refund service: ' + ((e && e.message) || e), { serious: true }); } catch (x) {} return { ok: false, error: 'Could not reach the refund service.' }; }
 }
 export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
@@ -110,7 +110,7 @@ export async function chargeOnHelcim(amountDollars, invoiceNumber, opts = {}) {
     });
     start = await r.json().catch(() => ({}));
     if (r.status >= 400) return { ok: false, error: start.error || start.message || `Couldn't start the terminal (HTTP ${r.status}).` };
-  } catch (e) { return { ok: false, error: 'Network error starting the terminal: ' + (e.message || e) }; }
+  } catch (e) { try { window.reportError?.('helcim.charge', 'Network error starting the terminal: ' + (e.message || e), { serious: true }); } catch (x) {} return { ok: false, error: 'Network error starting the terminal: ' + (e.message || e) }; }
 
   const TIMEOUT_MS = opts.timeoutMs || 180000;   // 3 min — customer is interacting with the device
   return await new Promise((resolve) => {

@@ -244,6 +244,7 @@ async function appAuthOk(request, url, env, salonId) {
   if (path === '/r')                return true;                // public review-QR redirect (customers scan it)
   if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
+  if (path === '/report' && request.method.toUpperCase() === 'POST') return true;         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
   if (!token) return false;
@@ -404,6 +405,17 @@ export default {
     // POST /push/subscribe | /push/unsubscribe — register a tech's push subscription.
     // Forwarded to the DO (same pattern as /state), re-wrapped with CORS.
     if (path.startsWith('/push/')) {
+      const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+      const doRes = await stub.fetch(request);
+      const body  = await doRes.text();
+      return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
+    // ── Automatic error reports (client crash/failure telemetry) ────────────────
+    // POST /report submits an error (auth-exempt above, so a broken auth path can still
+    // report); GET /report reads the log for the Diagnostics panel (auth-gated);
+    // POST /report/clear empties it. Forwarded to the salon's DO like /state and /push.
+    if (path === '/report' || path === '/report/clear') {
       const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
       const doRes = await stub.fetch(request);
       const body  = await doRes.text();
@@ -1079,6 +1091,82 @@ export class TurnDeskDO {
         const msg = JSON.stringify({ type: 'helcim_result', invoiceNumber: b.invoiceNumber, status: b.status || '', transactionId: b.transactionId || null, amount: (b.amount ?? null) });
         for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(msg); } catch {} } }
       }
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── Automatic error reports (capped, deduped ring buffer + throttled owner push) ──
+    // Clients POST uncaught errors / explicit reportError() calls here. Stored as ONE
+    // capped array under 'report:errors' (NOT a buildSnapshot prefix → never shipped to
+    // clients, so customer data in a stack never leaks to other devices). Deduped by
+    // fingerprint (repeats bump a count instead of piling up). A NEW fingerprint or a
+    // SERIOUS error pushes the owner at most once/hour per fingerprint — to the 'errors'
+    // push id (devices opt in from Settings → Diagnostics). Never fails the client.
+    if (url.pathname === '/report' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      // per-IP throttle: cap reports/minute so a runaway client can't flood the log
+      const ip = request.headers.get('CF-Connecting-IP') || 'local';
+      const minute = Math.floor(Date.now() / 60000);
+      const rlKey = 'reprl:' + ip;
+      const rl = (await this.state.storage.get(rlKey)) || { min: 0, n: 0 };
+      if (rl.min === minute && rl.n >= 40) return new Response('{"ok":true,"throttled":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      await this.state.storage.put(rlKey, { min: minute, n: rl.min === minute ? rl.n + 1 : 1 });
+
+      const now = Date.now();
+      const fp = String(body.fingerprint || body.message || 'unknown').slice(0, 200);
+      const serious = !!body.serious;
+      const stored = await this.state.storage.get('report:errors');
+      const arr = Array.isArray(stored) ? stored : [];
+      let entry = arr.find(e => e && e.fingerprint === fp);
+      const isNew = !entry;
+      if (entry) {
+        entry.count = (entry.count || 1) + 1;
+        entry.lastAt = now;
+        if (serious) entry.serious = true;
+      } else {
+        entry = {
+          fingerprint: fp,
+          app:     String(body.app || 'turndesk').slice(0, 20),
+          context: String(body.context || '').slice(0, 120),
+          message: String(body.message || '').slice(0, 500),
+          stack:   String(body.stack || '').slice(0, 4000),
+          version: String(body.version || '').slice(0, 20),
+          view:    String(body.view || '').slice(0, 80),
+          user:    String(body.user || '').slice(0, 60),
+          device:  String(body.device || '').slice(0, 60),
+          ua:      String(body.ua || '').slice(0, 200),
+          online:  body.online !== false,
+          breadcrumbs: Array.isArray(body.breadcrumbs) ? body.breadcrumbs.slice(-20).map(b => String(b).slice(0, 140)) : [],
+          serious, count: 1, firstAt: now, lastAt: now,
+        };
+        arr.push(entry);
+        if (arr.length > 200) arr.splice(0, arr.length - 200);   // cap — newest kept
+      }
+      await this.state.storage.put('report:errors', arr);
+
+      // Throttled owner alert: new fingerprint OR serious, at most once/hour per fingerprint.
+      try {
+        if (isNew || serious) {
+          const pk = 'reppush:' + fp;
+          const last = (await this.state.storage.get(pk)) || 0;
+          if (now - last > 3600000) {
+            await this.state.storage.put(pk, now);
+            await this.sendPushToTech('errors', {
+              title: serious ? '⚠️ TurnDesk — a failure was logged' : 'TurnDesk — a problem was logged',
+              body:  (String(body.context ? body.context + ': ' : '') + String(body.message || 'Unknown error')).slice(0, 180),
+              tag:   'turndesk-error',
+            }).catch(() => {});
+          }
+        }
+      } catch {}
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/report' && request.method === 'GET') {
+      const stored = await this.state.storage.get('report:errors');
+      const arr = Array.isArray(stored) ? stored : [];
+      return new Response(JSON.stringify({ errors: arr.slice().reverse() }), { status: 200, headers: { 'Content-Type': 'application/json' } });   // newest first
+    }
+    if (url.pathname === '/report/clear' && request.method === 'POST') {
+      await this.state.storage.put('report:errors', []);
       return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
