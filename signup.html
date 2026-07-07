@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- Force browsers to always fetch fresh HTML — prevents stale cached versions after deploys -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Muse Nails & Spa — Check-In</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/turndesk/manifest.json">
+<meta name="theme-color" content="#1a5252">
+<!-- iOS PWA — Safari ignores the manifest for most of these -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Muse">
+<link rel="apple-touch-icon" href="/turndesk/icons/icon-192.png">
+
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        // CSS-variable tokens (themeable per-login in Settings → Appearance). The
+        // hex fallback = the original light palette, so the default look is unchanged.
+        primary: "var(--primary, #1a5252)",
+        "primary-dim": "var(--primary-dim, #0f3d3d)",
+        "primary-container": "var(--primary-container, #8fd4d3)",
+        "on-primary": "var(--on-primary, #ffffff)",
+        "on-primary-container": "var(--on-primary-container, #0a2e2e)",
+        secondary: "var(--secondary, #5c4010)",
+        "secondary-container": "var(--secondary-container, #f5c870)",
+        "on-secondary-container": "var(--on-secondary-container, #3a2800)",
+        surface: "var(--surface, #e8ecee)",
+        "surface-container-lowest": "var(--surface-container-lowest, #f5f7f8)",
+        "surface-container-low": "var(--surface-container-low, #dde2e5)",
+        "surface-container": "var(--surface-container, #d0d6da)",
+        "surface-container-high": "var(--surface-container-high, #c2cacd)",
+        "surface-container-highest": "var(--surface-container-highest, #b4bec2)",
+        "on-surface": "var(--on-surface, #000000)",
+        "on-surface-variant": "var(--on-surface-variant, #1a1a1a)",
+        outline: "var(--outline, #4a5258)",
+        "outline-variant": "var(--outline-variant, #7a858a)",
+        error: "var(--error, #8b1c1a)",
+        "error-container": "var(--error-container, #e85a57)",
+      },
+      fontFamily: {
+        headline: ["Manrope"],
+        body: ["Inter"],
+      },
+      borderRadius: {
+        xl: "0.75rem",
+        "2xl": "1rem",
+        full: "9999px",
+      }
+    }
+  }
+}
+</script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-surface min-h-screen flex items-center justify-center px-6 py-10">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-6">
+      <h1 class="text-2xl font-headline font-bold text-on-surface">Start your salon on TurnDesk</h1>
+      <p class="text-xs font-body text-on-surface-variant mt-1">Request access — we’ll review it and send your salon link.</p>
+    </div>
+
+    <div id="signup-form" class="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 shadow-sm text-left">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Business name</label>
+      <input id="su-business" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="Lush Nails & Spa">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Your name</label>
+      <input id="su-name" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="Mia">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Email</label>
+      <input id="su-email" type="email" autocomplete="email" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="you@yoursalon.com">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Password</label>
+      <input id="su-password" type="password" autocomplete="new-password" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="At least 6 characters">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Confirm password</label>
+      <input id="su-password2" type="password" autocomplete="new-password" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="Re-enter password">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Phone (optional)</label>
+      <input id="su-phone" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="(909) 555-1212">
+      <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Anything you’d like us to know (optional)</label>
+      <textarea id="su-note" rows="2" class="w-full mt-1 mb-4 px-4 py-2 rounded-xl bg-surface-container text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="How many techs, when you’d like to start, etc."></textarea>
+      <button id="signup-submit" onclick="submitSignup()" class="w-full h-12 rounded-xl bg-primary text-on-primary text-base font-headline font-semibold hover:opacity-90 transition-opacity">Request access</button>
+      <p id="signup-error" class="text-xs text-error text-center font-body hidden mt-3"></p>
+    </div>
+
+    <div id="signup-done" class="hidden bg-surface-container-lowest rounded-2xl border border-surface-container-high p-8 text-center">
+      <span class="material-symbols-outlined text-primary" style="font-size:44px">mark_email_read</span>
+      <h2 class="text-lg font-headline font-bold text-on-surface mt-2">Thanks — request received</h2>
+      <p class="text-sm font-body text-on-surface-variant mt-1">We’ll review it and send your salon link once you’re approved. You’ll sign in with the email and password you just chose.</p>
+    </div>
+  </div>
+  <script type="module" src="js/app/signup.js"></script>
+</body>
+</html>
