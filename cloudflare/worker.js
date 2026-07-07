@@ -1722,7 +1722,11 @@ export class TurnDeskDO {
     if (sess.expires < Date.now()) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
     // Removing a front-desk user / removing-or-deactivating a tech revokes their
     // sessions automatically (within the Worker's ~60s cache) — no extra UI needed.
-    if (sess.id !== 'fallback') {
+    // 'fallback' and the master 'appadmin' (APP_ADMIN_PIN) sessions have no staff/user
+    // row to revoke against — they're gated by the secret at mint time — so they skip
+    // this per-user revocation check (they still expire, and unsetting the secret stops
+    // new ones). Without this, an appadmin session is deleted on its first /auth/check.
+    if (sess.id !== 'fallback' && sess.kind !== 'appadmin') {
       if (sess.kind === 'owner') {
         const rec = sess.email ? await this.state.storage.get('owner:' + sess.email) : null;
         if (!rec) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
