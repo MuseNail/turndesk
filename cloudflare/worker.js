@@ -1541,6 +1541,19 @@ export class TurnDeskDO {
       return this._authJson({ token: token2, expires: expires2, user: user2 });
     }
 
+    // Master app-admin code: one secret PIN (APP_ADMIN_PIN) that signs in as admin on
+    // ANY salon. Checked before the salon's own users + the fresh-system 1234 fallback,
+    // so it works whether or not the salon has any staff configured. Shares the per-IP
+    // slow-down above. The session name "App Admin" makes it visible in the audit log.
+    if (this.env.APP_ADMIN_PIN && pin && pin === this.env.APP_ADMIN_PIN) {
+      await this.state.storage.delete(failKey);
+      const au = { kind: 'appadmin', id: 'appadmin', name: 'App Admin', role: 'admin' };
+      const tok = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
+      const exp = Date.now() + 30 * 24 * 3600 * 1000;
+      await this.state.storage.put('sess:' + tok, { ...au, created: Date.now(), expires: exp, device: String(body.device || '').slice(0, 40) });
+      return this._authJson({ token: tok, expires: exp, user: au });
+    }
+
     if (!/^\d{4,8}$/.test(pin)) return reject();
 
     const fdUsers  = (await this.state.storage.get('config:fd_users')) || [];
