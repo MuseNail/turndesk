@@ -983,6 +983,33 @@ async function handleOperator(request, env, url, method, path) {
     const body = await r.text();
     return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="turndesk-${v.slug}.json"` }) });
   }
+  // GET|POST /operator/salons/<slug>/managerpin → see or set the front-desk MANAGER PIN.
+  // Front-desk PINs live in plaintext config (they're shared-iPad unlock codes, not hashed
+  // secrets), so the operator can both view and change them. The manager is the fd_user
+  // id 'fd-manager' (created by the salon's first-run prompt); setting one here also
+  // retires the temporary 1234 fallback (which only works while a salon has no fd_users).
+  let mpm = path.match(/^\/operator\/salons\/([a-z0-9-]+)\/managerpin$/);
+  if (mpm) {
+    const v = validateSlug(mpm[1]);
+    if (!v.ok) return json({ error: v.error }, 400);
+    const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(v.slug));
+    const snap = await (await salonStub.fetch(new Request('https://do/state/snapshot'))).json().catch(() => ({}));
+    let fd = (snap.state && snap.state.config && snap.state.config.fd_users) || [];
+    if (method === 'GET') {
+      const mgr = fd.find(u => u.id === 'fd-manager') || fd.find(u => (u.role || '') === 'admin') || fd[0] || null;
+      return json({ pin: mgr ? String(mgr.pin || '') : null, name: mgr ? mgr.name : 'Manager', staffCount: fd.length });
+    }
+    if (method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const pin = String(b.pin || '').trim();
+      if (!/^\d{4,8}$/.test(pin)) return json({ error: 'PIN must be 4–8 digits' }, 400);
+      const i = fd.findIndex(u => u.id === 'fd-manager');
+      if (i >= 0) fd[i] = { ...fd[i], pin, role: fd[i].role || 'admin' };
+      else fd = [{ id: 'fd-manager', name: 'Manager', pin, role: 'admin' }, ...fd];
+      await salonStub.fetch(new Request('https://do/state/mutate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'config.set', payload: { key: 'fd_users', value: fd } }) }));
+      return json({ ok: true, pin });
+    }
+  }
   return json({ error: 'not found' }, 404);
 }
 

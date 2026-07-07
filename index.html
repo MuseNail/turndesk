@@ -1673,6 +1673,24 @@ tailwind.config = {
 
 
 <!-- ═══════════════════════════════════════════════
+     FIRST-RUN MANAGER PIN (brand-new salon → replaces the 1234 fallback)
+═══════════════════════════════════════════════ -->
+<div id="manager-pin-modal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-80 max-w-full shadow-2xl fade-up text-center">
+    <span class="material-symbols-outlined text-primary" style="font-size:40px">pin</span>
+    <h2 class="text-lg font-headline font-bold text-on-surface mt-1">Set your manager PIN</h2>
+    <p class="text-xs font-body text-on-surface-variant mt-1 mb-4">Create a 4-digit PIN for signing in at the front desk. This replaces the temporary <strong>1234</strong> code.</p>
+    <input id="manager-pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="4-digit PIN"
+      class="w-full mb-2 px-4 h-12 rounded-xl bg-surface-container text-center text-lg tracking-[0.3em] font-headline text-on-surface outline-none focus:ring-2 focus:ring-primary"
+      onkeydown="if(event.key==='Enter')saveManagerPin()">
+    <p id="manager-pin-error" class="text-xs text-error font-body hidden mb-2"></p>
+    <button onclick="saveManagerPin()" class="w-full h-12 rounded-xl bg-primary text-on-primary text-sm font-headline font-semibold hover:opacity-90 transition-opacity">Save PIN</button>
+    <button onclick="dismissManagerPin()" class="w-full mt-2 text-xs font-body text-on-surface-variant hover:text-primary underline">Later</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
      MANUAL ADD MODAL (Front Desk)
 ═══════════════════════════════════════════════ -->
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">

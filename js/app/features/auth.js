@@ -101,6 +101,7 @@ function _finishPinLogin(user) {
   updateLoggedInDisplay();
   window.goTo?.('screen-desk');
   window.refreshWelcomeBanner?.();
+  setTimeout(() => maybePromptManagerSetup(), 500);   // brand-new salon → prompt for a real manager PIN
   window.showDashPanel?.('turns');
   showToast(`Welcome, ${getActiveUser().name}`);
   // Cash-drawer reminder: non-Admin staff are prompted to open a drawer when none is open
@@ -109,6 +110,42 @@ function _finishPinLogin(user) {
   if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
     setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
   }
+}
+
+// ── First-run manager PIN (brand-new salon) ───────────────────────────────────
+// A freshly provisioned salon has an owner (email/password) but no front-desk users,
+// so the temporary 1234 fallback is the only PIN. On the first admin sign-in we prompt
+// them to set a real 4-digit manager PIN — which creates a front-desk 'Manager' user
+// and, because a salon with any fd_users no longer accepts 1234, retires the fallback.
+// The operator can also see/change this PIN from the operator console.
+export function maybePromptManagerSetup() {
+  const au = getActiveUser();
+  if (!au || au.role !== 'admin' || au.kind === 'appadmin') return;   // owners/managers only; never the master app-admin
+  if ((cfg().fd_users || []).length > 0) return;                       // already has front-desk users → nothing to bootstrap
+  const m = document.getElementById('manager-pin-modal'); if (!m) return;
+  document.getElementById('manager-pin-error')?.classList.add('hidden');
+  const inp = document.getElementById('manager-pin-input'); if (inp) inp.value = '';
+  m.classList.remove('hidden'); m.style.display = 'flex';
+  setTimeout(() => document.getElementById('manager-pin-input')?.focus(), 100);
+}
+export function dismissManagerPin() {
+  const m = document.getElementById('manager-pin-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
+}
+export function saveManagerPin() {
+  const inp = document.getElementById('manager-pin-input');
+  const err = document.getElementById('manager-pin-error');
+  const pin = (inp?.value || '').trim();
+  if (!/^\d{4,8}$/.test(pin)) { if (err) { err.textContent = 'Enter a 4-digit PIN (numbers only).'; err.classList.remove('hidden'); } return; }
+  // Merge, don't clobber: update the manager if one exists, else prepend it — never
+  // drop any front-desk users a concurrent edit may have added.
+  const cur = cfg().fd_users || [];
+  const next = cur.some(u => u.id === 'fd-manager')
+    ? cur.map(u => u.id === 'fd-manager' ? { ...u, pin, role: u.role || 'admin' } : u)
+    : [{ id: 'fd-manager', name: 'Manager', pin, role: 'admin' }, ...cur];
+  dispatch('config.set', { key: 'fd_users', value: next });
+  dismissManagerPin();
+  showToast('Manager PIN set. Sign in with it at the front desk — add more staff in Settings.');
+  window.logAudit?.('Manager PIN set', 'Front-desk manager PIN configured');
 }
 
 function _showPinError() {

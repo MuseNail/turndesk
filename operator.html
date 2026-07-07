@@ -161,6 +161,7 @@ function renderSalons(salons) {
       &nbsp;<a href="${ORIGIN}/operator/export?slug=${encodeURIComponent(s.slug)}&op=${encodeURIComponent(token)}" download>Export data</a>
       &nbsp;<button class="btn-ghost" data-act="toggle" data-slug="${esc(s.slug)}" data-status="${s.status === 'disabled' ? 'active' : 'disabled'}">${s.status === 'disabled' ? 'enable' : 'disable'}</button>
       &nbsp;<button class="btn-ghost" data-act="pw" data-slug="${esc(s.slug)}">reset pw</button>
+      &nbsp;<button class="btn-ghost" data-act="mgrpin" data-slug="${esc(s.slug)}">manager PIN</button>
     </td></tr>`).join('');
   $('salons').innerHTML = `<table><thead><tr><th>Salon</th><th>Owner</th><th>Plan</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   $('salons').querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', onAction));
@@ -208,6 +209,14 @@ async function onAction(e) {
     alert(r.ok ? 'Owner password set.' : ('Failed: ' + (r.body?.error || r.status)));
   } else if (act === 'copy') {
     copyLink(slug, e.target);
+  } else if (act === 'mgrpin') {
+    const cur = await api(`/operator/salons/${slug}/managerpin`);
+    const currentPin = (cur.ok && cur.body.pin) ? cur.body.pin : '';
+    const pin = prompt(`Manager PIN for ${slug} (4 digits)${currentPin ? '' : ' — none set yet'}:`, currentPin);
+    if (pin == null) return;
+    if (!/^\d{4,8}$/.test(pin)) { alert('PIN must be 4–8 digits.'); return; }
+    const r = await api(`/operator/salons/${slug}/managerpin`, { method: 'POST', body: JSON.stringify({ pin }) });
+    alert(r.ok ? `Manager PIN for ${slug} set to ${pin}.` : ('Failed: ' + (r.body?.error || r.status)));
   }
 }
 
