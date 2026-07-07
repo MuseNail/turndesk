@@ -121,6 +121,7 @@ function _finishPinLogin(user) {
 export function maybePromptManagerSetup() {
   const au = getActiveUser();
   if (!au || au.role !== 'admin' || au.kind === 'appadmin') return;   // owners/managers only; never the master app-admin
+  if (Object.keys(cfg()).length === 0) return;                        // state not hydrated yet → don't false-prompt an established salon
   if ((cfg().fd_users || []).length > 0) return;                       // already has front-desk users → nothing to bootstrap
   const m = document.getElementById('manager-pin-modal'); if (!m) return;
   document.getElementById('manager-pin-error')?.classList.add('hidden');
@@ -283,14 +284,18 @@ async function _serverPinLogin(pin) {
 }
 
 function checkPin() {
-  const fd = cfg().fd_users;
-  const matched = fd.find(u => u.pin === pinBuffer) || (pinBuffer === STAFF_PIN ? { name: 'Manager', role: 'admin' } : null);
+  const fd = cfg().fd_users || [];
+  // The 1234 fallback is valid ONLY while no front-desk users exist — the same gate the
+  // server's authLogin uses. Once a manager PIN is set (fd_users non-empty), 1234 stops
+  // unlocking here too, so "set a manager PIN → 1234 is retired" holds client-side as well.
+  const fallbackOk = pinBuffer === STAFF_PIN && !fd.length;
+  const matched = fd.find(u => u.pin === pinBuffer) || (fallbackOk ? { name: 'Manager', role: 'admin' } : null);
   const matchedEl = document.getElementById('pin-matched-user');
   matchedEl.textContent = (matched && pinBuffer.length >= 4) ? `Welcome, ${matched.name}` : '';
 
   if (pinBuffer.length < 4) return;
   const user = fd.find(u => u.pin === pinBuffer);
-  const isFallback = pinBuffer === STAFF_PIN;
+  const isFallback = fallbackOk;
 
   if (user || isFallback) {
     const pin = pinBuffer;
@@ -334,8 +339,9 @@ function updatePinDots() {
 let _adminCodeOnSuccess = null;
 function isAdminCode(code) {
   if (!code) return false;
-  if (code === STAFF_PIN) return true;
-  return cfg().fd_users.some(u => u.pin === code && u.role === 'admin');
+  const fd = cfg().fd_users || [];
+  if (code === STAFF_PIN && !fd.length) return true;   // 1234 only while no front-desk users exist
+  return fd.some(u => u.pin === code && u.role === 'admin');
 }
 export function requireAdminCode(onSuccess, msg) {
   _adminCodeOnSuccess = onSuccess;

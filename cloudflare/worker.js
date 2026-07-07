@@ -993,9 +993,9 @@ async function handleOperator(request, env, url, method, path) {
     const v = validateSlug(mpm[1]);
     if (!v.ok) return json({ error: v.error }, 400);
     const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(v.slug));
-    const snap = await (await salonStub.fetch(new Request('https://do/state/snapshot'))).json().catch(() => ({}));
-    let fd = (snap.state && snap.state.config && snap.state.config.fd_users) || [];
     if (method === 'GET') {
+      const snap = await (await salonStub.fetch(new Request('https://do/state/snapshot'))).json().catch(() => ({}));
+      const fd = (snap.state && snap.state.config && snap.state.config.fd_users) || [];
       const mgr = fd.find(u => u.id === 'fd-manager') || fd.find(u => (u.role || '') === 'admin') || fd[0] || null;
       return json({ pin: mgr ? String(mgr.pin || '') : null, name: mgr ? mgr.name : 'Manager', staffCount: fd.length });
     }
@@ -1003,11 +1003,9 @@ async function handleOperator(request, env, url, method, path) {
       let b = {}; try { b = await request.json(); } catch {}
       const pin = String(b.pin || '').trim();
       if (!/^\d{4,8}$/.test(pin)) return json({ error: 'PIN must be 4–8 digits' }, 400);
-      const i = fd.findIndex(u => u.id === 'fd-manager');
-      if (i >= 0) fd[i] = { ...fd[i], pin, role: fd[i].role || 'admin' };
-      else fd = [{ id: 'fd-manager', name: 'Manager', pin, role: 'admin' }, ...fd];
-      await salonStub.fetch(new Request('https://do/state/mutate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'config.set', payload: { key: 'fd_users', value: fd } }) }));
-      return json({ ok: true, pin });
+      // Delegate the read-modify-write to the DO so it's atomic + stale-write-guarded.
+      const r = await salonStub.fetch(new Request('https://do/provision/managerpin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }) }));
+      return json(await r.json().catch(() => ({ ok: r.ok })), r.status);
     }
   }
   return json({ error: 'not found' }, 404);
@@ -1141,6 +1139,22 @@ export class TurnDeskDO {
       return new Response(JSON.stringify(res), {
         status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // Atomic manager-PIN set (operator console). The read + merge + write all happen inside
+    // this single-threaded DO handler, so unlike a worker-side snapshot-then-mutate there is
+    // no read-modify-write gap for a concurrent fd_users edit to be clobbered. Stamped, so it
+    // goes through the normal config stale-write guard + broadcast in applyMutation.
+    if (url.pathname === '/provision/managerpin' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const pin = String(b.pin || '').trim();
+      if (!/^\d{4,8}$/.test(pin)) return new Response('{"error":"bad pin"}', { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const fd = (await this.state.storage.get('config:fd_users')) || [];
+      const next = fd.some(u => u.id === 'fd-manager')
+        ? fd.map(u => u.id === 'fd-manager' ? { ...u, pin, role: u.role || 'admin' } : u)
+        : [{ id: 'fd-manager', name: 'Manager', pin, role: 'admin' }, ...fd];
+      await this.applyMutation({ op: 'config.set', payload: { key: 'fd_users', value: next, updatedAt: Date.now(), updatedBy: 'operator' } }, null);
+      return new Response(JSON.stringify({ ok: true, pin }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     if (url.pathname === '/state/backups') {
