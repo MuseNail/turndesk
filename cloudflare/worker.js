@@ -1,3 +1,4 @@
+import { slugify, validateSignupRequest } from './signup-util.js';
 // ── Cloudflare Worker — musedashboard ─────────────────────────────────────────
 //
 // Routes
@@ -245,6 +246,7 @@ async function appAuthOk(request, url, env, salonId) {
   if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
   if (path === '/report' && request.method.toUpperCase() === 'POST') return true;         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
+  if (path === '/signup/request' && request.method.toUpperCase() === 'POST') return true;  // public: pre-salon, no session yet
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
   if (!token) return false;
@@ -307,7 +309,7 @@ export default {
     // Require an explicit salon slug on every route except the two inherently
     // salon-agnostic public callbacks. Replaces the old silent 'muse' default so
     // a forgotten slug fails loudly instead of cross-wiring to another salon.
-    if (!salonId && path !== '/terminal/webhook' && path !== '/gcal/callback') {
+    if (!salonId && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
       return json({ error: 'missing salon' }, 400);
     }
 
@@ -420,6 +422,15 @@ export default {
       const doRes = await stub.fetch(request);
       const body  = await doRes.text();
       return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
+    // ── Public self-serve signup request (approval-gated; nothing provisioned yet) ──
+    // Forwarded to the reserved __registry__ DO, which validates + rate-limits + stores
+    // the pending request. Forwarding the original request preserves CF-Connecting-IP.
+    if (path === '/signup/request' && method === 'POST') {
+      const r = await registryStub(env).fetch(request);
+      const body = await r.text();
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
     // ── AI analytics (Anthropic Claude, or Google Gemini fallback) ──────────────
@@ -985,6 +996,32 @@ export class TurnDeskDO {
       if (!b.entry || !b.entry.slug) return this._authJson({ error: 'bad entry' }, 400);
       await this.state.storage.put('salon:' + b.entry.slug, b.entry);
       return this._authJson({ ok: true });
+    }
+    if (url.pathname === '/signup/request' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const v = validateSignupRequest(b);
+      if (!v.ok) return new Response(JSON.stringify({ error: v.error }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const ip = request.headers.get('CF-Connecting-IP') || 'local';
+      const rlKey = 'sreqrl:' + ip, now = Date.now();
+      const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
+      if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
+      if (rl.n >= 5) return new Response(JSON.stringify({ error: 'Too many requests — please try again later.' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+      let pending = 0;
+      const existing = await this.state.storage.list({ prefix: 'signup:' });
+      for (const [, x] of existing) if (x && x.status === 'pending') pending++;
+      if (pending >= 200) return new Response(JSON.stringify({ error: 'The request queue is full — please try again later.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      rl.n++; await this.state.storage.put(rlKey, rl);
+      const val = v.value;
+      const cred = await hashPassword(val.password);
+      const ownerRecord = { email: val.email, name: val.ownerName, role: 'owner', ...cred };
+      let base = slugify(val.business), cand = base, n = 2;
+      while (RESERVED_SLUGS.has(cand) || (await this.state.storage.get('salon:' + cand))) cand = base + '-' + n++;
+      const id = crypto.randomUUID();
+      await this.state.storage.put('signup:' + id, {
+        id, status: 'pending', business: val.business, ownerName: val.ownerName, email: val.email,
+        phone: val.phone, note: val.note, ownerRecord, proposedSlug: cand, finalSlug: '', createdAt: now, decidedAt: 0,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     // ── Provision: seed a brand-new salon's starter config ──────────────────────
     if (url.pathname === '/provision/seed' && request.method === 'POST') {
