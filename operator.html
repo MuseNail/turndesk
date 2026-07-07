@@ -69,6 +69,9 @@
       <div id="create-msg"></div>
     </div>
 
+    <h2 style="margin-top:24px">Pending requests</h2>
+    <div id="requests">Loading…</div>
+
     <div class="card">
       <h2>Salons</h2>
       <div id="salons">Loading…</div>
@@ -103,7 +106,48 @@ async function connect() {
   $('auth-card').style.display = 'none';
   $('app').style.display = 'block';
   renderSalons(res.body.salons || []);
+  refreshRequests();
 }
+
+async function refreshRequests() {
+  const r = await api('/operator/requests');
+  if (r.ok) renderRequests(r.body.requests || []);
+}
+function renderRequests(reqs) {
+  const pend = (reqs || []).filter(x => x.status === 'pending');
+  if (!pend.length) { document.getElementById('requests').innerHTML = '<p class="muted">No pending requests.</p>'; return; }
+  document.getElementById('requests').innerHTML = pend.map(x => `
+    <div class="card" style="margin-bottom:10px">
+      <div><strong>${esc(x.business)}</strong> — ${esc(x.ownerName)} · ${esc(x.email)}${x.phone ? ' · ' + esc(x.phone) : ''}</div>
+      ${x.note ? `<div class="muted" style="margin-top:4px">${esc(x.note)}</div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <input data-slug-for="${esc(x.id)}" value="${esc(x.proposedSlug)}" style="width:180px">
+        <button class="btn-primary" data-approve="${esc(x.id)}">Approve</button>
+        <button data-reject="${esc(x.id)}">Reject</button>
+        <span data-link-for="${esc(x.id)}" class="muted"></span>
+      </div>
+    </div>`).join('');
+}
+document.getElementById('requests').addEventListener('click', async (e) => {
+  const ap = e.target.closest('[data-approve]'), rj = e.target.closest('[data-reject]');
+  if (ap) {
+    const id = ap.getAttribute('data-approve');
+    const slugEl = document.querySelector(`[data-slug-for="${id}"]`);
+    const slug = slugEl ? slugEl.value : '';
+    ap.disabled = true;
+    const r = await api('/operator/requests/decide', { method: 'POST', body: JSON.stringify({ id, action: 'approve', slug }) });
+    if (r.ok) {
+      const link = location.origin.includes('github.io') ? `https://musenail.github.io/turndesk/?salon=${r.body.slug}` : `?salon=${r.body.slug}`;
+      document.querySelector(`[data-link-for="${id}"]`).innerHTML = 'Approved → <code>' + esc(link) + '</code>';
+      refreshRequests(); refresh();
+    } else { ap.disabled = false; alert(r.body.error || 'Approve failed'); }
+  } else if (rj) {
+    const id = rj.getAttribute('data-reject');
+    if (!confirm('Reject this request?')) return;
+    const r = await api('/operator/requests/decide', { method: 'POST', body: JSON.stringify({ id, action: 'reject' }) });
+    if (r.ok) refreshRequests(); else alert(r.body.error || 'Reject failed');
+  }
+});
 
 function renderSalons(salons) {
   if (!salons.length) { $('salons').innerHTML = '<p class="muted">No salons yet. Create one above.</p>'; return; }
@@ -115,6 +159,7 @@ function renderSalons(salons) {
     <td><span class="pill ${s.status === 'disabled' ? 'disabled' : 'active'}">${s.status === 'disabled' ? 'disabled' : 'active'}</span></td>
     <td style="text-align:right;white-space:nowrap">
       <a href="./?salon=${encodeURIComponent(s.slug)}" target="_blank">open</a>
+      &nbsp;<a href="${ORIGIN}/operator/export?slug=${encodeURIComponent(s.slug)}&op=${encodeURIComponent(token)}" download>Export data</a>
       &nbsp;<button class="btn-ghost" data-act="toggle" data-slug="${esc(s.slug)}" data-status="${s.status === 'disabled' ? 'active' : 'disabled'}">${s.status === 'disabled' ? 'enable' : 'disable'}</button>
       &nbsp;<button class="btn-ghost" data-act="pw" data-slug="${esc(s.slug)}">reset pw</button>
     </td></tr>`).join('');
