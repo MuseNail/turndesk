@@ -121,7 +121,7 @@ function _finishPinLogin(user) {
 export function maybePromptManagerSetup() {
   const au = getActiveUser();
   if (!au || au.role !== 'admin' || au.kind === 'appadmin') return;   // owners/managers only; never the master app-admin
-  if (Object.keys(cfg()).length === 0) return;                        // state not hydrated yet → don't false-prompt an established salon
+  if (!getState().rev) return;                                        // state not hydrated yet (rev bumps on first hydrate/change) → don't false-prompt an established salon before its fd_users load
   if ((cfg().fd_users || []).length > 0) return;                       // already has front-desk users → nothing to bootstrap
   const m = document.getElementById('manager-pin-modal'); if (!m) return;
   document.getElementById('manager-pin-error')?.classList.add('hidden');
