@@ -975,6 +975,14 @@ async function handleOperator(request, env, url, method, path) {
     await registryStub(env).fetch(new Request('https://do/signup/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rec.id, status: 'approved', finalSlug: slug }) }));
     return json({ ok: true, slug });
   }
+  if (path === '/operator/export' && method === 'GET') {
+    const v = validateSlug(url.searchParams.get('slug'));
+    if (!v.ok) return json({ error: v.error }, 400);
+    const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(v.slug));
+    const r = await salonStub.fetch(new Request('https://do/state/snapshot'));
+    const body = await r.text();
+    return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="turndesk-${v.slug}.json"` }) });
+  }
   return json({ error: 'not found' }, 404);
 }
 
