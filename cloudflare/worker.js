@@ -949,6 +949,32 @@ async function handleOperator(request, env, url, method, path) {
     }));
     return json(await r.json().catch(() => ({ ok: r.ok })), r.status);
   }
+  if (path === '/operator/requests' && method === 'GET') {
+    const r = await registryStub(env).fetch(new Request('https://do/registry/signups'));
+    return json(await r.json().catch(() => ({ requests: [] })));
+  }
+  if (path === '/operator/requests/decide' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const g = await registryStub(env).fetch(new Request('https://do/registry/signup-get?id=' + encodeURIComponent(b.id || '')));
+    const rec = (await g.json().catch(() => ({}))).entry;
+    if (!rec) return json({ error: 'request not found' }, 404);
+    if (rec.status !== 'pending') return json({ error: 'already ' + rec.status }, 409);
+    if (b.action === 'reject') {
+      await registryStub(env).fetch(new Request('https://do/signup/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rec.id, status: 'rejected', reason: b.reason || '' }) }));
+      return json({ ok: true, status: 'rejected' });
+    }
+    const v = validateSlug(b.slug || rec.proposedSlug);
+    if (!v.ok) return json({ error: v.error }, 400);
+    let slug = v.slug, n = 2;
+    while (await registryGet(env, slug)) slug = v.slug + '-' + n++;   // uniquify at approval time
+    const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(slug));
+    await salonStub.fetch(new Request('https://do/provision/seed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: rec.business, template: true }) }));
+    await salonStub.fetch(new Request('https://do/provision/owner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record: rec.ownerRecord }) }));
+    const entry = { slug, name: rec.business, status: 'active', ownerEmail: rec.email, plan: '', createdAt: new Date().toISOString() };
+    await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    await registryStub(env).fetch(new Request('https://do/signup/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rec.id, status: 'approved', finalSlug: slug }) }));
+    return json({ ok: true, slug });
+  }
   return json({ error: 'not found' }, 404);
 }
 
@@ -991,6 +1017,28 @@ export class TurnDeskDO {
       const map = await this.state.storage.list({ prefix: 'salon:' });
       return this._authJson({ salons: [...map.values()] });
     }
+    if (url.pathname === '/registry/signups' && request.method === 'GET') {
+      const all = await this.state.storage.list({ prefix: 'signup:' });
+      const arr = []; for (const [, x] of all) arr.push(x);
+      arr.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.createdAt - a.createdAt);
+      const requests = arr.slice(0, 200).map(({ ownerRecord, ...rest }) => rest);   // never ship the credential hash
+      return new Response(JSON.stringify({ requests }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/registry/signup-get' && request.method === 'GET') {
+      const rec = await this.state.storage.get('signup:' + (url.searchParams.get('id') || ''));
+      return new Response(JSON.stringify({ entry: rec || null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/signup/decide' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const rec = await this.state.storage.get('signup:' + (b.id || ''));
+      if (!rec) return new Response('{"error":"not found"}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+      rec.status = b.status === 'approved' ? 'approved' : 'rejected';
+      rec.decidedAt = Date.now();
+      if (b.finalSlug) rec.finalSlug = b.finalSlug;
+      if (b.reason) rec.rejectReason = String(b.reason).slice(0, 200);
+      await this.state.storage.put('signup:' + rec.id, rec);
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     if (url.pathname === '/registry/put' && request.method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
       if (!b.entry || !b.entry.slug) return this._authJson({ error: 'bad entry' }, 400);
@@ -1027,6 +1075,12 @@ export class TurnDeskDO {
     if (url.pathname === '/provision/seed' && request.method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
       return this.provisionSeed(b);
+    }
+    if (url.pathname === '/provision/owner' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (!b.record || !b.record.email || !b.record.hash) return new Response('{"error":"bad record"}', { status: 400, headers: { 'Content-Type': 'application/json' } });
+      await this.state.storage.put('owner:' + String(b.record.email).toLowerCase(), b.record);
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // Current destination for the public review-QR redirect (the Worker's /r route
