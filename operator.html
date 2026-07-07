@@ -71,6 +71,7 @@
 
     <h2 style="margin-top:24px">Pending requests</h2>
     <div id="requests">Loading…</div>
+    <div id="approve-result"></div>
 
     <div class="card">
       <h2>Salons</h2>
@@ -124,7 +125,6 @@ function renderRequests(reqs) {
         <input data-slug-for="${esc(x.id)}" value="${esc(x.proposedSlug)}" style="width:180px">
         <button class="btn-primary" data-approve="${esc(x.id)}">Approve</button>
         <button data-reject="${esc(x.id)}">Reject</button>
-        <span data-link-for="${esc(x.id)}" class="muted"></span>
       </div>
     </div>`).join('');
 }
@@ -132,15 +132,13 @@ document.getElementById('requests').addEventListener('click', async (e) => {
   const ap = e.target.closest('[data-approve]'), rj = e.target.closest('[data-reject]');
   if (ap) {
     const id = ap.getAttribute('data-approve');
+    const biz = ap.closest('.card')?.querySelector('strong')?.textContent || '';
     const slugEl = document.querySelector(`[data-slug-for="${id}"]`);
     const slug = slugEl ? slugEl.value : '';
     ap.disabled = true;
     const r = await api('/operator/requests/decide', { method: 'POST', body: JSON.stringify({ id, action: 'approve', slug }) });
-    if (r.ok) {
-      const link = location.origin.includes('github.io') ? `https://musenail.github.io/turndesk/?salon=${r.body.slug}` : `?salon=${r.body.slug}`;
-      document.querySelector(`[data-link-for="${id}"]`).innerHTML = 'Approved → <code>' + esc(link) + '</code>';
-      refreshRequests(); refresh();
-    } else { ap.disabled = false; alert(r.body.error || 'Approve failed'); }
+    if (r.ok) { showApproved(r.body.slug, biz); refreshRequests(); refresh(); }
+    else { ap.disabled = false; alert(r.body.error || 'Approve failed'); }
   } else if (rj) {
     const id = rj.getAttribute('data-reject');
     if (!confirm('Reject this request?')) return;
@@ -159,6 +157,7 @@ function renderSalons(salons) {
     <td><span class="pill ${s.status === 'disabled' ? 'disabled' : 'active'}">${s.status === 'disabled' ? 'disabled' : 'active'}</span></td>
     <td style="text-align:right;white-space:nowrap">
       <a href="./?salon=${encodeURIComponent(s.slug)}" target="_blank">open</a>
+      &nbsp;<button class="btn-ghost" data-act="copy" data-slug="${esc(s.slug)}">copy link</button>
       &nbsp;<a href="${ORIGIN}/operator/export?slug=${encodeURIComponent(s.slug)}&op=${encodeURIComponent(token)}" download>Export data</a>
       &nbsp;<button class="btn-ghost" data-act="toggle" data-slug="${esc(s.slug)}" data-status="${s.status === 'disabled' ? 'active' : 'disabled'}">${s.status === 'disabled' ? 'enable' : 'disable'}</button>
       &nbsp;<button class="btn-ghost" data-act="pw" data-slug="${esc(s.slug)}">reset pw</button>
@@ -167,6 +166,31 @@ function renderSalons(salons) {
   $('salons').querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', onAction));
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// The salon's shareable URL is always the production Pages URL (what you send owners),
+// regardless of where the operator console itself is running.
+const PUBLIC_BASE = 'https://musenail.github.io/turndesk/';
+const salonLink = slug => PUBLIC_BASE + '?salon=' + encodeURIComponent(slug);
+async function copyLink(slug, btn) {
+  const link = salonLink(slug);
+  try {
+    await navigator.clipboard.writeText(link);
+    if (btn) { const t = btn.textContent; btn.textContent = 'copied ✓'; setTimeout(() => { btn.textContent = t; }, 1500); }
+  } catch { window.prompt('Copy this link:', link); }
+}
+// Persistent approve confirmation — lives in #approve-result (NOT #requests, which the
+// pending-list refresh re-renders), so the link stays put until the next approval.
+function showApproved(slug, biz) {
+  $('approve-result').innerHTML = `<div class="card" style="border-color:#0f6e56;background:#e1f5ee">
+    <div><strong>✓ Approved${biz ? ' — ' + esc(biz) : ''}</strong></div>
+    <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <code style="background:#fff;padding:4px 8px;border-radius:6px;border:1px solid var(--line)">${esc(salonLink(slug))}</code>
+      <button class="btn-primary" data-copy="${esc(slug)}">Copy link</button>
+      <a href="${esc(salonLink(slug))}" target="_blank">open</a>
+    </div>
+    <div class="muted" style="margin-top:6px">Send this link to the owner — they sign in with the password from their request. It stays here until you approve the next one.</div>
+  </div>`;
+}
 
 async function refresh() { const r = await api('/operator/salons'); if (r.ok) renderSalons(r.body.salons || []); }
 
@@ -182,9 +206,12 @@ async function onAction(e) {
     const password = prompt('New password (≥6 chars):'); if (!password || password.length < 6) { alert('Password too short.'); return; }
     const r = await api(`/operator/salons/${slug}/owner`, { method: 'POST', body: JSON.stringify({ email, password }) });
     alert(r.ok ? 'Owner password set.' : ('Failed: ' + (r.body?.error || r.status)));
+  } else if (act === 'copy') {
+    copyLink(slug, e.target);
   }
 }
 
+$('approve-result').addEventListener('click', e => { const c = e.target.closest('[data-copy]'); if (c) copyLink(c.getAttribute('data-copy'), c); });
 $('op-connect').addEventListener('click', connect);
 $('op-token').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
 $('f-create').addEventListener('click', async () => {
