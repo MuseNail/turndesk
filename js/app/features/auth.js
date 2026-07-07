@@ -100,6 +100,7 @@ function _finishPinLogin(user) {
   pinCancel();
   updateLoggedInDisplay();
   window.goTo?.('screen-desk');
+  window.refreshWelcomeBanner?.();
   window.showDashPanel?.('turns');
   showToast(`Welcome, ${getActiveUser().name}`);
   // Cash-drawer reminder: non-Admin staff are prompted to open a drawer when none is open

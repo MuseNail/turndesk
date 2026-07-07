@@ -53,6 +53,16 @@ window.calEventsFor = calendar.getCalEvents;
 window.reportError  = reporter.reportError;   // so any module/inline code can log a silent failure
 window.breadcrumb   = reporter.breadcrumb;
 
+function refreshWelcomeBanner() {
+  const b = document.getElementById('welcome-banner'); if (!b) return;
+  b.classList.toggle('hidden', !!store.getState().config.onboarding_done || !session.getActiveUser());
+}
+window.refreshWelcomeBanner = refreshWelcomeBanner;
+window.dismissWelcome = () => {
+  try { sync.dispatch('config.set', { key: 'onboarding_done', value: true }); } catch (e) {}
+  document.getElementById('welcome-banner')?.classList.add('hidden');
+};
+
 // ── Modal registry ────────────────────────────────
 // Single source of truth for every dismissible modal/overlay + its close fn. Drives BOTH the
 // Escape key (close the first open one) AND closeAllModals() on navigation (so a screen change
@@ -575,6 +585,7 @@ function onStateChange(state, changed) {
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
     // Customers tab.) square-customers.js rebuilds its directory caches on every store change.
   }
+  refreshWelcomeBanner();
   const desk = document.getElementById('screen-desk');
   if (!desk || !desk.classList.contains('active')) return;
   queue.refreshOpenAssignFields?.();   // reflect a tech's synced price into an open Assign & Price modal
