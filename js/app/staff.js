@@ -12,6 +12,7 @@ import * as reporter from './reporter.js';   // automatic error reporting (staff
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
+import { getState } from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
@@ -445,66 +446,36 @@ function renderHistoryHtml() {
   }).join('');
 }
 
-// ── My appointments (Google Calendar, read-only) ──────────────────────────────
-// The tech's upcoming appointments, read straight from Google with a Worker-minted
-// access token (/gcal/token) — plain REST, no gapi. The tech's calendar is found by
-// the same rule the dashboard uses: Google calendar name == staff name
-// (case-insensitive, trimmed). Cached 60s; refreshed when the tab is opened.
+// ── My appointments (app-native, read-only) ───────────────────────────────────
+// The tech's upcoming bookings, read synchronously from the synced DO state
+// (state.appointments) — filtered to booking lines assigned to this tech's staffId.
 let _appts = null, _apptsAt = 0, _apptsLoading = false, _apptsErr = '';
 const APPTS_TTL_MS = 60000, APPTS_DAYS = 7;
-async function _gcalGet(url, token) {
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('google_' + r.status);
-  return r.json();
-}
-async function loadMyAppts(force) {
+function loadMyAppts(force) {
   const meStaff = me();
-  if (_apptsLoading || !meStaff) return;
-  if (!force && _apptsAt && Date.now() - _apptsAt < APPTS_TTL_MS) return;
-  _apptsLoading = true;
-  try {
-    const tr = await fetch(GCAL_PROXY + '/token');
-    if (!tr.ok) { _apptsErr = tr.status === 401 ? 'not_connected' : 'error'; _appts = _appts || []; return; }
-    const token = (await tr.json()).access_token;
-    const cl = await _gcalGet('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=owner&maxResults=100', token);
-    const myName = (meStaff.name || '').trim().toLowerCase();
-    const myCal = (cl.items || []).find(c => (c.summary || '').trim().toLowerCase() === myName);
-    if (!myCal) { _apptsErr = 'nocal'; _appts = []; _apptsAt = Date.now(); return; }
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const end = new Date(start); end.setDate(end.getDate() + APPTS_DAYS + 1);
-    const q = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '150' });
-    const evs = await _gcalGet(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(myCal.id)}/events?${q}`, token);
-    // One row per BOOKING: events on my calendar sharing museGroupId (a party) collapse
-    // into one, labelled by the primary guest — mirrors the dashboard's grid bubbles.
-    const groups = new Map();
-    (evs.items || []).forEach(ev => {
-      if (!ev.start?.dateTime) return;   // skip all-day events
-      const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(ev);
+  if (!meStaff) { _appts = []; _apptsErr = ''; _apptsAt = Date.now(); return; }
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + APPTS_DAYS + 1);
+  const myId = meStaff.id;
+  const out = [];
+  (getState().appointments || []).forEach(a => {
+    if (!a || !a.start || a.noShow) return;
+    const s = new Date(a.start);
+    if (isNaN(s) || s < start || s >= end) return;
+    // Only bookings that include a line assigned to ME.
+    const myLines = (a.guests || []).flatMap(g => g.lines || []).filter(l => l.staffId === myId && l.serviceId);
+    if (!myLines.length) return;
+    const g0 = (a.guests || [])[0] || {};
+    const services = [...new Set(myLines.map(l => svc(l.serviceId)?.label).filter(Boolean))];
+    out.push({
+      startMs: s.getTime(), endMs: new Date(a.end || (s.getTime() + 3600000)).getTime(),
+      name: g0.name || 'Guest', guests: Math.max(0, (a.guests || []).length - 1), services,
+      notes: (a.notes || '').trim(), confirmed: !!a.confirmed, noShow: !!a.noShow,
     });
-    _appts = [...groups.values()].map(evsIn => {
-      const priv = e => e.extendedProperties?.private || {};
-      const first = evsIn[0];
-      const startMs = +new Date(first.start.dateTime);
-      const endMs = +new Date(first.end?.dateTime || (startMs + 3600000));
-      const names = [...new Set(evsIn.map(e => priv(e).museName).filter(Boolean))];
-      const name = priv(first).musePrimaryName || priv(first).museName || (first.summary || '').split(' — ')[0] || 'Guest';
-      // Only the lines booked on MY calendar — a party can span techs.
-      const myLines = evsIn.flatMap(e => { try { return JSON.parse(priv(e).museLines || '[]'); } catch { return []; } })
-        .filter(l => l.calId === myCal.id && l.svcId);
-      const services = [...new Set(myLines.map(l => svc(l.svcId)?.label).filter(Boolean))];
-      if (!services.length) { const t = (first.summary || '').split(' — ')[1]; if (t) services.push(t); }   // non-app event fallback
-      return {
-        startMs, endMs, name, guests: Math.max(0, names.length - 1), services,
-        notes: (first.description || '').trim(),
-        confirmed: evsIn.some(e => priv(e).museConfirmed === '1'),
-        noShow: evsIn.some(e => priv(e).museNoShow === '1'),
-      };
-    }).sort((a, b) => a.startMs - b.startMs);
-    _apptsErr = ''; _apptsAt = Date.now();
-  } catch { _apptsErr = 'error'; _appts = _appts || []; }
-  finally { _apptsLoading = false; if (_view === 'appts' && !priceInputFocused()) render(); }
+  });
+  out.sort((x, y) => x.startMs - y.startMs);
+  _appts = out; _apptsErr = ''; _apptsAt = Date.now();
+  if (_view === 'appts' && !priceInputFocused()) render();
 }
 window.staffApptsRefresh = () => { loadMyAppts(true); showToast('Refreshing…'); };
 
