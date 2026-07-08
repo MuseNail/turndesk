@@ -313,7 +313,7 @@ export function renderTurnsApptStrip() {
   const sub = document.getElementById('turns-appts-sub');
   // Collapse the per-tech entries back to one card per booking for the strip.
   const seen = new Map();
-  turnsUpcomingAppts().forEach(a => { const k = a.startMs + '|' + a.name; if (!seen.has(k)) seen.set(k, { startMs: a.startMs, name: a.name, svc: a.svc, techs: new Set(), calId: a.calId, eventId: a.eventId, notes: a.notes }); if (a.techName) seen.get(k).techs.add(a.techName); });
+  turnsUpcomingAppts().forEach(a => { const k = a.startMs + '|' + a.name; if (!seen.has(k)) seen.set(k, { startMs: a.startMs, name: a.name, svc: a.svc, techs: new Set(), apptId: a.apptId, notes: a.notes }); if (a.techName) seen.get(k).techs.add(a.techName); });
   const cards = [...seen.values()];
   if (sub) sub.textContent = cards.length ? `· ${cards.length} upcoming` : '· nothing upcoming';
   if (!cards.length) { host.innerHTML = `<div class="text-xs text-on-surface-variant py-3 px-1 opacity-70">No upcoming appointments today.</div>`; return; }
@@ -328,7 +328,7 @@ export function renderTurnsApptStrip() {
     const bg = late ? '#ffd9d9' : soon ? '#ffe0b2' : '#ede7f6', fg = late ? '#7a1a1a' : soon ? '#6d3200' : '#42306b';
     const badge = late ? `<span class="text-[9px] font-bold flex-shrink-0" style="color:#b91c1c">${-mins}m late</span>`
                : soon ? `<span class="text-[9px] font-bold flex-shrink-0" style="color:#9a4a00">${mins}m</span>` : '';
-    return `<div class="flex-shrink-0 w-[150px] px-0.5"><div onclick="calEventClick(event,'${_tJs(a.calId)}','${_tJs(a.eventId)}','${_tJs(a.name)}','${_tJs(a.notes || '')}',true)" class="w-full rounded-xl px-2 py-1 text-left text-xs font-body cursor-pointer active:scale-95 transition-transform" style="background:${bg};color:${fg}">
+    return `<div class="flex-shrink-0 w-[150px] px-0.5"><div onclick="calEventClick(event,'${_tJs(a.apptId)}')" class="w-full rounded-xl px-2 py-1 text-left text-xs font-body cursor-pointer active:scale-95 transition-transform" style="background:${bg};color:${fg}">
       <div class="flex items-center gap-1"><span class="font-bold text-[11px] flex-shrink-0">${time}</span><span class="font-semibold text-[11px] truncate" style="flex:1;min-width:0">${_tEsc(a.name)}</span>${badge}</div>
       <div class="text-[10px] leading-tight truncate" style="opacity:.8">${_tEsc(a.svc)} · ${_tEsc(techLbl)}</div>
     </div></div>`;

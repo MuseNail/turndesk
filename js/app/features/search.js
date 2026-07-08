@@ -127,7 +127,7 @@ export function gsGo(kind, a) {
   if (kind === 'gc')    { window.showDashPanel?.('giftcards'); window.showEditGiftCard?.(a); return; }
   if (kind === 'appt')  {
     const hit = window.findTodayApptFor?.('', a);
-    if (hit) window.calEventClick?.({ stopPropagation() {} }, hit.calId, hit.eventId, hit.name, '', true);
+    if (hit) window.calEventClick?.({ stopPropagation() {} }, hit.apptId);
     else { window.showDashPanel?.('calendar'); }
     return;
   }
