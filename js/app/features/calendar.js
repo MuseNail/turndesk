@@ -1089,7 +1089,7 @@ function _phoneQueueMatch(rawPhone, apptStartMs) {
 // leaves it neutral rather than falsely flagging a served name-only booking).
 function _pastRecordMatch(eventIds, rawPhone, apptStartMs) {
   const recs = records();
-  const linked = recs.find(r => r.appointmentId && eventIds.has(String(r.appointmentId)));
+  const linked = recs.find(r => r.appointmentId && eventIds.includes(String(r.appointmentId)));
   if (linked) return linked;
   if (!rawPhone || !isFinite(apptStartMs)) return null;
   const before = 2 * 3600 * 1000, after = 6 * 3600 * 1000;   // up to 2h early … 6h late
