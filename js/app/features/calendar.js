@@ -1,5 +1,5 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
-import { getState } from '../store.js';
+import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
 import { PUSH_PROXY } from '../config.js';
 import { withAuth } from '../apptoken.js';
@@ -16,6 +16,10 @@ const GCAL_PROXY = 'https://turndesk.musenailandspa.workers.dev/gcal';
 const cfg = () => getState().config;
 const queue = () => getState().queue;
 const records = () => getState().records;
+
+// config.staff has no color field — assign a stable per-staff column color by roster index
+// so "color coding by staff" is preserved (mirrors queue.js CATEGORY_PALETTE).
+const STAFF_PALETTE = ['#1a5252','#7b1fa2','#0277bd','#00695c','#e65100','#5c3d8f','#2a7a4f','#7a2a1a','#785a1a','#7a1a5c','#1a5c7a','#455a64'];
 
 // Escapers for untrusted Google/Square data interpolated into innerHTML. _escHtml
 // for HTML-text/attribute context; _escAttrJs for a value placed inside a single-
@@ -56,8 +60,8 @@ let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId
 let _apptSaving = false;
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
-let _calHidden = new Set(JSON.parse(localStorage.getItem('turndesk_turndesk_gcal_hidden') || '[]'));
-let _calOrder = JSON.parse(localStorage.getItem('turndesk_turndesk_gcal_order') || 'null');
+let _calHidden = new Set(JSON.parse(localStorage.getItem('turndesk_cal_staff_hidden') || '[]'));
+let _calOrder = JSON.parse(localStorage.getItem('turndesk_cal_staff_order') || 'null');
 // Off-duty auto-hide (opt-in via config.cal_autohide_offduty): calendars whose matched
 // staff is off/sick/vacation are hidden by default each day. _calOffPeek holds the ones
 // the operator turned on for the CURRENTLY-viewed day; it resets on day navigation.
@@ -102,16 +106,25 @@ export function _gcalApplyGuards(calId, items) {
   return out;
 }
 
-// A calendar's tech is off on the viewed date? Maps Google calendar → staff by NAME
-// (case-insensitive, trimmed), reads the in-app schedule only (off/sick/vacation for
-// _calDate), never Google. No match (incl. Unassigned) or working/unset = not off.
+// The calendar's columns are the salon's active staff + a trailing "Unassigned" column.
+// Column id === staffId (a real config.staff[].id); the Unassigned column id === ''.
+// Colors come from STAFF_PALETTE by roster index so each tech keeps a stable color.
+function buildStaffColumns() {
+  const inactive = new Set(cfg().inactive_staff || []);
+  const cols = (cfg().staff || [])
+    .filter(s => s && s.id && !inactive.has(s.id))
+    .map((s, i) => ({ id: s.id, name: s.name || 'Staff', color: STAFF_PALETTE[i % STAFF_PALETTE.length] }));
+  cols.push({ id: '', name: 'Unassigned', color: '#9ca3af' });
+  return cols;
+}
+// A column's staff is off on the viewed date? Reads the in-app schedule only (off/sick/
+// vacation for _calDate). The Unassigned column (id '') and any unknown id are never "off".
 function calColumnOff(cal) {
-  if (!cal || !cal.name) return false;
-  const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
+  if (!cal || !cal.id) return false;
+  const st = (cfg().staff || []).find(s => s.id === cal.id);
   if (!st) return false;
   const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
   const explicit = sc[dstr]?.[st.id];
-  // '__none__' is a one-off blank that overrides the weekly repeat (mirrors getScheduleStatus).
   const status = explicit === '__none__' ? null
     : (explicit || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null);
   return status === 'off' || status === 'sick' || status === 'vacation';
@@ -149,6 +162,50 @@ export function toggleCalAutoHide(btn) {
   if (document.getElementById('cal-grid')) { calRenderGridPreserveScroll(); renderCalSelectorList(); }
 }
 
+// Every appointment whose start day falls within [fromDate..toDate], indexed by the staff
+// column(s) it touches. The SAME appt object appears under multiple column ids when its
+// guests span techs. Defensive: a line with an unknown/deleted staffId falls to Unassigned.
+function calApptsByColumn(fromDate, toDate) {
+  const from = new Date(fromDate); from.setHours(0, 0, 0, 0);
+  const to = new Date(toDate || fromDate); to.setHours(23, 59, 59, 999);
+  const known = new Set(_calCalendars.map(c => c.id));   // valid column ids (incl. '')
+  const map = {}; _calCalendars.forEach(c => { map[c.id] = []; });
+  (getState().appointments || []).forEach(a => {
+    if (!a || !a.start) return;
+    const s = new Date(a.start);
+    if (isNaN(s) || s < from || s > to) return;
+    const cols = new Set();
+    (a.guests || []).forEach(g => (g.lines || []).forEach(l => {
+      const sid = (l && l.staffId) || '';
+      cols.add(known.has(sid) ? sid : '');   // unknown staff → Unassigned
+    }));
+    if (!cols.size) cols.add('');            // a bare appt with no service lines → Unassigned
+    cols.forEach(sid => { if (map[sid]) map[sid].push(a); });
+  });
+  return map;
+}
+// The (guestName, serviceId, label) rows belonging to ONE column for a booking bubble.
+// Tech column: lines whose staffId === colId. Unassigned column: lines with no/unknown staff.
+function linesForColumn(appt, colId) {
+  const known = new Set(_calCalendars.map(c => c.id));
+  const rows = [];
+  (appt.guests || []).forEach(g => {
+    const fn = ((g.name || '').split(' ')[0] || g.name || '').trim();
+    (g.lines || []).forEach(l => {
+      const sid = (l && l.staffId) || '';
+      const inCol = colId === '' ? !known.has(sid) || sid === '' : sid === colId;
+      if (!inCol) return;
+      const label = cfg().services.find(x => x.id === l.serviceId)?.label || l.serviceId || '';
+      rows.push({ fn, svcId: l.serviceId || '', label });
+    });
+  });
+  return rows;
+}
+// Appt-scoped id (client mint). Deterministic ids (appt-<n>) are used only by the seeder.
+function newApptId() { return 'appt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
+// The queue entry (if any) that checked THIS appointment in.
+function _queueForAppt(apptId) { return apptId ? queue().find(x => String(x.appointmentId) === String(apptId)) || null : null; }
+
 // Returns the loaded events for a calendar (exposed via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
@@ -174,39 +231,23 @@ async function ensureTodayApptEvents(force) {
 // The event source for "today" features (Turns strip, reminders). Triggers a background refresh
 // and returns the freshest today-scoped events; before the first load lands, fall back to
 // _calEvents only when the calendar is showing today, so the common case never regresses.
-function todayApptSource() {
-  ensureTodayApptEvents();
-  if (_todayEventsAt) return _todayEvents;
-  if (new Date().toDateString() === _calDate.toDateString()) return _calEvents;
-  return {};
-}
+function todayApptSource() { const t = new Date(); return calApptsByColumn(t, t); }
 
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
-  const uCal = unassignedCalId();
-  const staff = cfg().staff || [];
-  const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
-  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
-  const groups = new Map();
-  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  const t = new Date(); const dstr = localDateStr(t);
   const out = [];
-  groups.forEach(items => {
-    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
-    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
-    const startMs = new Date(pev.start.dateTime).getTime();
-    // Don't remind for an appointment already handled: no-show, or already checked in
-    // (linked queue entry or a phone match near the appt time). Mirrors apptsForTurns so
-    // a banner never fires for someone already in a chair or flagged a no-show.
-    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;
-    let qm = null;
-    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
-    if (qm) return;
-    const lines = [];
-    items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
-    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ');
-    const techName = [...new Set(lines.map(l => staffForCal(l.calId)?.name).filter(Boolean))].join(', ');
-    out.push({ id: pev.id, name: ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest', startMs, svc, techName });
+  (getState().appointments || []).forEach(a => {
+    if (!a || !a.start || a.noShow) return;
+    const start = new Date(a.start);
+    if (isNaN(start) || localDateStr(start) !== dstr) return;
+    if (_queueForAppt(a.id)) return;   // already checked in
+    const g0 = (a.guests || [])[0] || {};
+    const lines = (a.guests || []).flatMap(g => g.lines || []);
+    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.serviceId)?.label).filter(Boolean))].join(', ');
+    const techName = [...new Set(lines.map(l => (cfg().staff || []).find(s => s.id === l.staffId)?.name).filter(Boolean))].join(', ');
+    out.push({ id: a.id, name: g0.name || 'Guest', startMs: start.getTime(), svc, techName });
   });
   return out;
 }
@@ -222,59 +263,38 @@ const STALE_APPT_DROP_MIN = 60;
 // Cancelled events are deleted upstream so they never appear. Lines with no tech (or
 // on the unassigned calendar) come back as techStaffId:'' / techName:'Unassigned'.
 export function apptsForTurns() {
-  const now = Date.now();
-  const uCal = unassignedCalId();
-  const staff = cfg().staff || [];
-  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
-  const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
-  const groups = new Map();
-  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  const now = Date.now(), dstr = localDateStr(new Date());
   const out = [];
-  groups.forEach(items => {
-    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
-    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
-    const startMs = new Date(pev.start.dateTime).getTime();
-    // Keep LATE appointments (start time already passed) — a running-late customer still hasn't
-    // arrived, so the front desk needs to see them, WITH a "late" flag. They drop off only when
-    // checked in, manually marked no-show, or very-late (see below). `late`/`minsLate` flag them.
+  (getState().appointments || []).forEach(a => {
+    if (!a || !a.start || a.noShow) return;
+    const start = new Date(a.start);
+    if (isNaN(start) || localDateStr(start) !== dstr) return;
+    const startMs = start.getTime();
     const late = startMs < now, minsLate = late ? Math.round((now - startMs) / 60000) : 0;
-    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // manual no-show
-    if (minsLate > STALE_APPT_DROP_MIN) return;   // very late & never checked in → drop (computed live, never written)
-    let qm = null;                                                               // already in the queue → checked in
-    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
-    if (qm) return;
-    const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest';
-    const lines = [];
-    items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
-    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ') || (pev.summary || '').split(' — ')[0] || 'Appointment';
+    if (minsLate > STALE_APPT_DROP_MIN) return;      // very late & never checked in → drop (computed live)
+    if (_queueForAppt(a.id)) return;                 // already checked in
+    const g0 = (a.guests || [])[0] || {};
+    const name = g0.name || 'Guest';
+    const lines = (a.guests || []).flatMap(g => g.lines || []);
+    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.serviceId)?.label).filter(Boolean))].join(', ') || 'Appointment';
     const techs = new Map();   // staffId -> name, distinct assigned techs
-    lines.forEach(l => { const st = staffForCal(l.calId); if (st) techs.set(st.id, st.name); });
-    const eCalId = primary.calId, eEventId = pev.id, eNotes = _apptNotes(pev);
-    if (techs.size === 0) out.push({ startMs, late, minsLate, name, svc, techStaffId: '', techName: 'Unassigned', calId: eCalId, eventId: eEventId, notes: eNotes });
-    else techs.forEach((tn, id) => out.push({ startMs, late, minsLate, name, svc, techStaffId: id, techName: tn, calId: eCalId, eventId: eEventId, notes: eNotes }));
+    lines.forEach(l => { const st = (cfg().staff || []).find(s => s.id === l.staffId); if (st) techs.set(st.id, st.name); });
+    const notes = a.notes || '';
+    if (techs.size === 0) out.push({ startMs, late, minsLate, name, svc, techStaffId: '', techName: 'Unassigned', apptId: a.id, notes });
+    else techs.forEach((tn, id) => out.push({ startMs, late, minsLate, name, svc, techStaffId: id, techName: tn, apptId: a.id, notes }));
   });
-  out.sort((a, b) => a.startMs - b.startMs);
+  out.sort((x, y) => x.startMs - y.startMs);
   return out;
 }
 
 // ── Unassigned-appointments calendar ──────────────
-// A designated calendar holds every appointment/service with no assigned tech.
-// Default = the Google primary calendar (info@musenailandspa.com); overridable
-// in Settings → Google Calendar (synced via config.unassigned_cal_id).
-export function unassignedCalId() {
-  const set = cfg().unassigned_cal_id;
-  if (set && _calCalendars.some(c => c.id === set)) return set;
-  if (_calPrimaryId && _calCalendars.some(c => c.id === _calPrimaryId)) return _calPrimaryId;
-  return _calCalendars[0]?.id || '';
-}
-// The designated unassigned calendar (default = the info@ primary) is shown as
-// "Unassigned" everywhere, never under its raw Google name — appointments parked
-// there have no tech yet. Display-only; storage/sync are unchanged.
+// The Unassigned column id is the empty string (a line with staffId null/'' → no tech yet).
+export function unassignedCalId() { return ''; }
 function calDisplayName(idOrCal) {
   const id = (idOrCal && typeof idOrCal === 'object') ? idOrCal.id : idOrCal;
-  if (id && id === unassignedCalId()) return 'Unassigned';
-  if (idOrCal && typeof idOrCal === 'object') return idOrCal.name;
-  return _calCalendars.find(c => c.id === id)?.name || '';
+  if (id === '' || id == null) return 'Unassigned';
+  if (idOrCal && typeof idOrCal === 'object' && idOrCal.name) return idOrCal.name;
+  return _calCalendars.find(c => c.id === id)?.name || 'Unassigned';
 }
 export function setUnassignedCal(calId) {
   dispatch('config.set', { key: 'unassigned_cal_id', value: calId || '' });
@@ -307,27 +327,17 @@ export function renderTodaysAppointments() {
   const titleEl = document.getElementById('cal-appts-title'), countEl = document.getElementById('cal-appts-count');
   const isToday = new Date().toDateString() === _calDate.toDateString();
   if (titleEl) titleEl.textContent = isToday ? "Today's Appointments" : _calDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-  const uCal = unassignedCalId();
-  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description||'') || ext.museLines !== undefined || cfg().services.some(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())); };
-  const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(ev => { if (!ev.start || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  const dstr = localDateStr(_calDate);
   const rows = [];
-  groups.forEach(items => {
-    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
-    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
-    const startDt = new Date(pev.start.dateTime || pev.start.date);
-    const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary||'').split(' — ')[0] || 'Guest';
-    const confirmed = items.some(it => (it.ev.extendedProperties?.private||{}).museConfirmed === '1');
-    const noShow = items.some(it => (it.ev.extendedProperties?.private||{}).museNoShow === '1');
-    const persons = new Map();
-    items.forEach(({ ev }) => { const pnm = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || name; if (!persons.has(pnm)) persons.set(pnm, _parseApptLines(ev, '')); });
-    let qm = null;
-    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime()); });
-    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, noShow, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
+  (getState().appointments || []).forEach(a => {
+    if (!a || !a.start) return;
+    const startDt = new Date(a.start);
+    if (isNaN(startDt) || localDateStr(startDt) !== dstr) return;
+    const g0 = (a.guests || [])[0] || {};
+    const qm = _queueForAppt(a.id);
+    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, appt: a, name: g0.name || 'Guest', confirmed: !!a.confirmed, noShow: !!a.noShow, qm });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
-  // Upcoming-only filter: hide rows whose time has passed OR that are finished
-  // (Complete / Paid / No-Show). Device-local toggle in the panel header.
   const _now = new Date();
   const shown = _apptsUpcomingOnly
     ? rows.filter(r => r.startDt >= _now && !r.noShow && !['complete','paid','done'].includes(r.qm?.status))
@@ -348,9 +358,9 @@ export function renderTodaysAppointments() {
     const qs = r.qm?.status;
     const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (isToday && r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af', isToday ? 'Unconfirmed' : '']);
     const svcLines = [];
-    r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (calDisplayName(l.calId)||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
+    (r.appt.guests || []).forEach(g => { const fn = ((g.name||'').split(' ')[0]||g.name||'').trim(); (g.lines||[]).forEach(l => { const s = cfg().services.find(x=>x.id===l.serviceId); const tech = (cfg().staff||[]).find(x=>x.id===l.staffId)?.name || 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.serviceId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--on-surface-variant, #41484d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
-    return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--surface-container-lowest, #f5f7f8)">
+    return `<div onclick="calEventClick(event,'${_e(r.appt.id)}')" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--surface-container-lowest, #f5f7f8)">
       <div class="flex items-center gap-1.5" style="line-height:1.2">
         <span style="font-size:11px;font-weight:700;color:#1a5252;flex-shrink:0">${timeStr}</span>
         ${r.confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;font-size:11px;flex-shrink:0">✓</span>':''}
@@ -440,7 +450,17 @@ function _calTryReady() {
     .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
 }
 
-export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); loadGCalScripts(); }
+export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
+// Re-render the calendar when appointments change on ANY device (the DO broadcast lands via
+// sync.js → applyChange → notify). Only touch the DOM when the Calendar panel is showing;
+// the Turns strip re-renders itself off apptsForTurns.
+subscribe((state, op) => {
+  if (op !== 'appt.upsert' && op !== 'appt.delete' && op !== 'hydrate') return;
+  if (document.getElementById('panel-calendar')?.classList.contains('active')) {
+    try { _calEvents = calApptsByColumn(calIsWeek() ? calWeekStart(_calDate) : _calDate, calIsWeek() ? (() => { const e = calWeekStart(_calDate); e.setDate(e.getDate()+6); return e; })() : _calDate); calRenderGridPreserveScroll(); renderTodaysAppointments(); } catch {}
+  }
+  if (document.getElementById('panel-turns')?.classList.contains('active')) { try { window.renderTurnsApptStrip?.(); } catch {} }
+});
 export function calSignIn(silent) {
   // Silent = re-mint from the Worker's stored refresh token (no user action). Interactive = send
   // the owner to Google's consent via the Worker; on return the app reloads and auto-connects.
@@ -519,31 +539,22 @@ export function openCalDatePicker(ev) {
 }
 
 export async function calLoadAndRender(silent) {
-  if (!silent) calSetStatus('Loading calendars…');
   try {
-    const calListResp = await gapi.client.calendar.calendarList.list({ minAccessRole: 'owner' });
-    const items = calListResp.result.items || [];
-    const systemNames = ['contacts','holiday','birthday','other calendar','united states'];
-    _calCalendars = items.filter(c => { const name = (c.summary||'').toLowerCase(); return !systemNames.some(s => name.includes(s)) && c.id !== 'primary'; }).map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor || '#1a5252' }));
-    if (_calCalendars.length === 0) { const p = items.find(c => c.id === 'primary' || c.primary); if (p) _calCalendars = [{ id: p.id, name: 'Primary', color: '#1a5252' }]; }
-    _calPrimaryId = (items.find(c => c.primary) || {}).id || _calPrimaryId;
-    // Day view fetches the viewed day; week view fetches Sun–Sat of the viewed week.
-    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
+    _calCalendars = buildStaffColumns();
+    if (_calCalendars.length <= 1) { applyCalOrder(); }   // only the Unassigned column exists yet
     applyCalOrder();
-    // Keep the prior day's per-cal events on a transient fetch failure instead of blanking the
-    // column — an empty column reads as "no appointments" and the front desk books over real
-    // bookings. Track anyFail so a partial load shows the error pill rather than a healthy green.
-    const prev = _calEvents; _calEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); _calEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
+    // Day view = the viewed day; week view = Sun–Sat of the viewed week. Same _calEvents shape
+    // ({ [colId]: [appt,...] }) the grid engine already consumes.
+    const from = calIsWeek() ? calWeekStart(_calDate) : _calDate;
+    const to = calIsWeek() ? (() => { const e = calWeekStart(_calDate); e.setDate(e.getDate() + 6); return e; })() : _calDate;
     const gbBefore = document.getElementById('cal-scroll'); const savedScroll = gbBefore ? gbBefore.scrollTop : null;
+    _calEvents = calApptsByColumn(from, to);
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
-    renderCalSelectorList(); calUpdateDateInput(); renderGcalCalendarList(); renderTodaysAppointments();
-    if (anyFail) setCalSyncIndicator('error');
+    renderCalSelectorList(); calUpdateDateInput(); renderTodaysAppointments();
   } catch (err) {
-    if (err.status === 401) { localStorage.removeItem('turndesk_turndesk_gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
-    else calSetStatus('Error loading calendar: ' + (err.result?.error?.message || err.message || 'Unknown error'));
+    console.warn('[calendar] render failed:', err);
+    calSetStatus('Error rendering calendar: ' + (err?.message || 'Unknown error'));
   }
 }
 
@@ -555,7 +566,7 @@ export function calRenderGrid() {
   const uCal = unassignedCalId();
   // "Unassigned only" view isolates the unassigned calendar full-width; turning it
   // off falls straight back to the previous calendars + order (nothing persisted).
-  const visible = (_unassignedOnly && uCal && _calCalendars.some(c => c.id === uCal))
+  const visible = (_unassignedOnly && _calCalendars.some(c => c.id === uCal))
     ? _calCalendars.filter(c => c.id === uCal)
     : _calCalendars.filter(c => !calIsHidden(c));
   if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
@@ -594,21 +605,19 @@ export function calRenderGrid() {
   const SVC_GROUPS = [{ids:['fullset','fill','dip'],color:'#7b1fa2'},{ids:['pedicure','kidpedicure'],color:'#0277bd'},{ids:['manicure','polishchange','kidmani'],color:'#00695c'},{ids:['wax'],color:'#e65100'}];
   // Which calendars each booking appears on today → drives the "same appointment
   // on another calendar" link indicator (e.g. assigned tech + unassigned).
-  const groupCals = {};
-  Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(e => { const g = e.extendedProperties?.private?.museGroupId; if (g) (groupCals[g] = groupCals[g] || new Set()).add(cid); }));
-  const calName = cid => calDisplayName(cid) || (cid === uCal ? 'Unassigned' : cid);
+  const groupCals = {};   // (native) no cross-calendar copies — link indicator is disabled
+  const calName = cid => calDisplayName(cid);
   visible.forEach((cal,colIdx) => {
     const events = _calEvents[cal.id] || [], isLast = colIdx === visible.length-1, isFirst = colIdx === 0;
     const off = calColumnOff(cal);   // #3: grey the column for a tech who's off this day
     body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${off ? 'background:#e9ebed;opacity:0.6;' : ''}${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; const h = START_HOUR + Math.floor(s*SLOT_MINS/60), m = (s*SLOT_MINS)%60; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calSlotClick('${cal.id}',${h},${m})"></div>`; }
     if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
-    // Group this column's events into bookings so a party checked in together (or
-    // one guest with several services) renders as ONE bubble. Overlapping same-time
-    // bubbles stacking on top of each other was the "piled-up / unreadable" bug.
-    // Key = shared museGroupId, else the event's own id for a solo appointment.
+    // Native: each appointment is exactly one booking bubble (all its guests/lines live on
+    // the one appt), keyed by the appt id. The lane-clustering below still spreads
+    // same-time bubbles side by side so concurrent appointments don't pile up.
     const bookings = new Map();
-    events.forEach(ev => { if (!ev.start) return; const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!bookings.has(k)) bookings.set(k, []); bookings.get(k).push(ev); });
+    events.forEach(a => { if (!a.start) return; bookings.set(a.id, [a]); });   // one appt = one booking
     const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
     const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     // Lay out bookings: position + height, then assign side-by-side lanes so that
@@ -617,7 +626,7 @@ export function calRenderGrid() {
     const layout = [];
     bookings.forEach(evs => {
       const first = evs[0];
-      const startDt = new Date(first.start.dateTime||first.start.date), endDt = new Date(first.end?.dateTime||first.end?.date||startDt.getTime()+3600000);
+      const startDt = new Date(first.start), endDt = new Date(first.end || (startDt.getTime()+3600000));
       const sMin = startDt.getHours()*60+startDt.getMinutes(), eMin = endDt.getHours()*60+endDt.getMinutes();
       const topMin = sMin - START_HOUR*60, durMin = Math.max(eMin-sMin,15);
       if (topMin < 0 || topMin >= (END_HOUR-START_HOUR)*60) return;
@@ -631,42 +640,25 @@ export function calRenderGrid() {
     layout.forEach(({ evs, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
       try {
       const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-      const gid = first.extendedProperties?.private?.museGroupId || '';
-      const linkedCals = gid && groupCals[gid] ? [...groupCals[gid]].filter(c => c !== cal.id) : [];
-      const linked = linkedCals.length > 0;
+      const gid = '';                       // native: no group link
+      const linkedCals = [];
+      const linked = false;
       const innerW = Math.min(COL_W - 8, maxBubbleW), gap = laneCount > 1 ? 3 : 0;
       const laneW = (innerW - gap*(laneCount-1)) / laneCount;
       const bLeft = 4 + lane*(laneW + gap);
-      const primaryEv = evs.find(e => (e.extendedProperties?.private||{}).musePrimary === '1') || first;
-      const ppriv = primaryEv.extendedProperties?.private || {};
-      const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary||'').split(' — ')[0] || 'Guest';
-      const primaryPhone = ppriv.musePrimaryPhone || _apptPhone(primaryEv);
-      const notes = _apptNotes(first), confirmed = evs.some(e => (e.extendedProperties?.private||{}).museConfirmed === '1'), isPast = startDt < now;
-      const noShow = evs.some(e => (e.extendedProperties?.private||{}).museNoShow === '1');
+      const g0 = (first.guests || [])[0] || {};
+      const primaryName = g0.name || 'Guest';
+      const primaryPhone = g0.phone || '';
+      const notes = first.notes || '', confirmed = !!first.confirmed, isPast = startDt < now;
+      const noShow = !!first.noShow;
       // Appointment-ness + a queue match for the booking. The check-in link is matched
       // against EVERY copy's id (all calendars), so the Paid/Checked-In badge shows on
       // every column — not just the copy the check-in went through. Phone fallback only
       // after that; never a loose name prefix.
-      let isAppt = false, qm = _queueByEventIds(_bookingEventIds(first));
-      for (const ev of evs) {
-        const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
-        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
-        if (!qm) qm = _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime());
-      }
+      let isAppt = true, qm = _queueForAppt(first.id);
+      if (!qm) qm = _phoneQueueMatch((primaryPhone || '').replace(/\D/g,''), startDt.getTime());
       const qs = qm?.status || null;
-      // One row per service in THIS column: "FirstName — Service".
-      const svcRows = [];
-      evs.forEach(ev => {
-        const ext = ev.extendedProperties?.private || {};
-        const person = ext.museName || (ev.summary||'').split(' — ')[0] || '';
-        const fn = (person.split(' ')[0] || person).trim();
-        // In a tech column show only that tech's services; in the unassigned column
-        // show the unassigned (no-tech) services. Keeps each service on one column.
-        const isUcol = cal.id === uCal;
-        const lines = _parseApptLines(ev, cal.id).filter(l => isUcol ? (!l.calId || l.calId === cal.id) : (l.calId === cal.id));
-        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
-        lines.forEach(l => { const s = cfg().services.find(x => x.id === l.svcId); svcRows.push({ fn, label: s?.label || l.svcId || '', svcId: l.svcId || '' }); });
-      });
+      const svcRows = linesForColumn(first, cal.id);
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
       const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
       let bg, border, tc = '#1a1a1a', pastStatus = '';   // status is conveyed by the bubble's color
@@ -680,8 +672,8 @@ export function calRenderGrid() {
       // Past day: resolve the appointment against the records — Completed (showed up) or
       // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
       if (isPastDay && isAppt && !noShow) {
-        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
-        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        const rawP = (primaryPhone || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
         if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; }
         else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
       }
@@ -693,7 +685,7 @@ export function calRenderGrid() {
       // Once the appointment is checked in, show its queue status as a badge on the bubble.
       const qLabel = noShow ? 'No Show' : pastStatus || { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
       const qBadge = qLabel ? `<span style="flex-shrink:0;font-size:7.5px;font-weight:800;color:#fff;background:${border};border-radius:999px;padding:1px 5px;white-space:nowrap">${qLabel}</span>` : '';
-      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
+      body += `<div onclick="calEventClick(event,'${_e(first.id)}')" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
         + (ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(phoneLine)}</div>`:'')
         + (ht>44?svcHtml:'')
@@ -717,17 +709,17 @@ export function calRenderGrid() {
 function calRenderGridPreserveScroll() { const gb = document.getElementById('cal-scroll'); const saved = gb ? gb.scrollTop : null; calRenderGrid(); if (saved !== null) requestAnimationFrame(() => { const n = document.getElementById('cal-scroll'); if (n) n.scrollTop = saved; }); }
 
 // ── Week view grid ─────────────────────────────────
-// 7 day columns (Sun–Sat) with every VISIBLE calendar's bookings merged per day,
-// tinted by each booking's tech (calendar) color — the overview competitors call
-// "week view". One block per booking (museGroupId-deduped; a copy on a tech calendar
-// wins over the unassigned copy for color/click ownership). Manual show/hide applies;
-// the per-day off-duty auto-hide does not (it's a single-day concept). Tap a block →
-// the normal appointment popover; tap a day header or empty space → that day's Day view.
+// 7 day columns (Sun–Sat) with every VISIBLE staff column's bookings merged per day,
+// tinted by each booking's staff color — the overview competitors call "week view".
+// One block per appointment (deduped by appt id; a real staff column wins over the
+// Unassigned column for color/click ownership). Manual show/hide applies; the per-day
+// off-duty auto-hide does not (it's a single-day concept). Tap a block → the normal
+// appointment popover; tap a day header or empty space → that day's Day view.
 function calRenderWeekGrid() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
   const uCal = unassignedCalId();
-  const visible = (_unassignedOnly && uCal && _calCalendars.some(c => c.id === uCal))
+  const visible = (_unassignedOnly && _calCalendars.some(c => c.id === uCal))
     ? _calCalendars.filter(c => c.id === uCal)
     : _calCalendars.filter(c => !_calHidden.has(c.id));
   if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
@@ -754,27 +746,25 @@ function calRenderWeekGrid() {
   // Dedup bookings across visible calendars (a booking is one event per calendar).
   // ownEv = the event copy that lives ON the owning calendar — calEventClick() looks
   // the id up in _calEvents[calId], so the clicked id must belong to that calendar.
-  const seen = new Map();   // bookingKey -> { evs, calId, ownEv }
-  visible.forEach(cal => (_calEvents[cal.id] || []).forEach(ev => {
-    if (!ev.start) return;
-    const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id);
-    let b = seen.get(k);
-    if (!b) { b = { evs: [], calId: cal.id, ownEv: ev }; seen.set(k, b); }
-    b.evs.push(ev);
-    if (b.calId === uCal && cal.id !== uCal) { b.calId = cal.id; b.ownEv = ev; }
+  const seen = new Map();   // apptId -> { evs:[appt], calId (owning col for color) }
+  visible.forEach(cal => (_calEvents[cal.id] || []).forEach(a => {
+    if (!a.start) return;
+    let b = seen.get(a.id);
+    if (!b) { b = { evs: [a], calId: cal.id }; seen.set(a.id, b); }
+    if (b.calId === '' && cal.id !== '') b.calId = cal.id;   // prefer a real staff column for color
   }));
   const byDay = days.map(() => []);
   const dayKeys = days.map(d => localDateStr(d));
-  seen.forEach(({ evs, calId, ownEv }) => {
+  seen.forEach(({ evs, calId }) => {
     const first = evs[0];
-    const startDt = new Date(first.start.dateTime || first.start.date);
-    const endDt = new Date(first.end?.dateTime || first.end?.date || startDt.getTime() + 3600000);
+    const startDt = new Date(first.start);
+    const endDt = new Date(first.end || (startDt.getTime() + 3600000));
     const di = dayKeys.indexOf(localDateStr(startDt));
     if (di < 0) return;
     const sMin = startDt.getHours() * 60 + startDt.getMinutes(), eMin = endDt.getHours() * 60 + endDt.getMinutes();
     const topMin = sMin - START_HOUR * 60, durMin = Math.max(eMin - sMin, 15);
     if (topMin < 0 || topMin >= (END_HOUR - START_HOUR) * 60) return;
-    byDay[di].push({ evs, calId, ownEv, first, startDt, startMin: sMin, endMin: sMin + durMin, top: (topMin / SLOT_MINS) * SLOT_H, ht: (durMin / SLOT_MINS) * SLOT_H });
+    byDay[di].push({ evs, calId, first, startDt, startMin: sMin, endMin: sMin + durMin, top: (topMin / SLOT_MINS) * SLOT_H, ht: (durMin / SLOT_MINS) * SLOT_H });
   });
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
@@ -804,35 +794,30 @@ function calRenderWeekGrid() {
     layout.forEach(b => { if (cluster.length && b.startMin >= clusterEnd) { finalizeCluster(cluster); cluster = []; clusterEnd = -1; } cluster.push(b); clusterEnd = Math.max(clusterEnd, b.endMin); });
     if (cluster.length) finalizeCluster(cluster);
 
-    layout.forEach(({ evs, calId, ownEv, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
+    layout.forEach(({ evs, calId, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
       try {
       const cal = _calCalendars.find(x => x.id === calId);
-      const color = (calId === uCal || !cal) ? '#9ca3af' : cal.color;
+      const color = (calId === '' || !cal) ? '#9ca3af' : cal.color;
       const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const primaryEv = evs.find(e => (e.extendedProperties?.private || {}).musePrimary === '1') || first;
-      const ppriv = primaryEv.extendedProperties?.private || {};
-      const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary || '').split(' — ')[0] || 'Guest';
-      const notes = _apptNotes(first);
-      const confirmed = evs.some(e => (e.extendedProperties?.private || {}).museConfirmed === '1');
-      const noShow = evs.some(e => (e.extendedProperties?.private || {}).museNoShow === '1');
-      const guests = Math.max(0, [...new Set(evs.map(e => (e.extendedProperties?.private || {}).museName).filter(Boolean))].length - 1);
-      let isAppt = false;
-      for (const ev of evs) {
-        const ext = ev.extendedProperties?.private || {}, dsc = ev.description || '', t = ev.summary || '';
-        if (!!ext.musePhone || ext.museLines !== undefined || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(dsc) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase()))) { isAppt = true; break; }
-      }
+      const g0 = (first.guests || [])[0] || {};
+      const primaryName = g0.name || 'Guest';
+      const notes = first.notes || '';
+      const confirmed = !!first.confirmed;
+      const noShow = !!first.noShow;
+      const guests = Math.max(0, (first.guests || []).length - 1);
+      let isAppt = true;
       const gap = laneCount > 1 ? 3 : 0;
       const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
       const bLeft = 4 + lane * (laneW + gap);
       let bg = color + '1f', border = color, tc = '#1a1a1a';
       if (isPastDay && isAppt && !noShow) {
-        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
-        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        const rawP = ((first.guests || [])[0]?.phone || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
         if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
         else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
       }
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
-      body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(calId)}','${_e((ownEv || first).id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
+      body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(first.id)}')" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
         + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
         + `</div>`;
@@ -955,7 +940,7 @@ function applyCalOrder() {
   _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
   _calCalendars = ordered;
 }
-function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('turndesk_turndesk_gcal_order', JSON.stringify(_calOrder)); }
+function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage.setItem('turndesk_cal_staff_order', JSON.stringify(_calOrder)); }
 export function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
@@ -987,7 +972,7 @@ export function calSelectorSave() {
     }
   });
   _calHidden = newHidden; _calOffPeek = newPeek;
-  localStorage.setItem('turndesk_turndesk_gcal_hidden', JSON.stringify([..._calHidden]));
+  localStorage.setItem('turndesk_cal_staff_hidden', JSON.stringify([..._calHidden]));
   _calSelectorDraft = null;
   const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
   renderCalSelectorList(); calRenderGridPreserveScroll();
@@ -1367,24 +1352,28 @@ export function findTodayApptFor(phone, name) {
   const p = String(phone || '').replace(/\D/g, '');
   const nm = String(name || '').trim().toLowerCase();
   if (!p && !nm) return null;
-  const uCal = unassignedCalId();
+  const dstr = localDateStr(new Date());
   let hit = null;
-  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => {
-    if (hit || !ev.start?.dateTime) return;
-    const ext = ev.extendedProperties?.private || {};
-    if (ext.museNoShow === '1') return;
-    const evPhone = _apptPhone(ev).replace(/\D/g, '');
-    const evName = (ext.museName || (ev.summary || '').split(' — ')[0] || '').trim().toLowerCase();
-    if (!((p && evPhone && evPhone === p) || (nm && evName && evName === nm))) return;
-    if (_queueByEventIds(_personEventIds(ev, todayApptSource()))) return;   // that appt (any of its copies) is already checked in
-    const lines = _parseApptLines(ev, cid).map(l => {
-      const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
+  (getState().appointments || []).forEach(a => {
+    if (hit || !a || !a.start || a.noShow) return;
+    const start = new Date(a.start);
+    if (isNaN(start) || localDateStr(start) !== dstr) return;
+    const match = (a.guests || []).some(g => {
+      const gPhone = String(g.phone || '').replace(/\D/g, '');
+      const gName = (g.name || '').trim().toLowerCase();
+      return (p && gPhone && gPhone === p) || (nm && gName && gName === nm);
+    });
+    if (!match) return;
+    if (_queueForAppt(a.id)) return;   // already checked in
+    const lines = (a.guests || []).flatMap(g => g.lines || []).map(l => {
+      const svc = cfg().services.find(s => s.id === l.serviceId)?.label || '';
       if (!svc) return '';
-      const tech = (!l.calId || l.calId === uCal) ? '' : (_calCalendars.find(c => c.id === l.calId)?.name || '');
+      const tech = (cfg().staff || []).find(s => s.id === l.staffId)?.name || '';
       return svc + (tech ? ` with ${tech}` : '');
     }).filter(Boolean);
-    hit = { calId: cid, eventId: ev.id, name: ext.museName || (ev.summary || '').split(' — ')[0] || name, startMs: new Date(ev.start.dateTime).getTime(), summary: lines.join(', ') };
-  }));
+    const g0 = (a.guests || [])[0] || {};
+    hit = { apptId: a.id, name: g0.name || name, startMs: start.getTime(), summary: lines.join(', ') };
+  });
   return hit;
 }
 // Called by the kiosk submitCheckin + desk submitManualAdd before they create entries.
