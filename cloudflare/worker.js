@@ -1576,6 +1576,21 @@ export class TurnDeskDO {
           }
           break;
         }
+        case 'appt.upsert': {
+          // App-native appointment (per-record key, mirrors records). Don't revive a cancelled
+          // appointment, and reject a stale offline copy so it can't clobber a newer edit.
+          const aKey = 'appt:' + payload.appt.id;
+          if (await this.state.storage.get('apptdeletion:' + payload.appt.id)) { stale = true; break; }
+          const prevAppt = await this.state.storage.get(aKey);
+          if (_isStaleWrite(prevAppt, payload.appt)) { stale = true; break; }
+          await this.state.storage.put(aKey, payload.appt);
+          break;
+        }
+        case 'appt.delete': {
+          await this.state.storage.delete('appt:' + payload.id);
+          await this.state.storage.put('apptdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.
@@ -1785,7 +1800,7 @@ export class TurnDeskDO {
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
-    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], deletions: [], customerDeletions: [], audit: [] };
+    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], deletions: [], customerDeletions: [], audit: [], appointments: [], apptDeletions: [] };
     const cfg = await this.state.storage.list({ prefix: 'config:' });
     for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
     const cm = await this.state.storage.list({ prefix: 'cfgmeta:' });
@@ -1800,6 +1815,10 @@ export class TurnDeskDO {
     for (const [, v] of cu) state.customers.push(v);
     const cd = await this.state.storage.list({ prefix: 'custdeletion:' });
     for (const [, v] of cd) state.customerDeletions.push(v);
+    const ap = await this.state.storage.list({ prefix: 'appt:' });
+    for (const [, v] of ap) state.appointments.push(v);
+    const apd = await this.state.storage.list({ prefix: 'apptdeletion:' });
+    for (const [, v] of apd) state.apptDeletions.push(v);
     const d = await this.state.storage.list({ prefix: 'deletion:' });
     for (const [, v] of d) state.deletions.push(v);
     const al = await this.state.storage.list({ prefix: 'audit:' });
@@ -1883,6 +1902,7 @@ export class TurnDeskDO {
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
     for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
     for (const g of (st.giftcards || [])) await this.state.storage.put('giftcard:' + String(g.id), g);
+    for (const a of (st.appointments || [])) await this.state.storage.put('appt:' + String(a.id), a);
     for (const d of (st.deletions || [])) await this.state.storage.put('deletion:' + String(d.id), d);
     await this.state.storage.put('meta:seq', (snap.seq || 0) + 1);
     await this.ensureBackupScheduled();

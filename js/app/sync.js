@@ -195,6 +195,7 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 // op: 'config.set' | 'queue.upsert' | 'queue.assignmentPatch' | 'queue.remove' | 'record.save'
 //   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log' | 'chat.append'
 //   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert' | 'customer.bulkDelete'
+//   | 'appt.upsert' | 'appt.delete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
   // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js
@@ -211,6 +212,8 @@ export function dispatch(op, payload) {
   if (op === 'customer.upsert' && payload && payload.customer) { payload.customer.updatedAt = Date.now(); payload.customer.updatedBy = DEVICE_ID; }
   // Bulk customer import — stamp every customer in the batch (one apply, not one-per-customer).
   if (op === 'customer.bulkUpsert' && payload && Array.isArray(payload.customers)) { const ts = Date.now(); payload.customers.forEach(c => { c.updatedAt = ts; c.updatedBy = DEVICE_ID; }); }
+  // Appointments — stamp so a stale offline copy can't clobber a newer edit (mirrors record.save).
+  if (op === 'appt.upsert' && payload && payload.appt) { payload.appt.updatedAt = Date.now(); payload.appt.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);
