@@ -37,6 +37,8 @@ const state = {
   customers: [],   // synced customer directory entities ({id,firstName,lastName,phone,email,...}); per-record DO keys (customer:<id>), NOT a config blob
   deletions: [],   // array of deleted record ids (strings)
   customerDeletions: [],   // array of deleted customer ids (strings) — tombstones so a stale offline upsert can't revive a deleted customer
+  appointments: [],   // synced app-native appointments (per-record DO keys appt:<id>); one row per booking, guests + per-service staffId inside
+  apptDeletions: [],  // array of deleted appointment ids (strings) — tombstones so a stale offline upsert can't revive a cancelled appt
   audit:     [],   // universal activity log (newest first, capped) — synced via the DO
   seq:       0,
   rev:       0,    // monotonic data-revision counter (bumped on hydrate + each applied change); lets consumers cheaply cache derived results and invalidate when state actually changes (records are mutated in place, so the array ref is not a reliable signal)
@@ -139,6 +141,8 @@ export function hydrate(snap) {
   state.customers = Array.isArray(incoming.customers) ? incoming.customers : [];
   state.deletions = Array.isArray(incoming.deletions) ? incoming.deletions.map(d => String(d.id ?? d)) : [];
   state.customerDeletions = Array.isArray(incoming.customerDeletions) ? incoming.customerDeletions.map(d => String(d.id ?? d)) : [];
+  state.appointments = Array.isArray(incoming.appointments) ? incoming.appointments : [];
+  state.apptDeletions = Array.isArray(incoming.apptDeletions) ? incoming.apptDeletions.map(d => String(d.id ?? d)) : [];
   state.audit     = Array.isArray(incoming.audit) ? incoming.audit : [];
   state.seq       = snap && snap.seq ? snap.seq : 0;
   state.rev++;
@@ -239,6 +243,17 @@ export function applyChange(op, payload, seq) {
       }
       break;
     }
+    case 'appt.upsert':
+      // Don't revive a cancelled appointment (mirrors record.save's deletion guard), and
+      // reject a stale offline copy so it can't clobber a newer edit (mirrors record.save).
+      if (state.apptDeletions.includes(String(payload.appt && payload.appt.id))) return;
+      if (!upsertByIdGuarded(state.appointments, payload.appt)) return;   // stale → keep the newer copy
+      break;
+    case 'appt.delete':
+      // Remove + tombstone (mirrors customer.delete — appointments carry no status field).
+      removeById(state.appointments, payload.id);
+      if (!state.apptDeletions.includes(String(payload.id))) state.apptDeletions.push(String(payload.id));
+      break;
     case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
     case 'chat.append': {
       // Append a single staff-chat message (mirrors the DO's atomic append). Idempotent by
@@ -281,7 +296,9 @@ function saveCache() {
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
       giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
-      customerDeletions: state.customerDeletions, seq: state.seq,
+      customerDeletions: state.customerDeletions,
+      appointments: state.appointments, apptDeletions: state.apptDeletions,
+      seq: state.seq,
     }));
   } catch (e) { /* quota / unavailable — non-fatal */ }
 }
