@@ -1464,10 +1464,10 @@ git commit -m "chore: td-v0.18 — app-native appointments (calendar re-arch Par
 
 - [ ] **Step 5: Ship (owner-gated)**
 
-Do NOT run these without the owner's explicit OK each time:
-- `git push` (GitHub Pages auto-deploys the client on push to `main`).
-- `wrangler deploy` from `cloudflare/` (the Worker changed — appt.* mutation + snapshot). Verify the Cloudflare account = info@musenailandspa.com before deploying.
-- After deploy: on the demo salon confirm cross-device sync of a freshly created appointment, and that the operator export/snapshot includes `appointments`.
+Do NOT run these without the owner's explicit OK each time. **Order matters — deploy the Worker BEFORE pushing the client:**
+1. **`wrangler deploy` from `cloudflare/` FIRST** (the Worker gained the `appt.*` mutation + snapshot). Verify the Cloudflare account = info@musenailandspa.com before deploying. Rationale: the client emits `appt.upsert`/`appt.delete` ops that only the new Worker understands; an OLD client on the NEW Worker is fully safe (it handles all legacy ops), but a NEW client on the OLD Worker would have its appointment writes rejected as `unknown op` — non-corrupting but **lossy** (the appt never persists and vanishes on reload). So the Worker must be live first.
+2. **Then `git push`** (GitHub Pages auto-deploys the client on push to `main`).
+3. After both are live: **run the demo seed** (`node tools/seed-demo.mjs` — Task 7's deferred live run; now the Worker accepts `appt.upsert`), then on the demo salon confirm the day/week calendar renders the seeded appointments, create/edit/cancel propagate cross-device (DO sync), check-in from an appointment creates the linked queue entry, and the operator export/snapshot includes `appointments`.
 
 Consider using the `ship` skill for the release flow (bump/changelog/commit/push-with-OK/optional wrangler-deploy).
 
