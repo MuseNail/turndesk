@@ -870,7 +870,7 @@ tailwind.config = {
             </div>
             <!-- Auth / New appointment -->
             <div id="cal-auth-area">
-              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden btn-primary">
+              <button onclick="calSignIn()" id="cal-signin-btn" style="display:none" class="hidden btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">login</span> Connect Google Calendar
               </button>
             </div>
@@ -911,7 +911,7 @@ tailwind.config = {
             <div id="cal-appts-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1.5"></div>
           </div>
           <!-- Tasks panel -->
-          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border overflow-hidden" style="flex:1 1 0;min-height:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+          <div id="cal-tasks-panel" style="display:none;flex:1 1 0;min-height:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)" class="hidden flex-col rounded-xl border overflow-hidden">
             <div class="flex items-center justify-between px-3 py-2.5 border-b border-surface-container-high">
               <div class="flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-primary" style="font-size:16px">task_alt</span>
@@ -1144,7 +1144,7 @@ tailwind.config = {
 
         <!-- Leaf: Google Calendar -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
+          <div id="gcal-section" style="display:none" class="hidden px-5 py-4 space-y-3">
             <p class="text-sm font-body text-on-surface-variant">Connect Google Calendar to view and create appointments in the Calendar tab.</p>
             <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
             <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full btn-primary">
