@@ -137,6 +137,35 @@ function buildGiftcards() {
   return out;
 }
 
+// A dozen-ish believable app-native appointments: some today (spread across staff, some
+// confirmed), some over the next 3 days, one 2-guest party. Deterministic ids appt-1..N.
+function buildAppointments() {
+  const out = [];
+  const at = (dayOffset, hour, min) => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + dayOffset); d.setHours(hour, min, 0, 0); return d; };
+  const mk = (startD, mins, guests, confirmed) => {
+    const start = startD.toISOString(), end = new Date(startD.getTime() + mins*60000).toISOString();
+    out.push({ id: `appt-${out.length + 1}`, start, end, guests, notes: '', confirmed: !!confirmed, noShow: false, checkedInQueueId: null, createdAt: Date.now() });
+  };
+  const cust = () => { const gn = pick(FIRST), fn = pick(LAST); const area = pick(['909','714','951']); return { name: `${gn} ${fn}`, phone: `(${area}) ${ri(200,999)}-${String(ri(0,9999)).padStart(4,'0')}` }; };
+  const svcId = () => pick(SERVICES).id;
+  const staffId = (i) => STAFF[i % STAFF.length].id;
+  // Today — one per several staff, a couple confirmed, one upcoming this afternoon.
+  [ [10,0,0], [11,30,1], [13,0,2], [14,30,3], [16,0,4], [17,15,5] ].forEach(([h,m,si], k) => {
+    const c = cust(); mk(at(0,h,m), pick([45,60,60,90]), [{ name: c.name, phone: c.phone, lines: [{ serviceId: svcId(), staffId: staffId(si) }] }], k % 2 === 0);
+  });
+  // A 2-guest party today, two different techs.
+  { const a = cust(), b = cust(); mk(at(0,15,0), 60, [
+      { name: a.name, phone: a.phone, lines: [{ serviceId: svcId(), staffId: staffId(1) }] },
+      { name: b.name, phone: b.phone, lines: [{ serviceId: svcId(), staffId: staffId(2) }] },
+    ], true); }
+  // Next 3 days — a few each, some Unassigned (staffId '').
+  for (let d = 1; d <= 3; d++) {
+    const n = ri(2, 4);
+    for (let k = 0; k < n; k++) { const c = cust(); const sid = chance(0.3) ? '' : staffId(d + k); mk(at(d, ri(9,17), pick([0,15,30,45])), pick([45,60,90]), [{ name: c.name, phone: c.phone, lines: [{ serviceId: svcId(), staffId: sid }] }], chance(0.5)); }
+  }
+  return out;
+}
+
 // Closed cash-drawer shifts for the last ~10 business days.
 function buildDrawerHistory(records) {
   const hist = [];
@@ -260,6 +289,11 @@ async function main() {
   // 4) Gift cards
   for (const card of buildGiftcards()) await mutate('giftcard.save', { card });
   console.log('  gift cards ✓');
+
+  // 4b) Appointments (app-native) — a few today + upcoming, one party.
+  const appointments = buildAppointments();
+  await pool(appointments, (a) => mutate('appt.upsert', { appt: a }), CONC);
+  console.log(`  appointments ✓ (${appointments.length})`);
 
   // 5) Cash-drawer history
   await mutate('config.set', { key: 'cash_drawer_history', value: buildDrawerHistory(records) });
