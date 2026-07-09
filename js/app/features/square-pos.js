@@ -702,6 +702,10 @@ export async function reprintTerminalReceipt(recordId) {
 // are persisted onto the ticket on Proceed and committed to the card ledger when it's Paid.
 function renderPayGc() {
   const host = document.getElementById('square-gc-section'); if (!host) return;
+  // Manual (no-terminal) checkout: the split-tender inputs, gift-card picker, and the
+  // "Card on Terminal" breakdown are all charge-flow UI. Hide them — the ticket block shows the
+  // total and the one-tap Mark-paid button carries the amount + chosen tender.
+  if (manualMode()) { host.innerHTML = ''; return; }
   const cards = getState().giftcards || [];
   const lines = _payGc.map(t => {
     const g = cards.find(x => x.id === t.giftcardId);
