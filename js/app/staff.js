@@ -12,7 +12,6 @@ import * as reporter from './reporter.js';   // automatic error reporting (staff
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
-import { getState } from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
@@ -451,14 +450,14 @@ function renderHistoryHtml() {
 // (state.appointments) — filtered to booking lines assigned to this tech's staffId.
 let _appts = null, _apptsAt = 0, _apptsLoading = false, _apptsErr = '';
 const APPTS_TTL_MS = 60000, APPTS_DAYS = 7;
-function loadMyAppts(force) {
+function loadMyAppts() {
   const meStaff = me();
   if (!meStaff) { _appts = []; _apptsErr = ''; _apptsAt = Date.now(); return; }
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + APPTS_DAYS + 1);
   const myId = meStaff.id;
   const out = [];
-  (getState().appointments || []).forEach(a => {
+  (store.getState().appointments || []).forEach(a => {
     if (!a || !a.start || a.noShow) return;
     const s = new Date(a.start);
     if (isNaN(s) || s < start || s >= end) return;
@@ -477,7 +476,7 @@ function loadMyAppts(force) {
   _appts = out; _apptsErr = ''; _apptsAt = Date.now();
   if (_view === 'appts' && !priceInputFocused()) render();
 }
-window.staffApptsRefresh = () => { loadMyAppts(true); showToast('Refreshing…'); };
+window.staffApptsRefresh = () => { loadMyAppts(); showToast('Refreshing…'); };
 
 function renderApptsHtml() {
   loadMyAppts();   // fire-and-forget — re-renders this tab when the load lands

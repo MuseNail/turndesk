@@ -228,11 +228,6 @@ async function ensureTodayApptEvents(force) {
     if (document.getElementById('panel-turns')?.classList.contains('active')) window.renderTurnsApptStrip?.();
   } finally { _todayLoading = false; }
 }
-// The event source for "today" features (Turns strip, reminders). Triggers a background refresh
-// and returns the freshest today-scoped events; before the first load lands, fall back to
-// _calEvents only when the calendar is showing today, so the common case never regresses.
-function todayApptSource() { const t = new Date(); return calApptsByColumn(t, t); }
-
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
@@ -455,8 +450,19 @@ export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); ca
 // sync.js → applyChange → notify). Only touch the DOM when the Calendar panel is showing;
 // the Turns strip re-renders itself off apptsForTurns.
 subscribe((state, op) => {
-  if (op !== 'appt.upsert' && op !== 'appt.delete' && op !== 'hydrate') return;
-  if (document.getElementById('panel-calendar')?.classList.contains('active')) {
+  if (op !== 'appt.upsert' && op !== 'appt.delete' && op !== 'hydrate' && op !== 'config.set') return;
+  const onCal = document.getElementById('panel-calendar')?.classList.contains('active');
+  if (op === 'config.set') {
+    // Staff added/removed/renamed changes the column set — rebuild the grid, but only when it
+    // actually changed so an unrelated config write (a settings toggle) doesn't churn the calendar.
+    if (onCal) {
+      const cur = new Set(_calCalendars.map(c => c.id + ':' + c.name));
+      const next = buildStaffColumns().map(c => c.id + ':' + c.name);
+      if (next.length !== cur.size || next.some(s => !cur.has(s))) { try { calLoadAndRender(true); } catch {} }
+    }
+    return;
+  }
+  if (onCal) {
     try { _calEvents = calApptsByColumn(calIsWeek() ? calWeekStart(_calDate) : _calDate, calIsWeek() ? (() => { const e = calWeekStart(_calDate); e.setDate(e.getDate()+6); return e; })() : _calDate); calRenderGridPreserveScroll(); renderTodaysAppointments(); } catch {}
   }
   if (document.getElementById('panel-turns')?.classList.contains('active')) { try { window.renderTurnsApptStrip?.(); } catch {} }
@@ -541,7 +547,6 @@ export function openCalDatePicker(ev) {
 export async function calLoadAndRender(silent) {
   try {
     _calCalendars = buildStaffColumns();
-    if (_calCalendars.length <= 1) { applyCalOrder(); }   // only the Unassigned column exists yet
     applyCalOrder();
     // Day view = the viewed day; week view = Sun–Sat of the viewed week. Same _calEvents shape
     // ({ [colId]: [appt,...] }) the grid engine already consumes.
@@ -1596,7 +1601,6 @@ export async function saveAppt() {
     guests, notes,
     confirmed: existing ? !!existing.confirmed : false,
     noShow: existing ? !!existing.noShow : false,
-    checkedInQueueId: existing ? (existing.checkedInQueueId || null) : null,
     createdAt: existing ? (existing.createdAt || Date.now()) : Date.now(),
   };
   const prevStaff = new Set(existing ? (existing.guests||[]).flatMap(g => (g.lines||[]).map(l => l.staffId).filter(Boolean)) : []);
