@@ -6,7 +6,7 @@ import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { isAwaitingPrice } from './status.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
-import { chargeOnHelcim, helcimActive, helcimCustomerCode } from './helcim.js';
+import { chargeOnHelcim, helcimActive, helcimCustomerCode, manualMode } from './helcim.js';
 import { drawerTipPayoutCents } from './cashdrawer.js';
 
 const cfg     = () => getState().config;
@@ -26,6 +26,7 @@ let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false,
 // tip payouts are tallied. Cash tips already go straight to the tech, so this only ever logs the
 // CARD tip amount.
 let _payTipFromDrawer = false;
+let _manualTender = 'cash';   // selected tender chip in manual (no-terminal) checkout
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
 const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;                 // the BILL (svc + items + fees − discount); tip NOT included
 const _payTipDollars   = () => Math.max(0, _payTip || 0);
@@ -207,9 +208,16 @@ export function openSquarePOS(entryId) {
   _payTipFromDrawer = !!cfg().cash_drawer;   // default ON when a drawer is open (the common card-tip → cash-payout case)
   renderPayGc();
   // Permission-gated (markPaidDirect): reveal the "record without charging" escape hatch
-  // (for a payment taken outside the app, e.g. keyed manually on the terminal).
+  // (for a payment taken outside the app, e.g. keyed manually on the terminal). Charge mode only.
   const mpBtn = document.getElementById('sq-markpaid-btn');
   if (mpBtn) mpBtn.classList.toggle('hidden', !canDo('markPaidDirect'));
+  // Manual (no-terminal) checkout: reset the tender to Cash, set the one-tap amount, wire the chips.
+  // The charge-mode / manual-mode layout swap itself is CSS-driven (body.proc-manual via syncProcessorClass).
+  _manualTender = 'cash';
+  const amtEl = document.getElementById('sq-markpaid-amt'); if (amtEl) amtEl.textContent = `$${(cents / 100).toFixed(2)}`;
+  _syncManualChips();
+  const sub = document.getElementById('sq-pay-sub');
+  if (sub) sub.textContent = manualMode() ? 'No card terminal set up — record how the customer paid.' : 'Review the ticket, then continue to the terminal to take payment.';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
@@ -254,10 +262,10 @@ export function markPaidNoCharge() {
     () => _markPaidForm(),
     'Continue');
 }
-function _markPaidForm() {
+function _markPaidForm(initMethod) {
   if (!_pendingPay) return;
   const amount = (_pendingPay.cents || 0) / 100;
-  let method = 'card';
+  let method = initMethod || 'card';
   document.getElementById('_markpaid-modal')?.remove();
   const methods = [['card','Card'],['cash','Cash'],['zelle','Zelle'],['gift','Gift'],['other','Other']];
   const m = document.createElement('div');
@@ -268,7 +276,7 @@ function _markPaidForm() {
     <div class="text-base font-headline font-bold text-on-surface mb-0.5">Record as already paid</div>
     <div class="text-xs font-body text-on-surface-variant mb-3">No charge will be sent — this creates the sale record with the tender below.</div>
     <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Method</label>
-    <div class="flex gap-1.5 flex-wrap mb-3" id="_mp-methods">${methods.map(([k,l]) => `<button type="button" data-m="${k}" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all ${k==='card'?'border-primary bg-primary text-on-primary':'border-outline-variant bg-transparent text-on-surface'}">${l}</button>`).join('')}</div>
+    <div class="flex gap-1.5 flex-wrap mb-3" id="_mp-methods">${methods.map(([k,l]) => `<button type="button" data-m="${k}" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all ${k===method?'border-primary bg-primary text-on-primary':'border-outline-variant bg-transparent text-on-surface'}">${l}</button>`).join('')}</div>
     <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Amount</label>
     <input id="_mp-amount" type="text" inputmode="decimal" value="${amount.toFixed(2)}" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-headline focus:border-primary outline-none mb-3">
     <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Reference / txn id (optional)</label>
@@ -291,16 +299,48 @@ function _markPaidForm() {
     _markPaidCommit(method, amt, ref);
   });
 }
+// The tender split a manual/mark-paid records. 'other'/zero → no tender line (the sale still
+// records, just untracked-by-method). Pure so it can be unit-tested; reports read tenders.{cash|zelle|card}.
+export function tendersFor(method, amount) {
+  return (method && method !== 'other' && amount > 0) ? { [method]: amount } : {};
+}
 function _markPaidCommit(method, amount, ref) {
   const ids = (_pendingPay?.ids || []).slice();
   if (!ids.length) return;
-  const tenders = (method && method !== 'other' && amount > 0) ? { [method]: amount } : {};
+  const tenders = tendersFor(method, amount);
   const refIds = ref ? [ref] : [];
   // Finalize FIRST (marks each ticket paid → a quickSale is no longer 'waiting'), THEN close the
   // confirm modal — so closeSquareConfirm's cancelled-quickSale cleanup doesn't drop a paid ticket.
   _finalizeTerminalPaid(ids, tenders, refIds, 0, []);
   closeSquareConfirm(true);
-  window.logAudit?.('Manual paid', `Recorded without charging · ${method}${amount ? ' $' + amount.toFixed(2) : ''}${ref ? ' · ref ' + ref : ''}`);
+  window.logAudit?.('Manual paid', `Marked paid · ${method}${amount ? ' $' + amount.toFixed(2) : ''}${ref ? ' · ref ' + ref : ''}`);
+}
+
+// Manual (no-terminal) checkout: one tap records the full ticket total to the chosen tender chip.
+// Available to every front-desk user — in manual mode it's the only checkout path, so no markPaidDirect gate.
+export function markPaidManual() {
+  if (!_pendingPay) return;
+  _markPaidCommit(_manualTender, (_pendingPay.cents || 0) / 100, '');
+}
+// The tucked-away "Adjust amount / add reference" link in manual mode → the fuller form,
+// pre-selected to the current tender chip (e.g. to log an external terminal's txn id or a partial).
+export function markPaidAdjust() {
+  if (!_pendingPay) return;
+  _markPaidForm(_manualTender);
+}
+// Wire the manual tender chips (Cash / Zelle / Card) once; called from openSquarePOS.
+let _manualChipsWired = false;
+function _syncManualChips() {
+  const wrap = document.getElementById('sq-tender-chips'); if (!wrap) return;
+  wrap.querySelectorAll('button').forEach(b => {
+    const on = b.dataset.m === _manualTender;
+    b.classList.toggle('border-primary', on); b.classList.toggle('bg-primary', on); b.classList.toggle('text-on-primary', on);
+    b.classList.toggle('border-outline-variant', !on); b.classList.toggle('bg-transparent', !on); b.classList.toggle('text-on-surface', !on);
+  });
+  if (!_manualChipsWired) {
+    _manualChipsWired = true;
+    wrap.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { _manualTender = b.dataset.m; _syncManualChips(); }));
+  }
 }
 
 export function proceedSquarePayment() {

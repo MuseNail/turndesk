@@ -250,6 +250,7 @@ async function main() {
   await mutate('config.set', { key: 'turns_order', value: TURNS_ORDER });
   await mutate('config.set', { key: 'inactive_staff', value: [] });
   await mutate('config.set', { key: 'review_url', value: 'https://g.page/lush-nails-demo/review' });
+  await mutate('config.set', { key: 'payment_processor', value: 'none' });   // beta: cash / manual checkout (no in-app terminal)
   console.log('  config ✓');
 
   // 2) Customers (one bulk call)

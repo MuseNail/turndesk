@@ -538,6 +538,12 @@
   .dp-day.dp-rstart, .dp-day.dp-rend { background:var(--primary,#1a5252); color:#fff; border-radius:999px; }
   /* Hide Square-only UI (legacy POS deep-link, etc.) when Helcim is the active card processor. */
   body.proc-helcim .square-only { display: none !important; }
+  /* Manual / no-terminal checkout (processor = "None"): hide the card-terminal controls and reveal
+     the cash / mark-paid layout on the Confirm Payment screen. Driven by syncProcessorClass(). */
+  body.proc-manual .square-only,
+  body.proc-manual .sq-charge-only { display: none !important; }
+  .sq-manual-only { display: none; }
+  body.proc-manual .sq-manual-only { display: block; }
 
   /* ── Reports: performance-by-hour chart ───────────────────────────────── */
   .perf-plot { display:flex; gap:8px; align-items:stretch; }

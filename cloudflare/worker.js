@@ -1767,6 +1767,9 @@ export class TurnDeskDO {
       if ((await this.state.storage.get('config:items'))    == null) await this.state.storage.put('config:items', STARTER_ITEMS);
       if ((await this.state.storage.get('config:fees'))     == null) await this.state.storage.put('config:fees', []);
     }
+    // Beta default: no in-app card terminal → cash / manual checkout, so a new salon can never
+    // accidentally charge the platform's shared card token. Owner flips to Square/Helcim in Settings.
+    if ((await this.state.storage.get('config:payment_processor')) == null) await this.state.storage.put('config:payment_processor', 'none');
     return this._authJson({ ok: true });
   }
 

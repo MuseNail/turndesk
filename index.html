@@ -1085,11 +1085,12 @@ tailwind.config = {
             <div class="text-xs font-body text-on-surface-variant">Drive your Helcim Smart Terminal for card payments. The API token &amp; result webhook are configured on the server.</div>
             <div>
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Active card processor</label>
-              <div class="flex gap-2">
+              <div class="flex gap-2 flex-wrap">
+                <button id="helcim-proc-none" onclick="setPaymentProcessor('none')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">None · cash / manual</button>
                 <button id="helcim-proc-square" onclick="setPaymentProcessor('square')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Square</button>
                 <button id="helcim-proc-helcim" onclick="setPaymentProcessor('helcim')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Helcim</button>
               </div>
-              <div class="text-[11px] text-on-surface-variant mt-1">Which processor the checkout charges cards on. Switch any time — instant fallback.</div>
+              <div class="text-[11px] text-on-surface-variant mt-1"><strong>None</strong> = no in-app card terminal: the front desk marks tickets paid by hand (Cash / Zelle / Card). Pick Square or Helcim once a terminal is connected.</div>
             </div>
             <div>
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Terminal device code</label>
@@ -2123,18 +2124,29 @@ tailwind.config = {
       <button onclick="closeSquareConfirm()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
     </div>
     <div class="flex-1 min-h-0 overflow-y-auto">
-      <p class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to Square to take payment.</p>
+      <p id="sq-pay-sub" class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to the terminal to take payment.</p>
       <div id="square-confirm-body" class="px-5 py-3 space-y-2"></div>
       <div id="square-gc-section" class="px-5"></div>
     </div>
     <div class="px-5 py-4 border-t border-surface-container-high flex flex-col gap-3 flex-shrink-0">
-      <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>
+      <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="sq-charge-only w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>
+      <!-- Manual (cash / no-terminal) checkout: shown when the salon's processor is "None". CSS reveals it via body.proc-manual. Reuses markPaidCommit → a real record with the chosen tender (reports split it by cash/zelle/card). -->
+      <div id="sq-manual-block" class="sq-manual-only">
+        <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1.5">How did they pay?</div>
+        <div class="flex gap-2 mb-3" id="sq-tender-chips">
+          <button type="button" data-m="cash" class="flex-1 py-2.5 rounded-xl border-2 font-body font-semibold text-sm transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">payments</span> Cash</button>
+          <button type="button" data-m="zelle" class="flex-1 py-2.5 rounded-xl border-2 font-body font-semibold text-sm transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">account_balance</span> Zelle</button>
+          <button type="button" data-m="card" class="flex-1 py-2.5 rounded-xl border-2 font-body font-semibold text-sm transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">credit_card</span> Card</button>
+        </div>
+        <button id="sq-markpaid-main" onclick="markPaidManual()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">check_circle</span> Mark paid · <span id="sq-markpaid-amt">$0.00</span></button>
+      </div>
       <div class="flex gap-2">
         <button onclick="closeSquareConfirm()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
         <button id="sq-pos-btn" onclick="proceedSquarePayment()" class="square-only flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Square POS</button>
       </div>
-      <!-- Admin/manager only: record a payment collected outside the app (e.g. keyed manually on the terminal) without charging. Hidden by default; shown for admin/manager in openSquarePOS. Two confirmation steps. -->
-      <button id="sq-markpaid-btn" onclick="markPaidNoCharge()" class="hidden text-xs font-body text-on-surface-variant hover:text-on-surface underline self-center mt-0.5">Already paid — record without charging</button>
+      <!-- Admin/manager only: record a payment collected outside the app without charging. Hidden by default; shown for admin/manager in openSquarePOS. Two confirmation steps. -->
+      <button id="sq-markpaid-btn" onclick="markPaidNoCharge()" class="sq-charge-only hidden text-xs font-body text-on-surface-variant hover:text-on-surface underline self-center mt-0.5">Already paid — record without charging</button>
+      <button id="sq-manual-adjust" onclick="markPaidAdjust()" class="sq-manual-only text-xs font-body text-on-surface-variant hover:text-on-surface underline self-center mt-0.5">Adjust amount / add reference</button>
     </div>
   </div>
 </div>

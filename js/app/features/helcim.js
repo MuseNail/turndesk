@@ -14,9 +14,11 @@ import { isPaidStatus } from './status.js';
 const cfg = () => getState().config;
 export function helcimDeviceCode() { return String(cfg().helcim_device_code || '').trim(); }
 
-// Which processor the checkout charges cards on. Default 'square' until the operator flips it.
-export function activeProcessor() { return cfg().payment_processor === 'helcim' ? 'helcim' : 'square'; }
+// Which processor the checkout charges cards on. 'none' = no in-app terminal (cash / manual
+// checkout) — the default for beta salons, so nobody accidentally charges the shared token.
+export function activeProcessor() { const p = cfg().payment_processor; return p === 'helcim' ? 'helcim' : p === 'none' ? 'none' : 'square'; }
 export function helcimActive() { return activeProcessor() === 'helcim'; }
+export function manualMode() { return activeProcessor() === 'none'; }   // cash / manual — no in-app card terminal
 
 // Resolve a Helcim customerCode from a ticket's name+phone so the contact rides the purchase and
 // the terminal can text/email the receipt. Best-effort — returns null on any failure (never blocks).
@@ -47,20 +49,25 @@ export async function refundOnHelcim(originalTransactionId, amountDollars, opts 
   } catch (e) { try { window.reportError?.('helcim.refund', 'Could not reach the refund service: ' + ((e && e.message) || e), { serious: true }); } catch (x) {} return { ok: false, error: 'Could not reach the refund service.' }; }
 }
 export function setPaymentProcessor(p) {
-  const v = p === 'helcim' ? 'helcim' : 'square';
+  const v = p === 'helcim' ? 'helcim' : p === 'none' ? 'none' : 'square';
   if (v === activeProcessor()) return;
   if (!['admin', 'manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can switch the card processor.'); return; }
-  const ok = confirm(`Switch the card processor to ${v === 'helcim' ? 'HELCIM' : 'SQUARE'}?\n\nThis changes which terminal ALL card charges go to, on every device, immediately. Tickets already paid are not affected.`);
+  const nm = v === 'helcim' ? 'HELCIM' : v === 'none' ? 'NONE — cash / manual (no card terminal)' : 'SQUARE';
+  const ok = confirm(v === 'none'
+    ? 'Set checkout to cash / manual (no card terminal)?\n\nThe front desk marks each ticket paid by hand (Cash / Zelle / Card). Nothing is charged in the app. Turn a processor back on here anytime.'
+    : `Switch the card processor to ${nm}?\n\nThis changes which terminal ALL card charges go to, on every device, immediately. Tickets already paid are not affected.`);
   if (!ok) return;
   dispatch('config.set', { key: 'payment_processor', value: v });
-  showToast(v === 'helcim' ? 'Card processor set to Helcim ✓' : 'Card processor set to Square ✓');
+  showToast(v === 'helcim' ? 'Card processor set to Helcim ✓' : v === 'none' ? 'Checkout set to cash / manual ✓' : 'Card processor set to Square ✓');
   syncProcessorClass(); renderHelcimSettings();
 }
-// Toggle a body class so CSS can hide Square-only UI (the legacy POS deep-link) when Helcim is
-// active. Called on boot, on every store change, and on flip — so it stays accurate cross-device.
+// Toggle body classes so CSS can reshape checkout: hide Square-only UI when Helcim is active, and
+// swap the pay screen to the manual (cash / mark-paid) layout when there's no in-app terminal.
+// Called on boot, on every store change, and on flip — so it stays accurate cross-device.
 export function syncProcessorClass() {
   try {
     document.body.classList.toggle('proc-helcim', helcimActive());
+    document.body.classList.toggle('proc-manual', manualMode());
     const lbl = document.getElementById('reconcile-proc-label');
     if (lbl) lbl.textContent = helcimActive() ? 'Reconcile w/ Helcim' : 'Reconcile w/ Square';
   } catch {}
@@ -137,6 +144,7 @@ export function renderHelcimSettings() {
   const off = 'flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high';
   const sb = document.getElementById('helcim-proc-square'); if (sb) sb.className = active === 'square' ? on : off;
   const hb = document.getElementById('helcim-proc-helcim'); if (hb) hb.className = active === 'helcim' ? on : off;
+  const nb = document.getElementById('helcim-proc-none'); if (nb) nb.className = active === 'none' ? on : off;
   const st = document.getElementById('helcim-conn-status'); if (st && !st.dataset.touched) st.textContent = helcimDeviceCode() ? `Device ${helcimDeviceCode()} saved.` : 'No terminal device code set.';
 }
 export function helcimSaveDevice() {
