@@ -1902,14 +1902,17 @@ export class TurnDeskDO {
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
     for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
     for (const g of (st.giftcards || [])) await this.state.storage.put('giftcard:' + String(g.id), g);
+    for (const c of (st.customers || [])) await this.state.storage.put('customer:' + String(c.id), c);
     for (const a of (st.appointments || [])) await this.state.storage.put('appt:' + String(a.id), a);
     for (const d of (st.deletions || [])) await this.state.storage.put('deletion:' + String(d.id), d);
+    for (const c of (st.customerDeletions || [])) await this.state.storage.put('custdeletion:' + String(c.id), c);
+    for (const a of (st.apptDeletions || [])) await this.state.storage.put('apptdeletion:' + String(a.id), a);
     await this.state.storage.put('meta:seq', (snap.seq || 0) + 1);
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
     for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
-    return { restored: true, key: useKey, counts: { config: Object.keys(st.config||{}).length, queue: (st.queue||[]).length, records: (st.records||[]).length, giftcards: (st.giftcards||[]).length } };
+    return { restored: true, key: useKey, counts: { config: Object.keys(st.config||{}).length, queue: (st.queue||[]).length, records: (st.records||[]).length, giftcards: (st.giftcards||[]).length, customers: (st.customers||[]).length, appointments: (st.appointments||[]).length } };
   }
 
   // Factory reset: wipe ALL state to an empty system, after a safety snapshot to
