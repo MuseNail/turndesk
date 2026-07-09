@@ -1583,13 +1583,14 @@ export function renderPayrollPage() {
     // Per-tech per-period manual overrides (config.payroll_adj): check / deduction / cash can each be
     // hand-set; anything not overridden falls back to the rule (cash defaults to commission−check−deduction).
     const a = _adj[tech.id + ':' + curKey] || {};
+    const aPrev = _adj[tech.id + ':' + prevKey] || {};   // prev-period override, so "vs previous" shows what was actually paid, not just the memorized rule value
     const cChk = a.check != null ? a.check : techCheckAmount(tech, cComm, curKey);
-    const pChk = techCheckAmount(tech, pComm, prevKey);
+    const pChk = aPrev.check != null ? aPrev.check : techCheckAmount(tech, pComm, prevKey);
     const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk);
     const cDed = a.deduction != null ? a.deduction : techCashDeduction(tech, cCashGross);
-    const pDed = techCashDeduction(tech, pCashGross);
+    const pDed = aPrev.deduction != null ? aPrev.deduction : techCashDeduction(tech, pCashGross);
     const cCash = a.cash != null ? a.cash : Math.max(0, cCashGross - cDed);
-    const pCash = Math.max(0, pCashGross - pDed);
+    const pCash = aPrev.cash != null ? aPrev.cash : Math.max(0, pCashGross - pDed);
     return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash, isVar: (tech.checkType || 'variable') === 'variable', adj: a };
   });
   // Lock: keep the LIVE rows for the Lock button; if this period is locked, override the displayed
@@ -1602,6 +1603,16 @@ export function renderPayrollPage() {
     T.forEach(x => { const s = byId[x.tech.id]; if (!s) return;
       x.c = { ...x.c, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.c.refundNotes, daily: s.daily || x.c.daily };
       x.cChk = s.check; x.cDed = s.deduction; x.cCash = s.cash; x.cTotal = s.total;
+    });
+  }
+  // Same for the PREVIOUS period's "Last" columns: a locked prior period shows its frozen
+  // snapshot (what was actually paid), so a later %/check/rule change can't rewrite the comparison.
+  const _plockPrev = (cfg().payroll_locks || {})[prevKey];
+  if (_plockPrev) {
+    const byIdP = {}; (_plockPrev.techs || []).forEach(s => byIdP[s.techId] = s);
+    T.forEach(x => { const s = byIdP[x.tech.id]; if (!s) return;
+      x.p = { ...x.p, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.p.refundNotes, daily: s.daily || x.p.daily };
+      x.pChk = s.check; x.pDed = s.deduction; x.pCash = s.cash; x.pTotal = s.total;
     });
   }
   // Each tech spans 5 columns: This-Billed | This-Comm | Δ | Last-Billed | Last-Comm.
@@ -1876,6 +1887,31 @@ export function payrollComputedRows(offset = _payrollOffset) {
       const s = byId[x.tech.id]; if (!s) return;
       x.c = { ...x.c, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.c.refundNotes, daily: s.daily || x.c.daily };
       x.cChk = s.check; x.cDed = s.deduction; x.cCash = s.cash; x.cTotal = s.total;
+    });
+  }
+  // The "vs previous" comparison must show what was actually PAID last period, so resolve the
+  // previous period the SAME way as the current one: the manual override (payroll_adj) wins over
+  // the memorized rule value (techCheckAmount reads payroll_checks), and a locked previous period's
+  // frozen snapshot wins over both. Previously the prev side used only the memorized rule value.
+  const prevKey = localDateStr(prevPayPeriod(cur).from);
+  T.forEach(x => {
+    const ap = adjAll[x.tech.id + ':' + prevKey] || {};
+    if (ap.check != null || ap.deduction != null || ap.cash != null) {
+      const pComm = _netComm(x.p);
+      const pChk = ap.check != null ? ap.check : techCheckAmount(x.tech, pComm, prevKey);
+      const gross = Math.max(0, pComm - pChk);
+      const pDed = ap.deduction != null ? ap.deduction : techCashDeduction(x.tech, gross);
+      const pCash = ap.cash != null ? ap.cash : Math.max(0, gross - pDed);
+      x.pChk = pChk; x.pDed = pDed; x.pCash = pCash; x.pTotal = pChk + pCash;
+    }
+  });
+  const prevLock = (cfg().payroll_locks || {})[prevKey];
+  if (prevLock) {
+    const byIdP = {}; (prevLock.techs || []).forEach(s => byIdP[s.techId] = s);
+    T.forEach(x => {
+      const s = byIdP[x.tech.id]; if (!s) return;
+      x.p = { ...x.p, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.p.refundNotes, daily: s.daily || x.p.daily };
+      x.pChk = s.check; x.pDed = s.deduction; x.pCash = s.cash; x.pTotal = s.total;
     });
   }
   return { cur, T, curDays, prevDays, locked: !!lock };
