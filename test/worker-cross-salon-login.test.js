@@ -6,7 +6,7 @@
 // See worker.js TurnDeskDO.findLogin + the /registry/index-owner route.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TurnDeskDO } from '../cloudflare/worker.js';
+import worker, { TurnDeskDO } from '../cloudflare/worker.js';
 
 function makeStorage() {
   const m = new Map();
@@ -27,24 +27,27 @@ function makeStorage() {
 }
 
 // Builds a mini multi-DO cluster: one TurnDeskDO per salon slug plus a
-// '__registry__' instance whose env.SALON_DO is a mock namespace that routes
-// idFromName(slug)/get(id) back to the matching salon DO's .fetch — mirroring
-// how the real Worker addresses SALON_DO.
+// '__registry__' instance. A SINGLE mock SALON_DO namespace routes
+// idFromName(slug)/get(id) back to the matching DO's .fetch — including
+// '__registry__' → the registry instance — mirroring how the real Worker
+// addresses SALON_DO. The namespace is returned so the worker's top-level
+// fetch()/_handle() can be exercised end-to-end (it calls registryStub()).
 function makeCluster(slugs, { restoreToken = 'test-restore-token' } = {}) {
   const salonDOs = {};
-  const salonEnv = { RESTORE_TOKEN: restoreToken };
+  const doByName = {};
+  const namespace = {
+    idFromName: (s) => ({ _slug: s }),
+    get: (id) => doByName[id._slug],
+  };
+  const salonEnv = { RESTORE_TOKEN: restoreToken, SALON_DO: namespace };
   for (const slug of slugs) {
     salonDOs[slug] = new TurnDeskDO({ storage: makeStorage() }, salonEnv);
+    doByName[slug] = salonDOs[slug];
   }
-  const registryEnv = {
-    RESTORE_TOKEN: restoreToken,
-    SALON_DO: {
-      idFromName: (s) => ({ _slug: s }),
-      get: (id) => salonDOs[id._slug],
-    },
-  };
+  const registryEnv = { RESTORE_TOKEN: restoreToken, SALON_DO: namespace };
   const registry = new TurnDeskDO({ storage: makeStorage() }, registryEnv);
-  return { salonDOs, registry };
+  doByName['__registry__'] = registry;
+  return { salonDOs, registry, namespace };
 }
 
 async function setOwner(salonDO, { email, password, name = 'Owner', role = 'owner', token = 'test-restore-token' }) {
@@ -177,4 +180,78 @@ test('find-login: rate-limited per IP — repeated attempts eventually slow down
     if (status === 429) { sawThrottle = true; break; }
   }
   assert.ok(sawThrottle, 'rapid repeated find-login attempts from one IP must eventually be throttled');
+});
+
+// ── Security-review fixes (adversarial round) ───────────────────────────────
+
+// CRITICAL fix #2: the worker rebuilds a clean forward (no X-Salon / no ?salon=)
+// so a poisoned header can't reach the registry DO's fetch() → _rememberSlug and
+// corrupt the registry's own meta:slug (which would cross-wire the backup
+// namespace). Exercised end-to-end through the real worker.fetch().
+test('worker.fetch strips X-Salon before forwarding find-login → registry meta:slug never poisoned', async () => {
+  const { salonDOs, registry, namespace } = makeCluster(['lush']);
+  await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
+
+  const env = { SALON_DO: namespace };
+  const res = await worker.fetch(new Request('https://api.turndesk.app/auth/find-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Salon': 'victim', 'CF-Connecting-IP': '203.0.113.9' },
+    body: JSON.stringify({ email: 'owner@lush.com', password: 'correct-horse-1' }),
+  }), env);
+  const body = await res.json();
+  assert.equal(body.ok, true, 'find-login must still work end-to-end through the worker');
+  assert.equal(body.slug, 'lush');
+  assert.equal(await registry.state.storage.get('meta:slug'), undefined,
+    'attacker X-Salon must NOT be persisted into the registry DO (clean forward strips it)');
+});
+
+// CRITICAL fix #1: a CLIENT request may never address a reserved slug — without
+// the guard, X-Salon:'__registry__' on an ordinary route would route at the
+// cross-salon registry DO, where the 1234 fresh-system fallback (empty
+// config:fd_users) could mint a registry admin session.
+test('worker.fetch rejects a client request addressing a reserved slug (__registry__)', async () => {
+  const { namespace } = makeCluster(['lush']);
+  const env = { SALON_DO: namespace };
+  const res = await worker.fetch(new Request('https://api.turndesk.app/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Salon': '__registry__' },
+    body: JSON.stringify({ pin: '1234' }),
+  }), env);
+  assert.equal(res.status, 404, 'addressing the reserved registry slug must 404, not route to it');
+  const body = await res.json().catch(() => ({}));
+  assert.equal(body.token, undefined, 'no session token may ever be minted on the registry DO');
+});
+
+// Same guard covers the other reserved names (admin/operator/api/…), not just the registry.
+test('worker.fetch rejects a client request addressing any other reserved slug (admin)', async () => {
+  const { namespace } = makeCluster(['lush']);
+  const env = { SALON_DO: namespace };
+  const res = await worker.fetch(new Request('https://api.turndesk.app/state/snapshot', {
+    method: 'GET',
+    headers: { 'X-Salon': 'admin' },
+  }), env);
+  assert.equal(res.status, 404, 'reserved slug "admin" must 404');
+});
+
+// IMPORTANT fix: findLogin forwards the real client IP to each salon's /auth/login
+// so the salon's own authfail:<ip> brute-force counter buckets by the attacker's
+// IP, not 'local'. Prove the IP is threaded through by asserting the salon DO
+// stamped authfail:<that-ip> after a wrong-password cross-salon attempt.
+test('find-login forwards the real client IP to the salon brute-force counter', async () => {
+  const { salonDOs, registry, namespace } = makeCluster(['lush']);
+  await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
+
+  const env = { SALON_DO: namespace };
+  await worker.fetch(new Request('https://api.turndesk.app/auth/find-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.7' },
+    body: JSON.stringify({ email: 'owner@lush.com', password: 'wrong-password' }),
+  }), env);
+
+  const byAttacker = await salonDOs.lush.state.storage.get('authfail:198.51.100.7');
+  assert.ok(byAttacker && byAttacker.n >= 1, 'the wrong guess must count against the attacker IP on the salon DO');
+  const byLocal = await salonDOs.lush.state.storage.get('authfail:local');
+  assert.equal(byLocal, undefined, 'the guess must NOT be bucketed under the generic "local" key');
 });

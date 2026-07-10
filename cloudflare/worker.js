@@ -307,6 +307,15 @@ export default {
     // the salon guard + §13 app-auth below (it carries its own operator token).
     if (path.startsWith('/operator/')) return handleOperator(request, env, url, method, path);
 
+    // Reserved slugs (incl. the '__registry__' DO) are never real salons — they're
+    // blocked at salon creation — so a CLIENT request must never be allowed to
+    // address one. Without this, X-Salon:'__registry__' would route ordinary routes
+    // (login, backup-now, …) at the cross-salon registry DO, where the fresh-system
+    // 1234 fallback (its config:fd_users is empty) could mint a registry admin
+    // session and write into any salon's backup namespace. Operator routes are
+    // handled above (their own token), so they're unaffected.
+    if (salonId && RESERVED_SLUGS.has(salonId)) return json({ error: 'not found' }, 404);
+
     // Require an explicit salon slug on every route except the two inherently
     // salon-agnostic public callbacks. Replaces the old silent 'muse' default so
     // a forgotten slug fails loudly instead of cross-wiring to another salon.
@@ -314,7 +323,8 @@ export default {
     // key itself carries the salon (photos are namespaced per salon client-side,
     // and are non-sensitive public branding). PUT/DELETE still require the slug.
     const _isPhotoGet = method === 'GET' && path.startsWith('/photos/');
-    if (!salonId && !_isPhotoGet && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request' && path !== '/auth/find-login') {
+    const _isFindLogin = path === '/auth/find-login' && method === 'POST';
+    if (!salonId && !_isPhotoGet && !_isFindLogin && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
       return json({ error: 'missing salon' }, 400);
     }
 
@@ -431,19 +441,23 @@ export default {
 
     // ── Public self-serve signup request (approval-gated; nothing provisioned yet) ──
     // Forwarded to the reserved __registry__ DO, which validates + rate-limits + stores
-    // the pending request. Forwarding the original request preserves CF-Connecting-IP.
+    // the pending request. The forward is REBUILT clean (no X-Salon header, no ?salon=
+    // query) so the registry DO's fetch() can't be tricked into _rememberSlug()-ing an
+    // attacker-supplied slug into the registry's own meta:slug. CF-Connecting-IP is
+    // carried through for the DO's per-IP rate limit.
     if (path === '/signup/request' && method === 'POST') {
-      const r = await registryStub(env).fetch(request);
+      const r = await registryStub(env).fetch(await cleanRegistryRequest(request, '/signup/request'));
       const body = await r.text();
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
     // ── Cross-salon email login (adaptive sign-in, Part B) ──────────────────────
     // Salon-agnostic: the ONE login route that doesn't require ?salon=/X-Salon.
-    // Forwarded to the reserved registry DO, which looks up the owner's salon(s)
-    // by email and tries the password against each salon's own PBKDF2 hash.
+    // Forwarded (rebuilt clean, same reasoning as /signup/request) to the reserved
+    // registry DO, which looks up the owner's salon(s) by email and tries the
+    // password against each salon's own PBKDF2 hash.
     if (path === '/auth/find-login' && method === 'POST') {
-      const r = await registryStub(env).fetch(request);
+      const r = await registryStub(env).fetch(await cleanRegistryRequest(request, '/auth/find-login'));
       const body = await r.text();
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
@@ -884,6 +898,18 @@ function validateSlug(slug) {
   return { ok: true, slug: s };
 }
 function registryStub(env) { return env.SALON_DO.get(env.SALON_DO.idFromName(REGISTRY_NAME)); }
+// Rebuild a public request into a clean POST to the registry DO carrying ONLY the
+// body + CF-Connecting-IP — no X-Salon header and no ?salon= query. This prevents
+// the registry DO's fetch() from reading an attacker-supplied slug and persisting
+// it via _rememberSlug (which would corrupt the registry's own meta:slug and, in
+// turn, the backup namespace it hands to alarm()). The path is fixed by the caller.
+async function cleanRegistryRequest(request, path) {
+  const ip   = request.headers.get('CF-Connecting-IP') || '';
+  const body = await request.text();
+  const headers = { 'Content-Type': 'application/json' };
+  if (ip) headers['CF-Connecting-IP'] = ip;
+  return new Request('https://do' + path, { method: 'POST', headers, body });
+}
 async function registryGet(env, slug) {
   try {
     const r = await registryStub(env).fetch(new Request('https://do/registry/get?slug=' + encodeURIComponent(slug)));
@@ -1877,11 +1903,17 @@ export class TurnDeskDO {
 
     const rec   = await this.state.storage.get('owneremail:' + email);
     const slugs = Array.isArray(rec && rec.slugs) ? rec.slugs : [];
+    // Forward the REAL client IP to each salon's /auth/login so its own
+    // authfail:<ip> brute-force counter buckets the guess by the attacker's IP —
+    // not by 'local', which would let cross-salon guesses dodge the per-IP
+    // slow-down entirely. (authLogin reads CF-Connecting-IP for that key.)
+    const loginHeaders = { 'Content-Type': 'application/json' };
+    if (ip && ip !== 'local') loginHeaders['CF-Connecting-IP'] = ip;
     for (const slug of slugs) {
       try {
         const stub = this.env.SALON_DO.get(this.env.SALON_DO.idFromName(slug));
         const r = await stub.fetch(new Request('https://do/auth/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: loginHeaders,
           body: JSON.stringify({ email, password }),
         }));
         const j = await r.json().catch(() => ({}));
