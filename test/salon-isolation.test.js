@@ -59,6 +59,33 @@ test('migration carries the legacy dead-letter into that salon Data Recovery', (
   assert.ok(JSON.parse(localStorage.getItem('turndesk_failed_ops:krystal') || '[]').some(x => x.mutationId === 'f1'));
 });
 
+test('migration DROPS legacy audit.log ops silently — they never show as "failed" (only breadcrumbs, no recovery value)', () => {
+  reset();
+  localStorage.setItem('td_salon', 'krystal');
+  localStorage.setItem('turndesk_outbox', JSON.stringify([
+    { type: 'mutate', op: 'audit.log',  payload: { event: { id: 'a1' } }, mutationId: 'm-audit', device: 'devA' },
+    { type: 'mutate', op: 'record.save', payload: { record: { id: 'r1' } }, mutationId: 'm-rec', device: 'devA' },
+  ]));
+  migrateLegacySalonStorage();
+  const dr = JSON.parse(localStorage.getItem('turndesk_failed_ops:krystal') || '[]');
+  assert.equal(dr.length, 1, 'only the record.save is quarantined — the audit.log is dropped');
+  assert.equal(dr[0].op, 'record.save');
+  assert.ok(!dr.some(x => x.op === 'audit.log'), 'no audit.log breadcrumb ever surfaces in Data Recovery');
+});
+
+test('migration also drops audit.log from a carried-forward legacy dead-letter', () => {
+  reset();
+  localStorage.setItem('td_salon', 'krystal');
+  localStorage.setItem('turndesk_failed_ops', JSON.stringify([
+    { at: 'x', error: 'old', op: 'audit.log',  mutationId: 'f-audit' },
+    { at: 'x', error: 'old', op: 'record.save', mutationId: 'f-rec' },
+  ]));
+  migrateLegacySalonStorage();
+  const dr = JSON.parse(localStorage.getItem('turndesk_failed_ops:krystal') || '[]');
+  assert.ok(dr.some(x => x.mutationId === 'f-rec'), 'the real failed write is preserved');
+  assert.ok(!dr.some(x => x.op === 'audit.log'), 'audit.log breadcrumb dropped');
+});
+
 test('migration is idempotent — a second run adds nothing', () => {
   reset();
   localStorage.setItem('td_salon', 'krystal');

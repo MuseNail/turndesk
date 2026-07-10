@@ -88,8 +88,14 @@ export function migrateLegacySalonStorage() {
     let legacyFailed = [], legacyOutbox = [];
     try { legacyFailed = JSON.parse(localStorage.getItem('turndesk_failed_ops') || '[]'); } catch {}
     try { legacyOutbox = JSON.parse(localStorage.getItem('turndesk_outbox') || '[]'); } catch {}
+    // audit.log ops are non-critical activity breadcrumbs (append-only, capped) with no recovery
+    // value — dropping a few is explicitly fine. Never quarantine them, so a brand-new salon's
+    // one-time upgrade across the scoping change doesn't show a scary "N failed" for pure log noise.
+    const worthKeeping = m => m && m.op !== 'audit.log';
+    legacyFailed = (Array.isArray(legacyFailed) ? legacyFailed : []).filter(worthKeeping);
+    legacyOutbox = (Array.isArray(legacyOutbox) ? legacyOutbox : []).filter(worthKeeping);
     if ((legacyFailed.length || legacyOutbox.length)) {
-      const quarantined = (Array.isArray(legacyOutbox) ? legacyOutbox : []).map(m => ({
+      const quarantined = legacyOutbox.map(m => ({
         at: new Date().toISOString(),
         error: 'unattributed pre-scoping write — verify the salon before recovering',
         op: m && m.op, payload: m && m.payload, mutationId: m && m.mutationId, device: m && m.device,
@@ -97,7 +103,7 @@ export function migrateLegacySalonStorage() {
       const k = scopedKey('turndesk_failed_ops');
       let cur = []; try { cur = JSON.parse(localStorage.getItem(k) || '[]'); } catch {}
       // No cap here: a one-time preserve must not drop a real un-synced write.
-      localStorage.setItem(k, JSON.stringify([...cur, ...(Array.isArray(legacyFailed) ? legacyFailed : []), ...quarantined]));
+      localStorage.setItem(k, JSON.stringify([...cur, ...legacyFailed, ...quarantined]));
     }
     localStorage.removeItem('turndesk_failed_ops');
     localStorage.removeItem('turndesk_outbox');
