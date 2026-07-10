@@ -536,7 +536,31 @@ function checkSquarePending() {
 }
 
 // ── Store subscription → re-render the active panel on (remote) changes ───────
+// Big offline banner (#offline-banner). Only "internet is off" — NOT "sign in needed"
+// (authNeeded is a credential problem, not a network one; the pill handles that). Debounced
+// so it never flashes during the initial connect or a 1-second wifi blip, but hidden the
+// instant the connection returns.
+let _offlineBannerTimer = null;
+function updateOfflineBanner(state) {
+  const banner = document.getElementById('offline-banner');
+  if (!banner) return;
+  const offline = !state.connected && !state.authNeeded;
+  if (!offline) {
+    if (_offlineBannerTimer) { clearTimeout(_offlineBannerTimer); _offlineBannerTimer = null; }
+    banner.classList.add('hidden');
+    return;
+  }
+  if (banner.classList.contains('hidden') && !_offlineBannerTimer) {
+    _offlineBannerTimer = setTimeout(() => {
+      _offlineBannerTimer = null;
+      const s = store.getState();
+      if (!s.connected && !s.authNeeded) banner.classList.remove('hidden');   // still offline after the grace window
+    }, 3000);
+  }
+}
+
 function updateSyncIndicator(state) {
+  updateOfflineBanner(state);
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
   const pill = dot.parentElement;

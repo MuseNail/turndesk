@@ -6,7 +6,7 @@
 // outbox replays on reconnect and the DO dedupes by mutationId.
 
 import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache } from './store.js';
-import { withAuth } from './apptoken.js';
+import { withAuth, salonSlug, scopedKey } from './apptoken.js';
 
 const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
 // When served from localhost (a static server in front of `wrangler dev`), talk to
@@ -31,7 +31,7 @@ let _outbox = loadOutbox();
 
 function loadOutbox() {
   let arr = [];
-  try { arr = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; }
+  try { arr = JSON.parse(localStorage.getItem(scopedKey(OUTBOX_KEY)) || '[]'); } catch { return []; }
   // Self-heal a flooded outbox: a pre-v4.26 bulk customer import enqueued one customer.upsert per
   // customer, which freezes the tab when replayed one-by-one (each replay = a full-state cache write
   // + re-render). Coalesce a large run of them into chunked customer.bulkUpsert messages (latest per
@@ -48,12 +48,12 @@ function loadOutbox() {
       bulk.push({ type: 'mutate', op: 'customer.bulkUpsert', payload: { customers: list.slice(i, i + 200) }, mutationId: DEVICE_ID + '-coalesce-' + list.length + '-' + i, device: DEVICE_ID });
     }
     arr = [...others, ...bulk];
-    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr)); } catch {}
+    try { localStorage.setItem(scopedKey(OUTBOX_KEY), JSON.stringify(arr)); } catch {}
   }
   return arr;
 }
 function saveOutbox() {
-  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox)); } catch {}
+  try { localStorage.setItem(scopedKey(OUTBOX_KEY), JSON.stringify(_outbox)); } catch {}
   setConnection(_connected, _outbox.length);
 }
 function enqueue(msg)        { _outbox.push(msg); saveOutbox(); }
@@ -65,9 +65,10 @@ function deadLetter(id, error) {
   const i = _outbox.findIndex(m => m.mutationId === id);
   const msg = i >= 0 ? _outbox[i] : null;
   try {
-    const log = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]');
+    const fk = scopedKey(FAILED_KEY);
+    const log = JSON.parse(localStorage.getItem(fk) || '[]');
     log.push({ at: new Date().toISOString(), error: String(error || 'rejected'), op: msg?.op, payload: msg?.payload, mutationId: id, device: DEVICE_ID });
-    localStorage.setItem(FAILED_KEY, JSON.stringify(log.slice(-200)));   // keep the last 200
+    localStorage.setItem(fk, JSON.stringify(log.slice(-200)));   // keep the last 200
   } catch {}
   if (i >= 0) { _outbox.splice(i, 1); saveOutbox(); }
   // Make a rejected write VISIBLE — it's recoverable in Settings → Data Recovery, not silently dropped.
@@ -75,13 +76,22 @@ function deadLetter(id, error) {
   // …and log it to Diagnostics + alert the owner: a rejected write is data-loss-adjacent.
   try { window.reportError?.('sync.rejected-write', (msg?.op || 'write') + ' rejected: ' + String(error || 'rejected'), { serious: true }); } catch (e) {}
 }
-export function failedOps() { try { return JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); } catch { return []; } }
+export function failedOps() { try { return JSON.parse(localStorage.getItem(scopedKey(FAILED_KEY)) || '[]'); } catch { return []; } }
 export function outboxPending() { return _outbox.slice(); }
 export function clearFailedOp(mutationId) {
   try {
-    const log = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]').filter(x => x.mutationId !== mutationId);
-    localStorage.setItem(FAILED_KEY, JSON.stringify(log));
+    const fk = scopedKey(FAILED_KEY);
+    const log = JSON.parse(localStorage.getItem(fk) || '[]').filter(x => x.mutationId !== mutationId);
+    localStorage.setItem(fk, JSON.stringify(log));
   } catch {}
+}
+
+// A queued write carries the salon it was made for (dispatch stamps `salon`). It must
+// NEVER be sent to a different salon than the one it belongs to — that would be a
+// cross-salon corruption. Un-stamped items (pre-stamp; only ever in their own salon's
+// scoped bucket) pass through. This is the belt on top of the per-salon outbox buckets.
+export function isForeignWrite(msg, currentSalon) {
+  return !!(msg && msg.salon && msg.salon !== currentSalon);
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -184,12 +194,18 @@ function handle(msg) {
   if (msg.type === 'helcim_result') { try { window.onHelcimResult?.(msg); } catch {} return; }
 }
 
-function replayOutbox() { for (const msg of _outbox) send(msg); } // DO dedupes by mutationId
+function replayOutbox() {                                    // DO dedupes by mutationId
+  const cur = salonSlug();
+  for (const msg of _outbox.slice()) {                       // copy: deadLetter mutates _outbox
+    if (isForeignWrite(msg, cur)) { deadLetter(msg.mutationId, 'blocked cross-salon write (belongs to ' + msg.salon + ', device is on ' + (cur || 'none') + ')'); continue; }
+    send(msg);
+  }
+}
 // A fresh snapshot REPLACES local state — which would drop any optimistic write that the
 // server hasn't confirmed yet (e.g. a just-now check-in), making it look like the customer
 // vanished. Re-apply the still-pending outbox ops on top of the snapshot so in-flight writes
 // survive; the server will dedupe them by mutationId when replayOutbox re-sends.
-function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op, msg.payload); } catch {} } }
+function reapplyOutbox() { const cur = salonSlug(); for (const msg of _outbox) { if (isForeignWrite(msg, cur)) continue; try { applyChange(msg.op, msg.payload); } catch {} } }
 
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'queue.upsert' | 'queue.assignmentPatch' | 'queue.remove' | 'record.save'
@@ -215,7 +231,9 @@ export function dispatch(op, payload) {
   // Appointments — stamp so a stale offline copy can't clobber a newer edit (mirrors record.save).
   if (op === 'appt.upsert' && payload && payload.appt) { payload.appt.updatedAt = Date.now(); payload.appt.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
-  const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
+  // Stamp the salon this write belongs to, so a replay can never send it to another salon
+  // (isForeignWrite guard) — the per-write half of the cross-salon isolation.
+  const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID, salon: salonSlug() };
   enqueue(msg);
   if (!send(msg)) httpMutate(msg);                           // WS down → HTTP fallback (idempotent)
 }

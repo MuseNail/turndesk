@@ -20,7 +20,7 @@ const AUTH_ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.
   : PROD_ORIGIN;
 
 function readSession() {
-  try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(scopedKey(KEY)) || 'null'); } catch { return null; }
 }
 
 export function getAppToken() {
@@ -32,7 +32,7 @@ export function getSessionUser() {
   return (s && s.user) || null;
 }
 export function clearSession() {
-  try { localStorage.removeItem(KEY); } catch {}
+  try { localStorage.removeItem(scopedKey(KEY)); } catch {}
 }
 
 // ── Salon (tenant) slug ───────────────────────────────────────────────────────
@@ -58,6 +58,53 @@ export function urlSalonSlug() {
   try { return new URLSearchParams(location.search).get('salon') || ''; } catch { return ''; }
 }
 
+// ── Per-salon storage isolation ───────────────────────────────────────────────
+// TurnDesk runs many salons on one origin, so the browser's localStorage is shared
+// across all of them. Everything that holds a salon's DATA or LOGIN must be keyed by
+// the salon slug, or a device used for one salon shows another's cached data + login
+// on its link (the cross-salon bleed bug). scopedKey() is the one place that builds
+// those keys. `:none` when no salon is known — a bucket that never collides with the
+// old unscoped key, so migration can tell legacy data apart.
+export function scopedKey(base) {
+  return base + ':' + (salonSlug() || 'none');
+}
+
+// One-time migration off the old single (unscoped) keys. Runs at module load (before
+// anything reads the scoped keys) and is idempotent — it removes the legacy keys, so a
+// second run is a no-op. Data-safety rules: (1) the cached state + session are DELETED,
+// never copied to the current salon's key — copying is exactly how one salon's data/token
+// would bleed into another. No data lost: the server re-sends the snapshot and the user
+// re-enters their PIN once. (2) Legacy pending outbox writes predate the salon stamp, so
+// we can't prove which salon they belong to — they are NEVER auto-replayed (that could
+// write one salon's change into another). They're preserved in that salon's Data Recovery
+// for a deliberate look. (3) This waits until a salon is known so those items land in a
+// bucket the owner will actually see; on a bare no-salon load it defers (the legacy keys
+// are never auto-replayed anyway — loadOutbox reads the scoped key).
+export function migrateLegacySalonStorage() {
+  try {
+    localStorage.removeItem('turndesk_state_cache');   // safe to drop — server re-syncs
+    localStorage.removeItem('turndesk_session');        // safe to drop — re-PIN once
+    if (!salonSlug()) return;                           // no salon yet → defer outbox/dead-letter
+    let legacyFailed = [], legacyOutbox = [];
+    try { legacyFailed = JSON.parse(localStorage.getItem('turndesk_failed_ops') || '[]'); } catch {}
+    try { legacyOutbox = JSON.parse(localStorage.getItem('turndesk_outbox') || '[]'); } catch {}
+    if ((legacyFailed.length || legacyOutbox.length)) {
+      const quarantined = (Array.isArray(legacyOutbox) ? legacyOutbox : []).map(m => ({
+        at: new Date().toISOString(),
+        error: 'unattributed pre-scoping write — verify the salon before recovering',
+        op: m && m.op, payload: m && m.payload, mutationId: m && m.mutationId, device: m && m.device,
+      }));
+      const k = scopedKey('turndesk_failed_ops');
+      let cur = []; try { cur = JSON.parse(localStorage.getItem(k) || '[]'); } catch {}
+      // No cap here: a one-time preserve must not drop a real un-synced write.
+      localStorage.setItem(k, JSON.stringify([...cur, ...(Array.isArray(legacyFailed) ? legacyFailed : []), ...quarantined]));
+    }
+    localStorage.removeItem('turndesk_failed_ops');
+    localStorage.removeItem('turndesk_outbox');
+  } catch {}
+}
+try { migrateLegacySalonStorage(); } catch {}
+
 // ── Cross-salon login (no salon known yet — bare/general link) ────────────────
 // The email/password could belong to any salon; the Worker's registry DO looks up
 // which one and mints a session scoped to it. NEVER sends ?salon= — not knowing
@@ -75,8 +122,8 @@ export async function serverFindLogin({ email, password } = {}) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) return { ok: false, error: j.error || 'bad_credentials', retryInSec: j.retryInSec };
     try {
-      localStorage.setItem(SALON_KEY, j.slug);
-      localStorage.setItem(KEY, JSON.stringify({ token: j.token, user: j.user, expires: j.expires }));
+      localStorage.setItem(SALON_KEY, j.slug);   // claim the salon FIRST so scopedKey below buckets the session under it
+      localStorage.setItem(scopedKey(KEY), JSON.stringify({ token: j.token, user: j.user, expires: j.expires }));
     } catch {}
     return { ok: true, slug: j.slug, user: j.user };
   } catch {
@@ -106,7 +153,7 @@ export async function serverLogin({ pin, email, password, userId, kind, device }
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return { ok: false, error: j.error || 'bad_pin', retryInSec: j.retryInSec };
-    try { localStorage.setItem(KEY, JSON.stringify({ token: j.token, user: j.user, expires: j.expires })); } catch {}
+    try { localStorage.setItem(scopedKey(KEY), JSON.stringify({ token: j.token, user: j.user, expires: j.expires })); } catch {}
     return { ok: true, user: j.user };
   } catch {
     return { ok: false, error: 'offline' };

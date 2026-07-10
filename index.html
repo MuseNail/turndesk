@@ -68,6 +68,13 @@ tailwind.config = {
 </head>
 <body class="bg-surface text-on-surface select-none">
 
+<!-- Impossible-to-miss offline banner — shown by updateSyncIndicator on a sustained outage
+     (debounced so it never flashes on the initial connect or a 1-second blip). -->
+<div id="offline-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#c0392b;color:#fff;text-align:center;font-weight:700;font-size:14px;line-height:1.35;padding:10px 16px;box-shadow:0 2px 10px rgba(0,0,0,.28)">
+  <span class="material-symbols-outlined" style="font-size:19px;vertical-align:-4px;margin-right:6px">wifi_off</span>
+  Offline — your changes are saved and will sync the moment you reconnect.
+</div>
+
 <!-- ═══════════════════════════════════════════════
      SCREEN 1: WELCOME (Customer-Facing)
 ═══════════════════════════════════════════════ -->

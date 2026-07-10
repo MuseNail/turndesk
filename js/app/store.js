@@ -6,6 +6,8 @@
 // No global mutable scope: feature modules import { getState, subscribe } and
 // dispatch writes through sync.js (which calls applyChange + sends the mutation).
 
+import { scopedKey } from './apptoken.js';   // per-salon key isolation (apptoken has no imports → no cycle)
+
 const CACHE_KEY = 'turndesk_state_cache';
 
 // Canonical config field names (clean slate — not the old turndesk_* Sheets keys).
@@ -293,7 +295,7 @@ export function setAuthNeeded(v) {
 // ── Offline cache (instant render on reload before the DO snapshot arrives) ─────
 function saveCache() {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
+    localStorage.setItem(scopedKey(CACHE_KEY), JSON.stringify({
       config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
       giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
       customerDeletions: state.customerDeletions,
@@ -305,7 +307,7 @@ function saveCache() {
 
 export function loadCache() {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(scopedKey(CACHE_KEY));
     if (!raw) return false;
     hydrate({ state: JSON.parse(raw), seq: JSON.parse(raw).seq });
     return true;
