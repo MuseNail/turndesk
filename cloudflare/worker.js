@@ -247,6 +247,7 @@ async function appAuthOk(request, url, env, salonId) {
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
   if (path === '/report' && request.method.toUpperCase() === 'POST') return true;         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
   if (path === '/signup/request' && request.method.toUpperCase() === 'POST') return true;  // public: pre-salon, no session yet
+  if (path === '/auth/find-login' && request.method.toUpperCase() === 'POST') return true;  // public: cross-salon lookup, pre-salon
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
   if (!token) return false;
@@ -313,7 +314,7 @@ export default {
     // key itself carries the salon (photos are namespaced per salon client-side,
     // and are non-sensitive public branding). PUT/DELETE still require the slug.
     const _isPhotoGet = method === 'GET' && path.startsWith('/photos/');
-    if (!salonId && !_isPhotoGet && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
+    if (!salonId && !_isPhotoGet && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request' && path !== '/auth/find-login') {
       return json({ error: 'missing salon' }, 400);
     }
 
@@ -432,6 +433,16 @@ export default {
     // Forwarded to the reserved __registry__ DO, which validates + rate-limits + stores
     // the pending request. Forwarding the original request preserves CF-Connecting-IP.
     if (path === '/signup/request' && method === 'POST') {
+      const r = await registryStub(env).fetch(request);
+      const body = await r.text();
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
+    // ── Cross-salon email login (adaptive sign-in, Part B) ──────────────────────
+    // Salon-agnostic: the ONE login route that doesn't require ?salon=/X-Salon.
+    // Forwarded to the reserved registry DO, which looks up the owner's salon(s)
+    // by email and tries the password against each salon's own PBKDF2 hash.
+    if (path === '/auth/find-login' && method === 'POST') {
       const r = await registryStub(env).fetch(request);
       const body = await r.text();
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
@@ -1049,6 +1060,9 @@ export class TurnDeskDO {
     if (url.pathname === '/auth/logout' && request.method === 'POST') return this.authLogout(request);
     if (url.pathname === '/auth/check'  && request.method === 'POST') return this.authCheck(request);
     if (url.pathname === '/auth/owner-set' && request.method === 'POST') return this.authOwnerSet(request);
+    // Cross-salon email login (adaptive sign-in): the Worker forwards this only to
+    // the reserved '__registry__' instance, so it's only ever reached there.
+    if (url.pathname === '/auth/find-login' && request.method === 'POST') return this.findLogin(request);
 
     // ── Salon registry (only the reserved '__registry__' instance uses these) ───
     // Internal routes called by the Worker's operator handler. Keys are `salon:<slug>`.
@@ -1086,6 +1100,22 @@ export class TurnDeskDO {
       let b = {}; try { b = await request.json(); } catch {}
       if (!b.entry || !b.entry.slug) return this._authJson({ error: 'bad entry' }, 400);
       await this.state.storage.put('salon:' + b.entry.slug, b.entry);
+      return this._authJson({ ok: true });
+    }
+    // Email→salon index for cross-salon login (adaptive sign-in, Part B). Holds
+    // ONLY email→slug — no password/hash — so a leak of this key reveals which
+    // salon an email maps to, but a login there still requires the password.
+    // Called after every owner-credential set (operator create/reset, signup
+    // approve); appends + dedupes so one email can map to several salons.
+    if (url.pathname === '/registry/index-owner' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const email = String(b.email || '').trim().toLowerCase();
+      const slug  = String(b.slug || '').trim();
+      if (!email || !slug) return this._authJson({ error: 'bad request' }, 400);
+      const key = 'owneremail:' + email;
+      const rec = (await this.state.storage.get(key)) || { slugs: [] };
+      if (!rec.slugs.includes(slug)) rec.slugs.push(slug);
+      await this.state.storage.put(key, rec);
       return this._authJson({ ok: true });
     }
     if (url.pathname === '/signup/request' && request.method === 'POST') {
@@ -1820,6 +1850,45 @@ export class TurnDeskDO {
       }
     }
     return this._authJson({ ok: true, user: { kind: sess.kind, id: sess.id, name: sess.name, role: sess.role } });
+  }
+
+  // Cross-salon email login (adaptive sign-in, Part B). Only the reserved
+  // '__registry__' instance ever receives this (the Worker forwards
+  // /auth/find-login there exclusively). Rate-limited per IP (mirrors
+  // /signup/request's sreqrl:/rl.n pattern). Looks up owneremail:<email> for
+  // candidate slugs and tries the password against each salon's OWN /auth/login
+  // in turn — the salon DO validates the PBKDF2 hash and mints a session scoped
+  // to itself, so a token returned here is only ever valid on the matched salon.
+  // Every failure path (unknown email, no mapping, wrong password on every
+  // candidate) returns the SAME generic { ok:false } with status 200 — no
+  // enumeration signal in the body or status code.
+  async findLogin(request) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'local';
+    const rlKey = 'findrl:' + ip, now = Date.now();
+    const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
+    if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
+    if (rl.n >= 5) return this._authJson({ error: 'Too many requests — please try again later.' }, 429);
+    rl.n++; await this.state.storage.put(rlKey, rl);
+
+    let body = {}; try { body = await request.json(); } catch {}
+    const email    = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    if (!email || !password) return this._authJson({ ok: false });
+
+    const rec   = await this.state.storage.get('owneremail:' + email);
+    const slugs = Array.isArray(rec && rec.slugs) ? rec.slugs : [];
+    for (const slug of slugs) {
+      try {
+        const stub = this.env.SALON_DO.get(this.env.SALON_DO.idFromName(slug));
+        const r = await stub.fetch(new Request('https://do/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }));
+        const j = await r.json().catch(() => ({}));
+        if (j && j.token) return this._authJson({ ok: true, slug, token: j.token, expires: j.expires, user: j.user });
+      } catch {}   // an unreachable/misbehaving salon DO must never abort the loop — try the rest
+    }
+    return this._authJson({ ok: false });
   }
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
