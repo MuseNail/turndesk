@@ -559,8 +559,8 @@ These are the deploy/verify steps, listed for the handoff. They are **not** part
 
 1. **Merge** `fix/r2-backups-per-salon` → `main`.
 2. **`wrangler deploy`** from `turndesk/cloudflare` (verify account `info@musenailandspa.com` / `7e47…fb62`).
-3. **Verify namespacing:** `POST /state/backup-now` (with `X-Salon: demo` + a valid session) → key under `backups/demo/`; `GET /state/backups` (`X-Salon: demo`) lists only demo's.
-4. **Prune once:** `POST /state/prune-legacy` (`X-Salon: demo` + `{ token: RESTORE_TOKEN }`) → note `pruned` count; re-run if it isn't 0. **Do this last**, after step 3 confirms labeled backups exist.
+3. **Force a labeled backup for EVERY salon, not just demo.** The prune in step 4 deletes every salon's legacy files, so before it runs, each salon must already have a namespaced backup — otherwise a salon whose 6h `alarm()` hasn't fired since deploy would be left with no recovery snapshot until its next alarm. For each registered salon (list them in the operator console — currently `demo` + `glamx-demo`, plus any disabled test artifacts): `POST /state/backup-now` (with `X-Salon: <slug>` + a valid session) → confirm the returned key is under `backups/<slug>/`, and `GET /state/backups` (`X-Salon: <slug>`) lists only that salon's. (This also force-stamps each salon's `meta:slug`, so any pre-deploy salon that hadn't taken client traffic is now labeled too.)
+4. **Prune once, LAST:** only after step 3 confirms a labeled `backups/<slug>/` exists for every salon, `POST /state/prune-legacy` (`X-Salon: <any slug>` + `{ token: RESTORE_TOKEN }`) → note `pruned` count; re-run until it returns `0`.
 5. Update memory: mark `task_dc7cfcd3` done; log the two follow-ups (registry-DO-not-backed-up; no backup retention).
 
 ## Self-Review
