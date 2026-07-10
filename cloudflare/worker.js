@@ -1931,9 +1931,10 @@ export class TurnDeskDO {
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
     const st = snap.state || {};
+    const slug = await this._getSlug();
     await this.backupNow();                           // safety snapshot before wiping
     await this.state.storage.deleteAll();
-    if (this.slug) await this.state.storage.put('meta:slug', this.slug);   // deleteAll wiped it; keep our identity
+    if (slug) await this.state.storage.put('meta:slug', slug);   // deleteAll wiped it; keep our identity
     for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
     for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
@@ -1955,9 +1956,10 @@ export class TurnDeskDO {
   // R2 (recoverable via /state/restore). Broadcasts the empty snapshot so any
   // connected client clears immediately.
   async factoryReset() {
+    const slug = await this._getSlug();
     const safety = await this.backupNow();            // recovery point before wiping
     await this.state.storage.deleteAll();
-    if (this.slug) await this.state.storage.put('meta:slug', this.slug);   // deleteAll wiped it; keep our identity
+    if (slug) await this.state.storage.put('meta:slug', slug);   // deleteAll wiped it; keep our identity
     await this.state.storage.put('meta:seq', 1);
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
