@@ -1187,6 +1187,16 @@ export class TurnDeskDO {
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // One-time cleanup of legacy un-prefixed backups. Reached via the worker /state/
+    // forward (so §13 app-auth applies) and additionally RESTORE_TOKEN-gated, like
+    // /state/restore and /state/reset. Bucket-wide; run once from any salon.
+    if (url.pathname === '/state/prune-legacy' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const res = await this.pruneLegacyBackups();
+      return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     // ── Google Calendar token store (server-only) ───────────────────────────────
     // Single blob { refresh, access, pending }. Only the Worker's /gcal/* handlers call
     // this (via the stub). 'gcal:blob' is NOT a buildSnapshot prefix, so the refresh
@@ -1918,6 +1928,20 @@ export class TurnDeskDO {
     const key  = this._backupPrefix(await this._getSlug()) + 'state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
     if (this.env.PHOTOS_BUCKET) await this.env.PHOTOS_BUCKET.put(key, JSON.stringify(snap), { httpMetadata: { contentType: 'application/json' } });
     return { backedUp: true, key, seq: snap.seq };
+  }
+
+  // One-time cleanup of the pre-namespacing backups (backups/state-*.json), which
+  // no per-salon list surfaces anymore. Deletes ONLY keys directly under backups/
+  // (no second slash) — never a labeled backups/<slug>/... key. Idempotent; on a
+  // very large legacy set, re-run until it returns pruned:0 (single R2 list page).
+  async pruneLegacyBackups() {
+    if (!this.env.PHOTOS_BUCKET) return { pruned: 0, keys: [] };
+    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/' });
+    const legacy = (listed.objects || [])
+      .map(o => o.key)
+      .filter(k => k.startsWith('backups/') && !k.slice('backups/'.length).includes('/'));
+    for (const k of legacy) await this.env.PHOTOS_BUCKET.delete(k);
+    return { pruned: legacy.length, keys: legacy.slice(0, 50) };
   }
 
   // Disaster recovery: replace ALL state with a backup snapshot from R2.

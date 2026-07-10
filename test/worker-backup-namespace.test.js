@@ -106,3 +106,17 @@ test('provisionSeed stamps the slug so the first backup is already namespaced', 
   await doInst.provisionSeed({ slug: 'lush', name: 'Lush Nails', template: false });
   assert.equal(await storage.get('meta:slug'), 'lush');
 });
+
+test('pruneLegacyBackups deletes ONLY un-prefixed legacy keys', async () => {
+  const bucket = makeBucket();
+  await bucket.put('backups/state-old-1.json', '{}');           // legacy
+  await bucket.put('backups/state-old-2.json', '{}');           // legacy
+  await bucket.put('backups/lush/state-new.json', '{}');        // labeled — must survive
+  const doInst = new TurnDeskDO({ storage: makeStorage() }, { PHOTOS_BUCKET: bucket });
+
+  const res = await doInst.pruneLegacyBackups();
+  assert.equal(res.pruned, 2);
+  assert.equal(await bucket.get('backups/state-old-1.json'), null);
+  assert.equal(await bucket.get('backups/state-old-2.json'), null);
+  assert.ok(await bucket.get('backups/lush/state-new.json'), 'labeled backup must survive');
+});
