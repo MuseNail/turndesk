@@ -99,3 +99,10 @@ test('slug-unknown falls back to the legacy un-prefixed key (no double slash)', 
   assert.ok(r.key.startsWith('backups/state-'), `expected legacy key, got ${r.key}`);
   assert.ok(!r.key.includes('backups//'), 'must not produce a double slash');
 });
+
+test('provisionSeed stamps the slug so the first backup is already namespaced', async () => {
+  const storage = makeStorage();
+  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: makeBucket() });
+  await doInst.provisionSeed({ slug: 'lush', name: 'Lush Nails', template: false });
+  assert.equal(await storage.get('meta:slug'), 'lush');
+});

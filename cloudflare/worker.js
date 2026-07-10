@@ -904,7 +904,7 @@ async function handleOperator(request, env, url, method, path) {
     // 1) seed starter config (DO internal route), 2) set owner credential, 3) registry entry LAST
     await salonStub.fetch(new Request('https://do/provision/seed', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: b.name || slug, template: b.template !== false }),
+      body: JSON.stringify({ slug, name: b.name || slug, template: b.template !== false }),
     }));
     await salonStub.fetch(new Request('https://do/auth/owner-set', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -968,7 +968,7 @@ async function handleOperator(request, env, url, method, path) {
     let slug = v.slug, n = 2;
     while (await registryGet(env, slug)) slug = v.slug + '-' + n++;   // uniquify at approval time
     const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(slug));
-    await salonStub.fetch(new Request('https://do/provision/seed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: rec.business, template: true }) }));
+    await salonStub.fetch(new Request('https://do/provision/seed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug, name: rec.business, template: true }) }));
     await salonStub.fetch(new Request('https://do/provision/owner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ record: rec.ownerRecord }) }));
     const entry = { slug, name: rec.business, status: 'active', ownerEmail: rec.email, plan: '', createdAt: new Date().toISOString() };
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
@@ -1768,6 +1768,7 @@ export class TurnDeskDO {
   // Seed a brand-new salon's starter config. Never overwrites existing config (so a
   // re-provision can't wipe a live salon's menu); only fills keys that are absent.
   async provisionSeed(opts) {
+    if (opts && opts.slug) await this._rememberSlug(opts.slug);   // brand-new salon: label its very first backup
     if (opts && opts.template !== false) {
       if ((await this.state.storage.get('config:services')) == null) await this.state.storage.put('config:services', STARTER_SERVICES);
       if ((await this.state.storage.get('config:items'))    == null) await this.state.storage.put('config:items', STARTER_ITEMS);
