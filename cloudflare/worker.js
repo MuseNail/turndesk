@@ -1018,11 +1018,17 @@ export class TurnDeskDO {
     this.sockets = new Set();
     this.SCHEMA_VERSION = 1;
     this.BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
+    this.slug = '';   // this salon's tenant slug; learned from requests, persisted to meta:slug
   }
 
   async fetch(request) {
     const url     = new URL(request.url);
     const upgrade = request.headers.get('Upgrade');
+
+    // Learn this salon's slug from the request (WS carries ?salon=, HTTP carries
+    // X-Salon). Runs before the WS upgrade return so socket connects stamp it too.
+    const _slug = (url.searchParams.get('salon') || request.headers.get('X-Salon') || '').trim();
+    if (_slug) await this._rememberSlug(_slug);
 
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
       const pair             = new WebSocketPair();
@@ -1831,6 +1837,17 @@ export class TurnDeskDO {
     state.audit = state.audit.slice(0, 500);
     const seq = (await this.state.storage.get('meta:seq')) || 0;
     return { state, seq, schemaVersion: this.SCHEMA_VERSION };
+  }
+
+  // The DO is addressed by idFromName(slug) but isn't told its slug. Learn it from
+  // request traffic and PERSIST it (meta:slug) so the timer-driven alarm() — which
+  // runs with no request, possibly on a cold-started instance — can read it back.
+  // meta:slug is not a buildSnapshot prefix, so it never reaches clients or backups.
+  async _rememberSlug(slug) {
+    slug = (slug || '').trim();
+    if (!slug || slug === this.slug) return;
+    this.slug = slug;
+    try { await this.state.storage.put('meta:slug', slug); } catch {}
   }
 
   async ensureBackupScheduled() {
