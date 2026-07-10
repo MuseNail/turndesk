@@ -43,15 +43,19 @@ function photoUrlFor(type, id) {
 // ── Logo ──────────────────────────────────────────
 export function setLogo() {
   const logoSrc = cfg().logo || LOGO_PATH;
+  const bizName = ((cfg().business || {}).name || '').trim();
   ['logo-welcome','logo-checkin','logo-desk','logo-signin'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === 'logo-signin' && !logoSrc) { el.style.display = 'none'; return; }   // no logo → heading carries the sign-in screen
-    el.style.display = '';
-    el.src = logoSrc;
-    if (id === 'logo-welcome') { const t = document.getElementById('logo-text-welcome'); if (t) t.style.display = 'none'; }
-    if (id === 'logo-checkin') { const t = document.getElementById('logo-text-checkin'); if (t) t.style.display = 'none'; }
+    if (!logoSrc) el.style.display = 'none';              // no logo → the business-name text fallback carries the header
+    else { el.style.display = ''; el.src = logoSrc; }
+    if (id === 'logo-welcome') { const t = document.getElementById('logo-text-welcome'); if (t) t.style.display = logoSrc ? 'none' : 'block'; }
+    if (id === 'logo-checkin') { const t = document.getElementById('logo-text-checkin'); if (t) t.style.display = logoSrc ? 'none' : 'block'; }
   });
+  // Per-salon branding: fill the name fallback (replaces the old hardcoded "MUSE") + tab title.
+  document.querySelectorAll('[data-biz-name]').forEach(n => { n.textContent = bizName || 'Welcome'; });
+  if (bizName) document.title = bizName;
   const preview   = document.getElementById('logo-settings-preview');
   const recropBtn = document.getElementById('logo-recrop-btn');
   if (preview) {

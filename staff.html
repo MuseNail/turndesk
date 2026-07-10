@@ -7,14 +7,14 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Muse Staff</title>
+<title>Staff</title>
 
 <!-- PWA (separate installable app, shares the same origin + Durable Object) -->
 <link rel="manifest" href="/turndesk/manifest-staff.json">
 <meta name="theme-color" content="#1a5252">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Muse Staff">
+<meta name="apple-mobile-web-app-title" content="Staff">
 <link rel="apple-touch-icon" href="/turndesk/icons/icon-192.png">
 
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
@@ -60,7 +60,7 @@ tailwind.config = {
   <!-- ── PIN login ───────────────────────────────── -->
   <div id="staff-login" class="hidden fixed inset-0 flex items-center justify-center p-6">
     <div class="bg-surface-container-lowest rounded-2xl shadow-2xl p-8 w-full max-w-xs text-center fade-up">
-      <div class="text-2xl font-headline font-extrabold text-primary mb-1">Muse Staff</div>
+      <div id="staff-brand-login" class="text-2xl font-headline font-extrabold text-primary mb-1">Staff</div>
       <div class="text-sm font-body text-on-surface-variant mb-6">Enter your PIN to see your customers</div>
       <input id="staff-pin-entry" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"
         onkeydown="staffPinKey(event)" oninput="staffPinInput()" autofocus
@@ -77,7 +77,7 @@ tailwind.config = {
       <div class="flex items-center gap-2 min-w-0">
         <span id="staff-conn" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e8730a"></span>
         <div class="min-w-0">
-          <div class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">Muse Staff</div>
+          <div id="staff-brand-header" class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">Staff</div>
           <div id="staff-tech-name" class="font-headline font-bold text-lg leading-tight truncate"></div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { dispatch } from '../sync.js';
 import { ticketTotal, escHtml, showToast } from '../utils.js';
 import { REVIEW_REDIRECT } from '../config.js';
 import { REVIEW_QR_DATAURL } from './review-qr.js';
+import { setLogo } from './photos.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -16,17 +17,15 @@ const queue   = () => getState().queue;
 const svc = id => (cfg().services || []).find(s => s.id === id);
 const staffById = id => (cfg().staff || []).find(s => s.id === id);
 
-// Shop header — printed on every customer receipt. Edit here if the salon
-// moves or the number changes.
-export const SHOP = {
-  name:  'Muse Nails & Spa',
-  addr:  '35801 Yucaipa Blvd, Yucaipa, CA 92399',
-  phone: '(909) 797-2998',
-  thanks: 'Thank you for visiting<br>Muse Nails &amp; Spa!',
-  // Review QR — permanent (encodes the Worker /r redirect), embedded as a data
-  // URL so it loads instantly in the print doc. Re-route it from Settings.
-  reviewQr: REVIEW_QR_DATAURL,
-};
+// Per-salon business identity (Settings → Business), printed on every receipt.
+// Falls back to empty so a receipt can never print another salon's name.
+function biz() {
+  const b = cfg().business || {};
+  return { name: (b.name || '').trim(), addr: (b.address || '').trim(), phone: (b.phone || '').trim() };
+}
+// Review QR — permanent (encodes the Worker /r redirect), embedded as a data URL
+// so it loads instantly in the print doc. Re-route it from Settings.
+export const SHOP = { reviewQr: REVIEW_QR_DATAURL };
 
 const money = n => '$' + Number(n || 0).toFixed(2);
 
@@ -64,11 +63,12 @@ function printReceiptDoc(bodyHtml, title) {
 
 function shopHeader() {
   const logo = cfg().logo || '';
+  const b = biz();
   return `<div class="ctr">
     ${logo ? `<img class="logo-img" src="${escHtml(logo)}" alt="">` : ''}
-    <div class="name">${SHOP.name}</div>
-    <div class="meta">${escHtml(SHOP.addr)}</div>
-    <div class="meta">${escHtml(SHOP.phone)}</div>
+    ${b.name ? `<div class="name">${escHtml(b.name)}</div>` : ''}
+    ${b.addr ? `<div class="meta">${escHtml(b.addr)}</div>` : ''}
+    ${b.phone ? `<div class="meta">${escHtml(b.phone)}</div>` : ''}
   </div>`;
 }
 
@@ -152,7 +152,7 @@ export function printCustomerReceipt(recordId) {
     ${totals}
     ${pay ? `<div class="dot"></div>${pay}` : ''}
     <div class="dash"></div>
-    <div class="foot">${SHOP.thanks}${qr}</div>
+    <div class="foot">${biz().name ? 'Thank you for visiting<br>' + escHtml(biz().name) + '!' : 'Thank you!'}${qr}</div>
   `, 'Receipt — ' + firstName);
 }
 
@@ -168,7 +168,7 @@ export function printTechReceipts80(techRows) {
       : '';
     return `<div${i ? ' style="page-break-before:always"' : ''}>
       <div class="ctr">
-        <div class="name">${SHOP.name}</div>
+        <div class="name">${escHtml(biz().name)}</div>
         <div class="meta">${escHtml(t.name)}</div>
         <div class="meta">${escHtml(t.period)}</div>
       </div>
@@ -180,6 +180,33 @@ export function printTechReceipts80(techRows) {
     </div>`;
   }).join('');
   printReceiptDoc(strips, 'Staff billing');
+}
+
+// ── Settings: business profile (name / address / phone) ──────────────────────
+// Per-salon identity: name shows on the welcome/check-in screens (via
+// photos.setLogo) + prints on receipts; address/phone print on receipts. Synced
+// config key `business`. Replaces the old hardcoded Muse SHOP constant.
+export function renderBusinessProfile() {
+  const el = document.getElementById('bizprofile-section'); if (!el) return;
+  const b = cfg().business || {};
+  const lbl = 'text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1';
+  const input = 'w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface';
+  const v = s => escHtml(s || '').replace(/"/g, '&quot;');
+  el.innerHTML = `
+    <p class="text-sm font-body text-on-surface-variant mb-3">Your salon's name shows on the customer welcome &amp; check-in screens and prints on receipts. Address and phone print on receipts only.</p>
+    <label class="${lbl}">Business name</label>
+    <input id="biz-name" class="${input} mb-3" placeholder="e.g. Krystal Nails Lounge" value="${v(b.name)}">
+    <label class="${lbl}">Address</label>
+    <input id="biz-address" class="${input} mb-3" placeholder="123 Main St, City, ST 00000" value="${v(b.address)}">
+    <label class="${lbl}">Phone</label>
+    <input id="biz-phone" class="${input} mb-3" placeholder="(000) 000-0000" value="${v(b.phone)}">
+    <button onclick="saveBusinessProfile()" class="btn-primary px-4 py-2 rounded-xl font-body font-bold text-sm">Save</button>`;
+}
+export function saveBusinessProfile() {
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  dispatch('config.set', { key: 'business', value: { name: g('biz-name'), address: g('biz-address'), phone: g('biz-phone') } });
+  setLogo();   // re-render welcome/check-in branding + tab title immediately
+  showToast('Business profile saved');
 }
 
 // ── Settings: review-QR link ─────────────────────────────────────────────────

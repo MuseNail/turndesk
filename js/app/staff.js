@@ -127,6 +127,11 @@ function syncChat() {
 // ── Render ────────────────────────────────────────
 function render() {
   syncChat();
+  // Per-salon branding: the tech app carries the salon's name, not a hardcoded brand.
+  const bizName = ((cfg().business || {}).name || '').trim();
+  const bl = document.getElementById('staff-brand-login'); if (bl) bl.textContent = bizName || 'Staff';
+  const bh = document.getElementById('staff-brand-header'); if (bh) bh.textContent = bizName || 'Staff';
+  if (bizName) document.title = bizName + ' Staff';
   const fd = meFd();
   if (fd) { renderFdView(fd); maybeNotifPrompt(); return; }
   const meStaff = me();

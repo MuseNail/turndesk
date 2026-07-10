@@ -274,7 +274,8 @@ const SETTINGS_NAV = [
     { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true, icon:'sync' },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir', icon:'contacts' },
   ]},
-  { id:'business', title:'Business', desc:'Branding', items:[
+  { id:'business', title:'Business', desc:'Profile, logo & receipts', items:[
+    { label:'Business Profile', sub:'Name, address & phone — on the app & receipts', content:'bizprofile-section', render:'renderBusinessProfile', adminOnly:true, icon:'store' },
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
   ]},
