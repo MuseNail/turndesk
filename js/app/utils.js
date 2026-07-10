@@ -28,6 +28,18 @@ export function ticketTotal(r) {
 export const escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 export const escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// ── Throttle wait message ────────────────────────────────────────────────────
+// One phrasing for every "you're being rate-limited" sign-in message (PIN, owner,
+// and the cross-salon find-login). A large retryInSec — the find-login limiter is a
+// fixed 1-hour window — reads as minutes instead of an ugly "wait 3540s", and an
+// absent one still says something useful instead of a bare "wait undefineds".
+export function throttleWaitMsg(retryInSec) {
+  const s = Math.ceil(Number(retryInSec) || 0);
+  if (s <= 0)  return 'Too many tries — please wait a moment and try again.';
+  if (s < 90)  return `Too many tries — wait ${s}s.`;
+  return `Too many tries — wait about ${Math.ceil(s / 60)} min.`;
+}
+
 // ── Pill switch in-place flip ────────────────────
 // Flip a single .mswitch toggle's visual state WITHOUT re-rendering its whole list.
 // Rebuilding a list on every tap recreated the row + button under the user's finger —

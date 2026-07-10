@@ -3,7 +3,7 @@
 
 import { getState } from '../store.js';
 import { dispatch, resync } from '../sync.js';
-import { showToast, escHtml } from '../utils.js';
+import { showToast, escHtml, throttleWaitMsg } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
 import { STAFF_PIN } from '../config.js';
 import { serverLogin, serverFindLogin, salonSlug } from '../apptoken.js';
@@ -202,7 +202,7 @@ export async function ownerLogin() {
     const res = await serverLogin({ email, password, device: 'dashboard' });
     if (res.ok) { _finishPinLogin(res.user); resync(); return; }
     showErr(
-      res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+      res.error === 'slow_down' ? throttleWaitMsg(res.retryInSec) :
       res.error === 'offline'   ? 'Offline — check your connection.' :
       res.error === 'no_salon'  ? 'No salon selected.' :
                                   'Incorrect email or password.'
@@ -236,7 +236,7 @@ export async function businessSignin() {
       const res = await serverFindLogin({ email, password });
       if (res.ok) { location.href = location.pathname + '?salon=' + encodeURIComponent(res.slug); return; }
       showErr(
-        res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+        res.error === 'slow_down' ? throttleWaitMsg(res.retryInSec) :
         res.error === 'offline'   ? 'Offline — check your connection.' :
                                     'Incorrect email or password.'
       );
@@ -246,7 +246,7 @@ export async function businessSignin() {
     const res = await serverLogin({ email, password, device: 'dashboard' });
     if (res.ok) { _finishPinLogin(res.user); resync(); return; }
     showErr(
-      res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+      res.error === 'slow_down' ? throttleWaitMsg(res.retryInSec) :
       res.error === 'offline'   ? 'Offline — check your connection.' :
       res.error === 'no_salon'  ? 'No salon selected.' :
                                   'Incorrect email or password.'
@@ -340,7 +340,7 @@ async function _serverPinLogin(pin) {
   // Every outcome below resolves to a visible status — no silent dead end regardless
   // of how many digits were entered.
   if (res.error === 'slow_down' || res.retryInSec) {
-    showToast(`Too many tries — wait ${res.retryInSec || 5}s and try again.`);
+    showToast(throttleWaitMsg(res.retryInSec));
     _showPinError();
   } else if (res.error === 'offline') {
     _setPinStatus('No connection — check your internet and try again.');

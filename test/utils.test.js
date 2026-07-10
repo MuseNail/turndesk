@@ -1,7 +1,7 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPhone, dedupByLabel, localDateStr, byName, formatElapsed, rolloverAction } from '../js/app/utils.js';
+import { formatPhone, dedupByLabel, localDateStr, byName, formatElapsed, rolloverAction, throttleWaitMsg } from '../js/app/utils.js';
 
 const phone = (v) => { const o = { value: v }; formatPhone(o); return o.value; };
 
@@ -53,4 +53,24 @@ test('rolloverAction: shared marker gates the day rollover globally', () => {
   // already rolled over today → SKIP (this is the fix: a device opened mid-day must NOT re-clear
   // the roster the front desk already set up)
   assert.equal(rolloverAction('2026-06-01', '2026-06-01'), 'skip');
+});
+
+test('throttleWaitMsg: no known wait → a generic "please wait a moment" line', () => {
+  const generic = 'Too many tries — please wait a moment and try again.';
+  assert.equal(throttleWaitMsg(),          generic);   // undefined (e.g. a 429 with no retryInSec)
+  assert.equal(throttleWaitMsg(0),         generic);
+  assert.equal(throttleWaitMsg(null),      generic);
+  assert.equal(throttleWaitMsg(-5),        generic);
+});
+
+test('throttleWaitMsg: short waits show seconds (the PIN/owner escalating slow-down)', () => {
+  assert.equal(throttleWaitMsg(5),  'Too many tries — wait 5s.');
+  assert.equal(throttleWaitMsg(30), 'Too many tries — wait 30s.');
+  assert.equal(throttleWaitMsg(89), 'Too many tries — wait 89s.');
+});
+
+test('throttleWaitMsg: long waits round up to minutes (the find-login hourly window)', () => {
+  assert.equal(throttleWaitMsg(90),   'Too many tries — wait about 2 min.');
+  assert.equal(throttleWaitMsg(600),  'Too many tries — wait about 10 min.');
+  assert.equal(throttleWaitMsg(3600), 'Too many tries — wait about 60 min.');
 });

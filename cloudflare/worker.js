@@ -1921,7 +1921,14 @@ export class TurnDeskDO {
     const rlKey = 'findrl:' + ip, now = Date.now();
     const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
     if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
-    if (rl.n >= 5) return this._authJson({ error: 'Too many requests — please try again later.' }, 429);
+    if (rl.n >= 5) {
+      // Mirror authLogin's throttle shape ({ error:'slow_down', retryInSec }) so the
+      // client's existing slow_down handler shows a wait message instead of falling
+      // through to a misleading "incorrect email or password". The limiter is a fixed
+      // 1-hour window, so retryInSec can be minutes — the client formats it.
+      const retryInSec = Math.max(1, Math.ceil((3600000 - (now - rl.since)) / 1000));
+      return this._authJson({ error: 'slow_down', retryInSec }, 429);
+    }
     rl.n++; await this.state.storage.put(rlKey, rl);
 
     let body = {}; try { body = await request.json(); } catch {}

@@ -13,7 +13,7 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, throttleWaitMsg } from './utils.js';
 import { APP_VERSION } from './config.js';
 import { setActiveUser, getActiveUser, canDo } from './session.js';
 import { isPaidStatus } from './features/status.js';
@@ -197,7 +197,7 @@ window.rappPinSubmit = async () => {
       return;
     }
     renderLogin(res.ok ? 'Reports is for front-desk accounts.'
-      : res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
+      : res.error === 'slow_down' || res.retryInSec ? throttleWaitMsg(res.retryInSec)
       : res.error === 'offline' ? 'Connecting… try again in a moment' : 'Incorrect PIN');
     return;
   }

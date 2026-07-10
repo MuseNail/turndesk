@@ -169,17 +169,22 @@ test('find-login: registry owneremail: index holds no password/hash', async () =
   assert.deepEqual(Object.keys(rec).sort(), ['slugs']);
 });
 
-test('find-login: rate-limited per IP — repeated attempts eventually slow down', async () => {
+test('find-login: throttle responds with the canonical slow_down shape (not a bespoke message)', async () => {
   const { salonDOs, registry } = makeCluster(['lush']);
   await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
   await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
 
-  let sawThrottle = false;
+  let throttled = null;
   for (let i = 0; i < 10; i++) {
-    const { status } = await findLogin(registry, { email: 'owner@lush.com', password: 'wrong' });
-    if (status === 429) { sawThrottle = true; break; }
+    const res = await findLogin(registry, { email: 'owner@lush.com', password: 'wrong' });
+    if (res.status === 429) { throttled = res; break; }
   }
-  assert.ok(sawThrottle, 'rapid repeated find-login attempts from one IP must eventually be throttled');
+  assert.ok(throttled, 'rapid repeated find-login attempts from one IP must eventually be throttled');
+  // Mirror authLogin's throttle response so the client's existing slow_down handling
+  // shows a wait message, instead of falling through to a misleading "incorrect password".
+  assert.equal(throttled.body.error, 'slow_down', 'throttle must use the canonical slow_down token');
+  assert.equal(typeof throttled.body.retryInSec, 'number', 'throttle must tell the client how long to wait');
+  assert.ok(throttled.body.retryInSec > 0, 'retryInSec must be a positive number of seconds');
 });
 
 // ── Security-review fixes (adversarial round) ───────────────────────────────

@@ -13,7 +13,7 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
@@ -776,7 +776,7 @@ window.staffPinSubmit = async () => {
       registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
       return;
     }
-    renderLogin(res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
+    renderLogin(res.error === 'slow_down' || res.retryInSec ? throttleWaitMsg(res.retryInSec)
       : res.error === 'offline' ? 'Connecting… try again in a moment' : 'Incorrect PIN');
     return;
   }
