@@ -50,6 +50,14 @@ export function salonSlug() {
   try { return localStorage.getItem(SALON_KEY) || ''; } catch { return ''; }
 }
 
+// The salon slug FROM THE URL ONLY (?salon=), ignoring the cached td_salon. The bare
+// link (…/turndesk/ with no ?salon=) is the public front door: the sign-in screen uses
+// THIS — not salonSlug() — to decide PIN-first vs "find your salon", so a device that once
+// visited a salon link doesn't turn the front door into that salon's staff PIN pad.
+export function urlSalonSlug() {
+  try { return new URLSearchParams(location.search).get('salon') || ''; } catch { return ''; }
+}
+
 // ── Cross-salon login (no salon known yet — bare/general link) ────────────────
 // The email/password could belong to any salon; the Worker's registry DO looks up
 // which one and mints a session scoped to it. NEVER sends ?salon= — not knowing

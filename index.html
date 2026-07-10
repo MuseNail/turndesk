@@ -141,6 +141,10 @@ tailwind.config = {
     <div class="flex flex-col items-center mb-6 fade-up">
       <img id="logo-signin" src="" alt="" class="h-20 md:h-24 w-auto object-contain mb-3" style="border-radius:8px"
            onerror="this.style.display='none'">
+      <!-- Temporary TurnDesk welcome mark — shown only on the bare front door (email-first mode) -->
+      <div id="signin-brand" class="hidden flex w-14 h-14 rounded-2xl bg-primary bg-gradient-to-br from-primary to-primary-dim items-center justify-center mb-3 shadow-sm">
+        <span class="material-symbols-outlined text-primary-container" style="font-size:30px">auto_awesome</span>
+      </div>
       <h1 id="signin-heading" class="text-2xl font-headline font-bold text-on-surface">Sign in to your business</h1>
       <p id="signin-subheading" class="text-xs font-body text-on-surface-variant mt-1 tracking-wide">Manage your salon — sales, staff, and reports</p>
     </div>
@@ -175,6 +179,7 @@ tailwind.config = {
          email + password (no PIN pad — a PIN is meaningless without a salon yet). -->
     <div id="signin-email-mode" class="hidden">
       <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-6 shadow-sm fade-up text-left" style="animation-delay:0.05s">
+        <p class="text-xs font-headline font-semibold text-on-surface mb-4">Salon access</p>
         <label class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Email</label>
         <input id="signin-email" type="email" autocomplete="username" placeholder="you@yoursalon.com"
                class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-surface-container text-sm font-body text-on-surface outline-none focus:ring-2 focus:ring-primary">

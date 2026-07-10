@@ -6,7 +6,7 @@ import { dispatch, resync } from '../sync.js';
 import { showToast, escHtml, throttleWaitMsg } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
 import { STAFF_PIN } from '../config.js';
-import { serverLogin, serverFindLogin, salonSlug } from '../apptoken.js';
+import { serverLogin, serverFindLogin, urlSalonSlug } from '../apptoken.js';
 
 const cfg = () => getState().config;
 const isAdmin = () => getActiveUser()?.role === 'admin';   // only admins manage login accounts
@@ -215,12 +215,14 @@ export async function ownerLogin() {
 // Same server credential as ownerLogin(), but from the full-screen sign-in (screen-signin)
 // that non-kiosk devices land on, instead of the keypad-modal toggle.
 //
-// Two paths, chosen by whether this device already knows its salon:
-//  - salon known  → the existing per-salon serverLogin() (email scoped to THIS salon's DO).
-//  - no salon yet (bare/general link, "Find your salon") → serverFindLogin() asks the
-//    registry which salon this email/password belongs to, then this device fully reloads
-//    scoped to it (?salon=<slug>) — the simplest robust way to re-point the sync layer,
-//    which was never connected to any salon before this.
+// Two paths, chosen by whether the LINK (?salon=) names a salon — urlSalonSlug(), NOT
+// salonSlug(): on the bare front door a stale cached td_salon must NOT hijack the flow
+// into that salon's per-salon login. The screen matches (renderSigninScreen keys off the
+// same urlSalonSlug()), so the visible "find your salon" form always finds the salon.
+//  - salon link (?salon=) → the per-salon serverLogin() (email scoped to THIS salon's DO).
+//  - bare link (no ?salon=, "Find your salon") → serverFindLogin() asks the registry which
+//    salon this email/password belongs to, then reloads scoped to it (?salon=<slug>) — the
+//    simplest robust way to re-point the sync layer, which was on no chosen salon before.
 let _bizLoginBusy = false;
 export async function businessSignin() {
   if (_bizLoginBusy) return;
@@ -232,7 +234,7 @@ export async function businessSignin() {
   if (!email || !password) { showErr('Enter your email and password.'); return; }
   _bizLoginBusy = true;
   try {
-    if (!salonSlug()) {
+    if (!urlSalonSlug()) {
       const res = await serverFindLogin({ email, password });
       if (res.ok) { location.href = location.pathname + '?salon=' + encodeURIComponent(res.slug); return; }
       showErr(
@@ -290,23 +292,25 @@ export function routeSignedOut() {
 }
 
 // ── Adaptive sign-in screen ────────────────────────────────────────────────────
-// screen-signin adapts to whether THIS device already knows its salon — no toggle:
-//  - salon known  → PIN-first: lead with the PIN pad (opens #pin-modal immediately).
-//  - no salon yet → email-first "Find your salon": no PIN pad (meaningless with no
-//    salon), businessSignin() routes it through the cross-salon lookup instead.
-// Called on every route-to-signed-out (boot, logout) AND again whenever config syncs
-// in, so the business-name header catches up once it arrives (it may be empty on a
-// cold, no-session device at first render).
+// screen-signin adapts to the LINK THIS DEVICE OPENED — decided by the URL's ?salon=
+// ONLY (urlSalonSlug), never the cached td_salon, so the bare public link (…/turndesk/)
+// is always the "find your salon" front door even on a device that once visited a salon:
+//  - salon link (?salon=<slug>) → PIN-first: lead with the PIN pad (opens #pin-modal).
+//  - bare link (no ?salon=)     → email-first welcome: TurnDesk mark + "Welcome to
+//    TurnDesk", no PIN pad at all (a PIN is meaningless — and unsafe against a stale
+//    cached salon — without a chosen salon). businessSignin() runs the cross-salon lookup.
+// Called on every route-to-signed-out (boot, logout) AND again whenever config syncs in.
 export function renderSigninScreen({ openPin = false } = {}) {
-  const pinFirst = !!salonSlug();
+  const pinFirst = !!urlSalonSlug();
   document.getElementById('signin-pin-mode')?.classList.toggle('hidden', !pinFirst);
   document.getElementById('signin-email-mode')?.classList.toggle('hidden', pinFirst);
   document.getElementById('signin-kiosk-btn')?.classList.toggle('hidden', !pinFirst);
+  document.getElementById('signin-brand')?.classList.toggle('hidden', pinFirst);   // TurnDesk welcome mark only on the bare front door
   const bizName = ((cfg().business || {}).name || '').trim();
   const heading = document.getElementById('signin-heading');
   const sub     = document.getElementById('signin-subheading');
-  if (heading) heading.textContent = pinFirst ? (bizName || 'Sign in to your business') : 'Find your salon';
-  if (sub)     sub.textContent     = pinFirst ? 'Manage your salon — sales, staff, and reports' : 'Sign in and we’ll open your salon';
+  if (heading) heading.textContent = pinFirst ? (bizName || 'Sign in to your business') : 'Welcome to TurnDesk';
+  if (sub)     sub.textContent     = pinFirst ? 'Manage your salon — sales, staff, and reports' : 'Sign in to open your salon';
   if (openPin && pinFirst) showPinModal();
 }
 

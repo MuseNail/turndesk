@@ -7,7 +7,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast } from '../utils.js';
 import { PHOTOS_PROXY, LOGO_PATH } from '../config.js';
-import { salonSlug } from '../apptoken.js';
+import { salonSlug, urlSalonSlug } from '../apptoken.js';
 
 const cfg = () => getState().config;
 
@@ -54,7 +54,9 @@ export function setLogo() {
   ['logo-welcome','logo-checkin','logo-desk','logo-signin'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (id === 'logo-signin' && !logoSrc) { el.style.display = 'none'; return; }   // no logo → heading carries the sign-in screen
+    // On the bare front door (no ?salon= in the URL) the sign-in screen is the generic
+    // TurnDesk welcome — never a cached salon's logo, even if one is still in the store.
+    if (id === 'logo-signin' && (!logoSrc || !urlSalonSlug())) { el.style.display = 'none'; return; }   // no logo / bare link → the welcome mark + heading carry the screen
     if (!logoSrc) el.style.display = 'none';              // no logo → the business-name text fallback carries the header
     else { el.style.display = ''; el.src = logoSrc; }
     if (id === 'logo-welcome') { const t = document.getElementById('logo-text-welcome'); if (t) t.style.display = logoSrc ? 'none' : 'block'; }
