@@ -6,7 +6,7 @@ import { dispatch, resync } from '../sync.js';
 import { showToast, escHtml } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
 import { STAFF_PIN } from '../config.js';
-import { serverLogin } from '../apptoken.js';
+import { serverLogin, serverFindLogin, salonSlug } from '../apptoken.js';
 
 const cfg = () => getState().config;
 const isAdmin = () => getActiveUser()?.role === 'admin';   // only admins manage login accounts
@@ -35,17 +35,25 @@ export function updateLoggedInDisplay() {
 }
 
 // ── PIN modal ─────────────────────────────────────
-export function showPinModal() {
+// { ownerLogin:true } opens straight to the email/password toggle (the sign-in
+// screen's "Forgot PIN? · Owner sign-in" link) instead of the numeric pad — avoids
+// racing two separate autofocus timers (pad vs owner email) against each other.
+export function showPinModal({ ownerLogin = false } = {}) {
   pinBuffer = '';
   setActiveUser(null);
   window.applyUserTheme?.();   // revert to the default palette on the login screen
   updatePinDots();
   document.getElementById('pin-error').classList.add('hidden');
   document.getElementById('pin-matched-user').textContent = '';
+  _setPinStatus();
   const m = document.getElementById('pin-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
-  showPinEntry();   // always open on the PIN view (not a stale owner form)
-  setTimeout(() => { const kb = document.getElementById('pin-keyboard-input'); if (kb) { kb.value = ''; kb.focus(); } }, 100);
+  if (ownerLogin) {
+    showOwnerLogin();
+  } else {
+    showPinEntry();   // always open on the PIN view (not a stale owner form)
+    setTimeout(() => { const kb = document.getElementById('pin-keyboard-input'); if (kb) { kb.value = ''; kb.focus(); } }, 100);
+  }
 }
 
 // Log out the current user: confirm, clear the session, then return to THIS device's
@@ -60,6 +68,7 @@ export function logout() {
       const p = document.getElementById('signin-password'); if (p) p.value = '';
       document.getElementById('signin-error')?.classList.add('hidden');
       window.goTo?.('screen-signin');
+      renderSigninScreen({ openPin: true });   // same adaptive lead-with-PIN behavior as boot
     }
   };
   if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to sign in again.', doLogout);
@@ -150,6 +159,7 @@ export function saveManagerPin() {
 }
 
 function _showPinError() {
+  _setPinStatus();   // back to "Enter your PIN" — the error line below carries the detail
   document.getElementById('pin-error')?.classList.remove('hidden');
   pinBuffer = '';
   const kb = document.getElementById('pin-keyboard-input'); if (kb) kb.value = '';
@@ -176,6 +186,7 @@ export function showPinEntry() {
   const e = document.getElementById('owner-email'); if (e) e.value = '';
   const p = document.getElementById('owner-password'); if (p) p.value = '';
   document.getElementById('owner-error')?.classList.add('hidden');
+  _setPinStatus();   // clear any stale "Signing in…"/error status from a previous attempt
 }
 
 let _ownerLoginBusy = false;
@@ -203,6 +214,13 @@ export async function ownerLogin() {
 // ── Business sign-in screen (owner/manager email + password — the dedicated front door) ──
 // Same server credential as ownerLogin(), but from the full-screen sign-in (screen-signin)
 // that non-kiosk devices land on, instead of the keypad-modal toggle.
+//
+// Two paths, chosen by whether this device already knows its salon:
+//  - salon known  → the existing per-salon serverLogin() (email scoped to THIS salon's DO).
+//  - no salon yet (bare/general link, "Find your salon") → serverFindLogin() asks the
+//    registry which salon this email/password belongs to, then this device fully reloads
+//    scoped to it (?salon=<slug>) — the simplest robust way to re-point the sync layer,
+//    which was never connected to any salon before this.
 let _bizLoginBusy = false;
 export async function businessSignin() {
   if (_bizLoginBusy) return;
@@ -214,6 +232,17 @@ export async function businessSignin() {
   if (!email || !password) { showErr('Enter your email and password.'); return; }
   _bizLoginBusy = true;
   try {
+    if (!salonSlug()) {
+      const res = await serverFindLogin({ email, password });
+      if (res.ok) { location.href = location.pathname + '?salon=' + encodeURIComponent(res.slug); return; }
+      showErr(
+        res.error === 'slow_down' ? `Too many tries — wait ${res.retryInSec || 30}s.` :
+        res.error === 'offline'   ? 'Offline — check your connection.' :
+                                    'Incorrect email or password.'
+      );
+      const p = document.getElementById('signin-password'); if (p) p.value = '';
+      return;
+    }
     const res = await serverLogin({ email, password, device: 'dashboard' });
     if (res.ok) { _finishPinLogin(res.user); resync(); return; }
     showErr(
@@ -254,17 +283,52 @@ export function toggleKioskDevice() {
 // session (activeUser) is left untouched so a reload mid-shift doesn't bounce anyone out.
 export function routeSignedOut() {
   if (getActiveUser()) return;
-  window.goTo?.(isKioskDevice() ? 'screen-welcome' : 'screen-signin');
+  if (isKioskDevice()) { window.goTo?.('screen-welcome'); return; }
+  window.goTo?.('screen-signin');
+  renderSigninScreen({ openPin: true });
 }
 
-// §13 server login on a FRESH browser (no synced data yet, so the local list
-// can't answer): the server checks the PIN, returns who it is, and mints the
-// session. Debounced so a 6-digit PIN doesn't fire half-typed attempts (each
-// miss feeds the server's slow-down counter).
+// ── Adaptive sign-in screen ────────────────────────────────────────────────────
+// screen-signin adapts to whether THIS device already knows its salon — no toggle:
+//  - salon known  → PIN-first: lead with the PIN pad (opens #pin-modal immediately).
+//  - no salon yet → email-first "Find your salon": no PIN pad (meaningless with no
+//    salon), businessSignin() routes it through the cross-salon lookup instead.
+// Called on every route-to-signed-out (boot, logout) AND again whenever config syncs
+// in, so the business-name header catches up once it arrives (it may be empty on a
+// cold, no-session device at first render).
+export function renderSigninScreen({ openPin = false } = {}) {
+  const pinFirst = !!salonSlug();
+  document.getElementById('signin-pin-mode')?.classList.toggle('hidden', !pinFirst);
+  document.getElementById('signin-email-mode')?.classList.toggle('hidden', pinFirst);
+  document.getElementById('signin-kiosk-btn')?.classList.toggle('hidden', !pinFirst);
+  const bizName = ((cfg().business || {}).name || '').trim();
+  const heading = document.getElementById('signin-heading');
+  const sub     = document.getElementById('signin-subheading');
+  if (heading) heading.textContent = pinFirst ? (bizName || 'Sign in to your business') : 'Find your salon';
+  if (sub)     sub.textContent     = pinFirst ? 'Manage your salon — sales, staff, and reports' : 'Sign in and we’ll open your salon';
+  if (openPin && pinFirst) showPinModal();
+}
+
+// Status line shown under "Staff Access" (the #pin-subtitle paragraph) — every PIN
+// attempt resolves to a visible state (Enter your PIN → Signing in… → success/error),
+// never a silent dead end.
+function _setPinStatus(msg) {
+  const el = document.getElementById('pin-subtitle');
+  if (el) el.textContent = msg || 'Enter your PIN';
+}
+
+// §13 server login: the server checks the PIN, returns who it is, and mints the
+// session. Used both for a FRESH browser (no synced fd_users yet, so the local list
+// can't answer at all) AND for a complete PIN that matches nobody in a non-empty
+// local list (a stale/never-synced device, or a PIN added on another device that
+// hasn't landed here yet) — either way we never just sit there doing nothing.
+// Debounced by the caller so a multi-digit PIN doesn't fire half-typed attempts
+// (each miss feeds the server's slow-down counter).
 let _srvLoginTimer = null, _srvLoginBusy = false;
 async function _serverPinLogin(pin) {
   if (_srvLoginBusy || pin.length < 4) return;
   _srvLoginBusy = true;
+  _setPinStatus('Signing in…');
   const res = await serverLogin({ pin, device: 'dashboard' });
   _srvLoginBusy = false;
   if (pin !== pinBuffer) return;                       // kept typing — attempt is stale
@@ -273,13 +337,16 @@ async function _serverPinLogin(pin) {
     _finishPinLogin(res.user);
     return;
   }
+  // Every outcome below resolves to a visible status — no silent dead end regardless
+  // of how many digits were entered.
   if (res.error === 'slow_down' || res.retryInSec) {
     showToast(`Too many tries — wait ${res.retryInSec || 5}s and try again.`);
     _showPinError();
   } else if (res.error === 'offline') {
+    _setPinStatus('No connection — check your internet and try again.');
     showToast('No connection — this browser needs internet for its first sign-in.');
-  } else if (pin.length >= 6) {
-    _showPinError();
+  } else {
+    _showPinError();   // bad_pin (or anything unrecognized): a definitive "incorrect"
   }
 }
 
@@ -293,12 +360,13 @@ function checkPin() {
   const matchedEl = document.getElementById('pin-matched-user');
   matchedEl.textContent = (matched && pinBuffer.length >= 4) ? `Welcome, ${matched.name}` : '';
 
-  if (pinBuffer.length < 4) return;
+  if (pinBuffer.length < 4) { _setPinStatus(); return; }
   const user = fd.find(u => u.pin === pinBuffer);
   const isFallback = fallbackOk;
 
   if (user || isFallback) {
     const pin = pinBuffer;
+    _setPinStatus('Signing in…');
     setTimeout(() => {
       _finishPinLogin(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
       // Background §13 session mint/refresh — the server reads the same PIN list,
@@ -317,13 +385,16 @@ function checkPin() {
         }, 3000);
       });
     }, 300);
-  } else if (!fd.length) {
-    // Fresh browser: nothing synced yet — the server owns the PIN check (§13).
-    clearTimeout(_srvLoginTimer);
-    _srvLoginTimer = setTimeout(() => _serverPinLogin(pinBuffer), 650);
-  } else if (pinBuffer.length >= 6) {
-    _showPinError();
+    return;
   }
+
+  // No local match on a complete PIN — NEVER a dead end (this used to silently do
+  // nothing here when fd.length > 0 and the buffer hadn't yet reached 6 digits).
+  // Always ask the server, whether the local list is empty or just doesn't have
+  // this PIN. Debounced so we don't fire on every half-typed digit.
+  clearTimeout(_srvLoginTimer);
+  _setPinStatus('Signing in…');
+  _srvLoginTimer = setTimeout(() => _serverPinLogin(pinBuffer), 650);
 }
 
 function updatePinDots() {

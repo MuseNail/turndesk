@@ -579,7 +579,7 @@ function onStateChange(state, changed) {
   if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
-    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
+    photos.setLogo(); auth.updateLoggedInDisplay(); auth.renderSigninScreen(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
@@ -787,6 +787,7 @@ function boot() {
   utils.startElapsedTimer();
   checkin.renderGuestsContainer();
   photos.setLogo();
+  auth.renderSigninScreen();
   queue.renderQueue();
   auth.updateLoggedInDisplay();
   chat.initChatDeskNotify();   // dashboard opts into desktop notifications for new chat messages

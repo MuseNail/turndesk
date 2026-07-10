@@ -50,6 +50,32 @@ export function salonSlug() {
   try { return localStorage.getItem(SALON_KEY) || ''; } catch { return ''; }
 }
 
+// ── Cross-salon login (no salon known yet — bare/general link) ────────────────
+// The email/password could belong to any salon; the Worker's registry DO looks up
+// which one and mints a session scoped to it. NEVER sends ?salon= — not knowing
+// the salon is the whole reason this exists. On success this claims the slug for
+// this device (same effect as visiting a ?salon= link) and stores the session
+// exactly like serverLogin() does, so every existing session-reading code path —
+// getAppToken(), the fetch wrapper, withAuth() — just works once the caller
+// routes the device into that salon.
+export async function serverFindLogin({ email, password } = {}) {
+  try {
+    const r = await fetch(AUTH_ORIGIN + '/auth/find-login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) return { ok: false, error: j.error || 'bad_credentials', retryInSec: j.retryInSec };
+    try {
+      localStorage.setItem(SALON_KEY, j.slug);
+      localStorage.setItem(KEY, JSON.stringify({ token: j.token, user: j.user, expires: j.expires }));
+    } catch {}
+    return { ok: true, slug: j.slug, user: j.user };
+  } catch {
+    return { ok: false, error: 'offline' };
+  }
+}
+
 // PIN → server session. Returns { ok, user } on success; on failure
 // { ok:false, error:'bad_pin'|'slow_down'|'offline', retryInSec? }. A 'bad_pin'
 // with retryInSec means the next try has to wait (escalating slow-down).
