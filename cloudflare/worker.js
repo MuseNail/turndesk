@@ -364,6 +364,17 @@ export default {
     if (path.startsWith('/photos/')) {
       const key = path.slice('/photos/'.length);
       if (!key) return json({ error: 'Missing photo key' }, 400);
+      // This route shares ONE R2 bucket with the per-salon backups (backups/<slug>/...). GET /photos
+      // is auth-exempt, so a readable backups/ key would leak a salon's FULL state — refuse the
+      // backup namespace outright on every method (read, write, delete).
+      if (key === 'backups' || key.startsWith('backups/')) return json({ error: 'not found' }, 404);
+      // Writes/deletes are bound to the caller's authenticated salon. The client namespaces keys as
+      // `<slug>/<name>` (features/photos.js _pkey), and salonId is guaranteed present for non-GET
+      // /photos (the missing-salon guard above), so a write can only ever land under the caller's own
+      // prefix. Without this, an authenticated user of salon A could overwrite/delete salon B's images.
+      if ((method === 'PUT' || method === 'DELETE') && !key.startsWith(salonId + '/')) {
+        return json({ error: 'forbidden' }, 403);
+      }
 
       if (method === 'PUT') {
         const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
