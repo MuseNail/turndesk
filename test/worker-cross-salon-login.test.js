@@ -260,3 +260,50 @@ test('find-login forwards the real client IP to the salon brute-force counter', 
   const byLocal = await salonDOs.lush.state.storage.get('authfail:local');
   assert.equal(byLocal, undefined, 'the guess must NOT be bucketed under the generic "local" key');
 });
+
+// ── Security-review follow-ups (2026-07-10) ─────────────────────────────────
+
+// A salon the operator has DISABLED (registry status:'disabled') is locked out of
+// every route by appAuthOk — so handing back a token would only 401 on reload.
+// find-login instead reports {error:'disabled'} so the (already password-verified)
+// owner sees a clear "salon not active" message rather than a dead reload.
+test('find-login: a DISABLED salon returns {error:disabled} — no token, no reload target', async () => {
+  const { salonDOs, registry } = makeCluster(['lush']);
+  await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
+  await registry.state.storage.put('salon:lush', { slug: 'lush', status: 'disabled' });   // operator disabled it
+
+  const { status, body } = await findLogin(registry, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  assert.equal(status, 200);
+  assert.equal(body.ok, false);
+  assert.equal(body.error, 'disabled', 'the correct-password owner must be told the salon is disabled');
+  assert.equal(body.token, undefined, 'no session token for a disabled salon');
+  assert.equal(body.slug, undefined, 'no ?salon= reload target for a disabled salon');
+});
+
+// The disabled state is revealed ONLY after a correct password (the token-match branch),
+// so a guesser learns nothing: a wrong password on a disabled salon is byte-identical to
+// any other failure — no enumeration signal that the salon exists-but-is-disabled.
+test('find-login: a WRONG password on a disabled salon is indistinguishable from any failure', async () => {
+  const { salonDOs, registry } = makeCluster(['lush']);
+  await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
+  await registry.state.storage.put('salon:lush', { slug: 'lush', status: 'disabled' });
+
+  const { body } = await findLogin(registry, { email: 'owner@lush.com', password: 'wrong' });
+  assert.deepEqual(body, { ok: false }, 'without the password, disabled must look like any other rejection');
+});
+
+// A salon with an explicit active entry — and (via the existing tests) a salon with NO
+// registry entry at all, like the directly-seeded demo — still returns the token.
+test('find-login: an explicitly-active salon still returns the token', async () => {
+  const { salonDOs, registry } = makeCluster(['lush']);
+  await setOwner(salonDOs.lush, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  await indexOwner(registry, { email: 'owner@lush.com', slug: 'lush' });
+  await registry.state.storage.put('salon:lush', { slug: 'lush', status: 'active' });
+
+  const { body } = await findLogin(registry, { email: 'owner@lush.com', password: 'correct-horse-1' });
+  assert.equal(body.ok, true);
+  assert.ok(body.token, 'an active salon still mints a token');
+  assert.equal(body.slug, 'lush');
+});

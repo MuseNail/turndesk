@@ -237,6 +237,7 @@ export async function businessSignin() {
       if (res.ok) { location.href = location.pathname + '?salon=' + encodeURIComponent(res.slug); return; }
       showErr(
         res.error === 'slow_down' ? throttleWaitMsg(res.retryInSec) :
+        res.error === 'disabled'  ? 'This salon isn’t active right now — please contact support.' :
         res.error === 'offline'   ? 'Offline — check your connection.' :
                                     'Incorrect email or password.'
       );

@@ -868,6 +868,10 @@ async function verifyPassword(password, rec) {
   for (let i = 0; i < hash.length; i++) diff |= hash.charCodeAt(i) ^ rec.hash.charCodeAt(i);
   return diff === 0;
 }
+// A fixed, never-matching credential used ONLY to normalize find-login timing when an
+// email maps to no salon (see TurnDeskDO.findLogin). The salt is valid base64 so the
+// PBKDF2 path runs the same work as a real verify; the result is always discarded.
+const _TIMING_DUMMY = { salt: 'AAAAAAAAAAAAAAAAAAAAAA==', hash: 'A'.repeat(44), iters: PBKDF2_ITERS };
 
 // ── Salon registry + operator console ──────────────────────────────────────────
 // The registry is a single reserved DO instance ('__registry__') holding one
@@ -1952,9 +1956,23 @@ export class TurnDeskDO {
           body: JSON.stringify({ email, password }),
         }));
         const j = await r.json().catch(() => ({}));
-        if (j && j.token) return this._authJson({ ok: true, slug, token: j.token, expires: j.expires, user: j.user });
+        if (j && j.token) {
+          // Correct password. If the operator has DISABLED this salon, don't hand back a
+          // token the disabled-salon guard (appAuthOk) would only 401 on — tell the now-
+          // authenticated owner plainly instead of a dead reload. Safe: this branch is
+          // reached ONLY after a password match, so a guesser never learns the disabled
+          // state. No registry entry (e.g. the directly-seeded demo) counts as active.
+          const entry = await this.state.storage.get('salon:' + slug);
+          if (entry && entry.status === 'disabled') return this._authJson({ ok: false, error: 'disabled' });
+          return this._authJson({ ok: true, slug, token: j.token, expires: j.expires, user: j.user });
+        }
       } catch {}   // an unreachable/misbehaving salon DO must never abort the loop — try the rest
     }
+    // Timing normalization: an email that maps to NO salon otherwise returns without any
+    // PBKDF2 work, making "is this a registered owner?" measurable. Burn one throwaway
+    // verify so a miss costs about the same as a hit (defense-in-depth atop the per-IP
+    // rate limit; the salon-count timing difference is accepted).
+    if (!slugs.length) { try { await verifyPassword(password, _TIMING_DUMMY); } catch {} }
     return this._authJson({ ok: false });
   }
 
