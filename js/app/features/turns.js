@@ -3,6 +3,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
+import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
@@ -20,8 +21,8 @@ const setBreak = arr   => dispatch('config.set', { key: 'turns_break', value: ar
 const setOff   = arr   => dispatch('config.set', { key: 'turns_off',   value: arr });
 
 let turnsViewingHistory = null;
-let turnsHistory = JSON.parse(localStorage.getItem('turndesk_turns_history') || '{}');
-function saveTurnsHistory() { try { localStorage.setItem('turndesk_turns_history', JSON.stringify(turnsHistory)); } catch (e) { console.warn('[turns] history save failed (quota?)', e); } }
+let turnsHistory = JSON.parse(localStorage.getItem(scopedKey('turndesk_turns_history')) || '{}');
+function saveTurnsHistory() { try { localStorage.setItem(scopedKey('turndesk_turns_history'), JSON.stringify(turnsHistory)); } catch (e) { console.warn('[turns] history save failed (quota?)', e); } }
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {

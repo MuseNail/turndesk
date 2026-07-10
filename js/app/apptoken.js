@@ -84,6 +84,17 @@ export function migrateLegacySalonStorage() {
   try {
     localStorage.removeItem('turndesk_state_cache');   // safe to drop — server re-syncs
     localStorage.removeItem('turndesk_session');        // safe to drop — re-PIN once
+    // Device-local keys that became per-salon scoped (v0.30): a customer-directory PII cache, the
+    // device turns-history snapshot, and the staff/reports "who's signed in here" ids. All are
+    // caches/prefs the app rebuilds or re-asks for — drop the old UNSCOPED copies so one salon's
+    // customers/history/identity can't linger under another salon's link. NEVER copy them into a
+    // salon bucket (that is exactly how the cross-salon bleed happens). Safe to drop anytime, so
+    // this runs unconditionally (no salon needed) — unlike the pending outbox below.
+    localStorage.removeItem('turndesk_customers');       // customer directory PII cache (rebuilt from the synced store)
+    localStorage.removeItem('turndesk_turns_history');   // device turns-history snapshot (synced turns state is authoritative)
+    localStorage.removeItem('turndesk_staff_id');        // staff app: which tech signed in here
+    localStorage.removeItem('turndesk_staff_fd_id');     // staff app: which front-desk user signed in here
+    localStorage.removeItem('turndesk_reports_uid');     // reports app: which user signed in here
     if (!salonSlug()) return;                           // no salon yet → defer outbox/dead-letter
     let legacyFailed = [], legacyOutbox = [];
     try { legacyFailed = JSON.parse(localStorage.getItem('turndesk_failed_ops') || '[]'); } catch {}

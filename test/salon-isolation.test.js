@@ -86,6 +86,30 @@ test('migration also drops audit.log from a carried-forward legacy dead-letter',
   assert.ok(!dr.some(x => x.op === 'audit.log'), 'audit.log breadcrumb dropped');
 });
 
+test('migration removes the newly-scoped device-local keys (customer PII cache, turns history, staff/reports identity) — never copies them into a salon bucket', () => {
+  reset();
+  localStorage.setItem('td_salon', 'krystal');
+  localStorage.setItem('turndesk_customers', JSON.stringify([{ firstName: 'Jane', phone: '5551212' }]));
+  localStorage.setItem('turndesk_turns_history', JSON.stringify({ '2026-07-10': { order: [] } }));
+  localStorage.setItem('turndesk_staff_id', 't5');
+  localStorage.setItem('turndesk_staff_fd_id', 'fd2');
+  localStorage.setItem('turndesk_reports_uid', 'fd3');
+  migrateLegacySalonStorage();
+  for (const k of ['turndesk_customers', 'turndesk_turns_history', 'turndesk_staff_id', 'turndesk_staff_fd_id', 'turndesk_reports_uid']) {
+    assert.equal(localStorage.getItem(k), null, k + ' legacy unscoped copy removed (no lingering cross-salon data)');
+    assert.equal(localStorage.getItem(k + ':krystal'), null, k + ' must NOT be copied into the salon bucket (that would re-bleed)');
+  }
+});
+
+test('migration removes the legacy device-local keys even on a bare no-salon load (they are safe to drop anytime)', () => {
+  reset();
+  localStorage.setItem('turndesk_customers', JSON.stringify([{ firstName: 'Jane' }]));
+  localStorage.setItem('turndesk_staff_id', 't5');
+  migrateLegacySalonStorage();   // no td_salon
+  assert.equal(localStorage.getItem('turndesk_customers'), null, 'PII cache dropped even with no salon known');
+  assert.equal(localStorage.getItem('turndesk_staff_id'), null, 'identity dropped even with no salon known');
+});
+
 test('migration is idempotent — a second run adds nothing', () => {
   reset();
   localStorage.setItem('td_salon', 'krystal');

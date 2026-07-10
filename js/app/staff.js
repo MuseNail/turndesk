@@ -10,7 +10,7 @@
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
 import * as reporter from './reporter.js';   // automatic error reporting (staff app shares the salon /report log)
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
-import { serverLogin } from './apptoken.js';
+import { serverLogin, scopedKey } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg } from './utils.js';
@@ -28,9 +28,9 @@ const svc     = id => (cfg().services || []).find(s => s.id === id);
 // Station label for an assignment's a.station id (mirrors queue.js stationLabel without importing it).
 const stationLbl = id => { if (!id) return ''; const d = (cfg().stations || []).find(s => s.id === id); return d ? (d.label || d.id) : String(id); };
 
-const MY_KEY = 'turndesk_staff_id';            // device-local: which tech is signed in on THIS device
+const MY_KEY = scopedKey('turndesk_staff_id');            // per-salon device-local: which tech is signed in on THIS device (for THIS salon)
 let myId = localStorage.getItem(MY_KEY) || null;
-const MY_FD_KEY = 'turndesk_staff_fd_id';      // device-local: a front-desk user signed in here (read-only schedule/hours)
+const MY_FD_KEY = scopedKey('turndesk_staff_fd_id');      // per-salon device-local: a front-desk user signed in here (read-only schedule/hours)
 let myFdId = localStorage.getItem(MY_FD_KEY) || null;
 let _view = 'active';                      // 'active' | 'appts' | 'history'
 let _updateVer = null;                     // newer published version detected → show the update banner

@@ -7,6 +7,7 @@ import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
+import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
@@ -174,7 +175,7 @@ export function openQueueHistoryPicker(ev) {
 }
 export function loadQueueHistory(dateStr) {
   if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }
-  const hist = JSON.parse(localStorage.getItem('turndesk_turns_history') || '{}')[dateStr];
+  const hist = JSON.parse(localStorage.getItem(scopedKey('turndesk_turns_history')) || '{}')[dateStr];
   queueViewingHistory = { date: dateStr, snapshot: (hist && hist.snapshot) || [] };
   const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(dateStr);
   renderQueue();

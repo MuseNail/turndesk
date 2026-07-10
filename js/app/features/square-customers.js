@@ -6,6 +6,7 @@ import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, formatPhone, autoCapitalize, dismissNumpad, escHtml, escAttrJs } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
+import { scopedKey } from '../apptoken.js';   // per-salon key isolation — the customer cache holds PII, must never bleed across salons
 
 const cfg = () => getState().config;
 // Manual customer notes are app-owned + synced (config.customer_notes) — kept
@@ -38,7 +39,7 @@ function _storeCustomers() {
   const fromStore = getState().customers || [];
   if (fromStore.length) return { list: fromStore, fromStore: true };
   try {
-    const cached = JSON.parse(localStorage.getItem('turndesk_customers') || '[]');
+    const cached = JSON.parse(localStorage.getItem(scopedKey('turndesk_customers')) || '[]');
     return { list: cached.map(c => ({ id: c.squareId, firstName: c.firstName || '', lastName: c.lastName || '', phone: c.phone || '', email: c.email || '', squareId: c.squareId })), fromStore: false };
   } catch { return { list: [], fromStore: false }; }
 }
@@ -49,7 +50,7 @@ function rebuildDirectory() {
     id: c.id, given_name: c.firstName || '', family_name: c.lastName || '',
     phone: c.phone || '', display: [c.firstName, c.lastName].filter(Boolean).join(' '),
   }));
-  if (fromStore) { try { localStorage.setItem('turndesk_customers', JSON.stringify(customerDirectory)); } catch (e) {} }
+  if (fromStore) { try { localStorage.setItem(scopedKey('turndesk_customers'), JSON.stringify(customerDirectory)); } catch (e) {} }
   window.renderCustomersTab?.();   // live-refresh the Customers tab if it's the open panel
 }
 rebuildDirectory();

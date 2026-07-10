@@ -10,7 +10,7 @@
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
 import * as reporter from './reporter.js';   // automatic error reporting (reports app shares the salon /report log)
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
-import { serverLogin } from './apptoken.js';
+import { serverLogin, scopedKey } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, throttleWaitMsg } from './utils.js';
@@ -25,7 +25,7 @@ import { drawerReportHtml, cdPrintShift, cdPrintCounts } from './features/cashdr
 
 const cfg = () => store.getState().config;
 
-const MY_KEY = 'turndesk_reports_uid';         // device-local: which fd user is signed in here
+const MY_KEY = scopedKey('turndesk_reports_uid');         // per-salon device-local: which fd user is signed in here (for THIS salon)
 let myUid = localStorage.getItem(MY_KEY) || null;
 let _view = 'reports';                     // 'reports' | 'payroll'
 let _range = 'today';                      // 'today' | 'yesterday' | 'week' | 'payperiod' | 'month'
