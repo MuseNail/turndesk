@@ -1850,6 +1850,20 @@ export class TurnDeskDO {
     try { await this.state.storage.put('meta:slug', slug); } catch {}
   }
 
+  // Read the persisted slug. alarm() runs with no request and possibly a cold
+  // instance (this.slug empty), so it must fall back to durable storage.
+  async _getSlug() {
+    if (this.slug) return this.slug;
+    const s = await this.state.storage.get('meta:slug');
+    this.slug = (typeof s === 'string' && s) ? s : '';
+    return this.slug;
+  }
+
+  // backups/<slug>/ per salon; legacy backups/ only when the slug is unknown
+  // (unreachable for a real backing-up salon — any DO that backs up has taken a
+  // slug-bearing request first — but a safe no-regression floor).
+  _backupPrefix(slug) { return slug ? 'backups/' + slug + '/' : 'backups/'; }
+
   async ensureBackupScheduled() {
     const cur = await this.state.storage.getAlarm();
     if (cur === null) await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
@@ -1860,8 +1874,9 @@ export class TurnDeskDO {
     try {
       const snap = await this.buildSnapshot();
       const ts   = new Date().toISOString().replace(/[:.]/g, '-');
+      const slug = await this._getSlug();
       if (this.env.PHOTOS_BUCKET) {
-        await this.env.PHOTOS_BUCKET.put('backups/state-' + ts + '.json', JSON.stringify(snap), {
+        await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'state-' + ts + '.json', JSON.stringify(snap), {
           httpMetadata: { contentType: 'application/json' },
         });
       }
@@ -1889,7 +1904,7 @@ export class TurnDeskDO {
   // List the timestamped snapshots in R2 (newest first).
   async listBackups() {
     if (!this.env.PHOTOS_BUCKET) return { backups: [], count: 0 };
-    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/' });
+    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: this._backupPrefix(await this._getSlug()) });
     const backups = (listed.objects || [])
       .map(o => ({ key: o.key, uploaded: o.uploaded, size: o.size }))
       .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
@@ -1899,7 +1914,7 @@ export class TurnDeskDO {
   // Force a snapshot to R2 right now (used for testing + before a restore).
   async backupNow() {
     const snap = await this.buildSnapshot();
-    const key  = 'backups/state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    const key  = this._backupPrefix(await this._getSlug()) + 'state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
     if (this.env.PHOTOS_BUCKET) await this.env.PHOTOS_BUCKET.put(key, JSON.stringify(snap), { httpMetadata: { contentType: 'application/json' } });
     return { backedUp: true, key, seq: snap.seq };
   }
@@ -1918,6 +1933,7 @@ export class TurnDeskDO {
     const st = snap.state || {};
     await this.backupNow();                           // safety snapshot before wiping
     await this.state.storage.deleteAll();
+    if (this.slug) await this.state.storage.put('meta:slug', this.slug);   // deleteAll wiped it; keep our identity
     for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
     for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
@@ -1941,6 +1957,7 @@ export class TurnDeskDO {
   async factoryReset() {
     const safety = await this.backupNow();            // recovery point before wiping
     await this.state.storage.deleteAll();
+    if (this.slug) await this.state.storage.put('meta:slug', this.slug);   // deleteAll wiped it; keep our identity
     await this.state.storage.put('meta:seq', 1);
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
