@@ -7,8 +7,15 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast } from '../utils.js';
 import { PHOTOS_PROXY, LOGO_PATH } from '../config.js';
+import { salonSlug } from '../apptoken.js';
 
 const cfg = () => getState().config;
+
+// Namespace every R2 photo key by salon so tenants can't collide (logos share the
+// literal key `logo_business`; staff/fduser ids like `staff-1` also repeat across
+// salons). The Worker exempts GET /photos from the salon guard, so the key must be
+// self-describing — an <img> can't send an X-Salon header.
+function _pkey(key) { const s = salonSlug(); return s ? `${s}/${key}` : key; }
 
 // ── R2 helpers ────────────────────────────────────
 async function _uploadToR2(key, dataUrl, mimeType) {
@@ -17,13 +24,13 @@ async function _uploadToR2(key, dataUrl, mimeType) {
     const binary  = atob(b64);
     const bytes   = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const res = await fetch(`${PHOTOS_PROXY}/${key}`, { method: 'PUT', body: bytes, headers: { 'Content-Type': mimeType } });
+    const res = await fetch(`${PHOTOS_PROXY}/${_pkey(key)}`, { method: 'PUT', body: bytes, headers: { 'Content-Type': mimeType } });
     if (!res.ok) throw new Error(res.status);
     return (await res.json()).url || null;
   } catch (e) { console.warn('[Photos] Upload failed:', e); return null; }
 }
 async function _deleteFromR2(key) {
-  try { await fetch(`${PHOTOS_PROXY}/${key}`, { method: 'DELETE' }); } catch (e) { console.warn('[Photos] Delete failed:', e); }
+  try { await fetch(`${PHOTOS_PROXY}/${_pkey(key)}`, { method: 'DELETE' }); } catch (e) { console.warn('[Photos] Delete failed:', e); }
 }
 
 // ── Store helpers ─────────────────────────────────

@@ -309,7 +309,11 @@ export default {
     // Require an explicit salon slug on every route except the two inherently
     // salon-agnostic public callbacks. Replaces the old silent 'muse' default so
     // a forgotten slug fails loudly instead of cross-wiring to another salon.
-    if (!salonId && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
+    // GET /photos/* is exempt: an <img> loads it with no X-Salon header, so the
+    // key itself carries the salon (photos are namespaced per salon client-side,
+    // and are non-sensitive public branding). PUT/DELETE still require the slug.
+    const _isPhotoGet = method === 'GET' && path.startsWith('/photos/');
+    if (!salonId && !_isPhotoGet && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
       return json({ error: 'missing salon' }, 400);
     }
 
