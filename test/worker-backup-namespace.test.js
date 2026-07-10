@@ -50,6 +50,31 @@ test('DO learns + persists its slug from the request (?salon= and X-Salon)', asy
   assert.equal(await s2.get('meta:slug'), 'glam', 'X-Salon header must be persisted');
 });
 
+// Lock the DO's slug expression to the worker's salonId precedence
+// (url.searchParams.get('salon') || request.headers.get('X-Salon')): the query
+// param must win when both are present and disagree.
+test('slug precedence: ?salon= wins over a conflicting X-Salon', async () => {
+  const s = makeStorage();
+  const doInst = new TurnDeskDO({ storage: s }, { PHOTOS_BUCKET: makeBucket() });
+  await doInst.fetch(new Request('https://do/state/snapshot?salon=lush', { headers: { 'X-Salon': 'glam' } }));
+  assert.equal(await s.get('meta:slug'), 'lush', 'query-param salon must win over the X-Salon header');
+});
+
+test('slug whitespace is trimmed before persisting', async () => {
+  const s = makeStorage();
+  const doInst = new TurnDeskDO({ storage: s }, { PHOTOS_BUCKET: makeBucket() });
+  await doInst.fetch(new Request('https://do/state/snapshot', { headers: { 'X-Salon': '  lush  ' } }));
+  assert.equal(await s.get('meta:slug'), 'lush', 'surrounding whitespace must be trimmed');
+});
+
+test('absent slug is a no-op (no stray meta:slug write)', async () => {
+  const s = makeStorage();
+  const doInst = new TurnDeskDO({ storage: s }, { PHOTOS_BUCKET: makeBucket() });
+  await doInst.fetch(new Request('https://do/state/snapshot'));
+  assert.equal(await s.get('meta:slug'), undefined, 'no slug in the request must not write meta:slug');
+  assert.equal(doInst.slug, '', 'in-memory slug stays the empty-string default');
+});
+
 test('backups are written under backups/<slug>/', async () => {
   const bucket = makeBucket();
   const s1 = makeStorage(); await s1.put('meta:slug', 'lush');
