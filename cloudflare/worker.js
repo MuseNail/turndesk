@@ -920,6 +920,21 @@ async function registryGet(env, slug) {
 
 // Operator routes: gated by the OPERATOR_TOKEN secret (Bearer or ?op=). All are
 // cross-salon. Returns a Response.
+// Add/refresh the registry owneremail→slug index so the salon-agnostic
+// /auth/find-login (bare link) can route an owner to their salon. Best-effort —
+// a miss only means the owner must use the salon-specific link. Email→slug only,
+// no secret.
+async function indexOwnerEmail(env, email, slug) {
+  email = String(email || '').trim().toLowerCase(); slug = String(slug || '').trim();
+  if (!email || !slug) return;
+  try {
+    await registryStub(env).fetch(new Request('https://do/registry/index-owner', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, slug }),
+    }));
+  } catch {}
+}
+
 async function handleOperator(request, env, url, method, path) {
   const auth = request.headers.get('Authorization') || '';
   const tok  = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (url.searchParams.get('op') || '');
@@ -953,6 +968,7 @@ async function handleOperator(request, env, url, method, path) {
     }));
     const entry = { slug, name: b.name || slug, status: 'active', ownerEmail: String(b.ownerEmail).toLowerCase(), plan: b.plan || '', createdAt: new Date().toISOString() };
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    await indexOwnerEmail(env, entry.ownerEmail, slug);
     return json({ ok: true, slug, entry });
   }
   // POST /operator/salons/<slug>/register { name, ownerEmail, plan } → add an
@@ -966,6 +982,7 @@ async function handleOperator(request, env, url, method, path) {
     const existing = await registryGet(env, v.slug);
     const entry = { slug: v.slug, name: b.name || (existing && existing.name) || v.slug, status: 'active', ownerEmail: (b.ownerEmail || (existing && existing.ownerEmail) || '').toLowerCase(), plan: b.plan || (existing && existing.plan) || '', createdAt: (existing && existing.createdAt) || new Date().toISOString() };
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    await indexOwnerEmail(env, entry.ownerEmail, entry.slug);
     return json({ ok: true, entry });
   }
   // POST /operator/salons/<slug>/status { status } → enable/disable
@@ -988,7 +1005,17 @@ async function handleOperator(request, env, url, method, path) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: env.RESTORE_TOKEN, email: b.email, password: b.password, name: b.name || 'Owner', role: b.role === 'manager' ? 'manager' : 'owner' }),
     }));
+    if (r.ok) await indexOwnerEmail(env, b.email, m[1]);
     return json(await r.json().catch(() => ({ ok: r.ok })), r.status);
+  }
+  // POST /operator/reindex-owners → one-time backfill of the owneremail→slug index
+  // from every registry salon's ownerEmail (for salons created before the index existed).
+  if (path === '/operator/reindex-owners' && method === 'POST') {
+    const lr = await registryStub(env).fetch(new Request('https://do/registry/list'));
+    const salons = (await lr.json().catch(() => ({ salons: [] }))).salons || [];
+    let n = 0;
+    for (const s of salons) { if (s && s.ownerEmail && s.slug) { await indexOwnerEmail(env, s.ownerEmail, s.slug); n++; } }
+    return json({ ok: true, indexed: n });
   }
   if (path === '/operator/requests' && method === 'GET') {
     const r = await registryStub(env).fetch(new Request('https://do/registry/signups'));
@@ -1014,6 +1041,7 @@ async function handleOperator(request, env, url, method, path) {
     const entry = { slug, name: rec.business, status: 'active', ownerEmail: rec.email, plan: '', createdAt: new Date().toISOString() };
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
     await registryStub(env).fetch(new Request('https://do/signup/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rec.id, status: 'approved', finalSlug: slug }) }));
+    await indexOwnerEmail(env, rec.email, slug);
     return json({ ok: true, slug });
   }
   if (path === '/operator/export' && method === 'GET') {
