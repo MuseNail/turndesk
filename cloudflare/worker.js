@@ -1861,9 +1861,10 @@ export class TurnDeskDO {
       const t = staff.find(s => s.pin && String(s.pin) === pin && !inactive.has(s.id) && (!wantId || s.id === wantId));
       if (t) user = { kind: 'tech', id: t.id, name: t.name, role: 'tech' };
     }
-    // Fresh-system fallback (mirrors the client's Manager fallback, config.js
-    // STAFF_PIN): accepted ONLY while no front-desk users exist at all.
-    if (!user && !fdUsers.length && pin === '1234') user = { kind: 'fd', id: 'fallback', name: 'Manager', role: 'admin' };
+    // No fresh-system PIN fallback: a brand-new salon has an owner credential (set at
+    // provisioning), so it bootstraps via owner email/password, then the first-run prompt
+    // sets a real manager PIN. Accepting a fixed "1234" here would be an admin backdoor on
+    // any salon whose (public) slug is known — see STRESS-TEST-2026-07-11.md H1.
     if (!user) return reject();
 
     await this.state.storage.delete(failKey);
@@ -1921,11 +1922,12 @@ export class TurnDeskDO {
     if (sess.expires < Date.now()) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
     // Removing a front-desk user / removing-or-deactivating a tech revokes their
     // sessions automatically (within the Worker's ~60s cache) — no extra UI needed.
-    // 'fallback' and the master 'appadmin' (APP_ADMIN_PIN) sessions have no staff/user
-    // row to revoke against — they're gated by the secret at mint time — so they skip
-    // this per-user revocation check (they still expire, and unsetting the secret stops
-    // new ones). Without this, an appadmin session is deleted on its first /auth/check.
-    if (sess.id !== 'fallback' && sess.kind !== 'appadmin') {
+    // The master 'appadmin' (APP_ADMIN_PIN) session has no staff/user row to revoke
+    // against — it's gated by the secret at mint time — so it skips this per-user check
+    // (it still expires, and unsetting the secret stops new ones). Without this, an
+    // appadmin session is deleted on its first /auth/check. Any lingering legacy
+    // 'fallback' session (from the retired 1234 path) now correctly fails this check.
+    if (sess.kind !== 'appadmin') {
       if (sess.kind === 'owner') {
         const rec = sess.email ? await this.state.storage.get('owner:' + sess.email) : null;
         if (!rec) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
@@ -2101,11 +2103,21 @@ export class TurnDeskDO {
     await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
   }
 
-  // List the timestamped snapshots in R2 (newest first).
+  // List the timestamped snapshots in R2 (newest first). Pages the R2 cursor: a single
+  // list() returns at most 1000 objects in ascending key order, so without paging a salon
+  // with >1000 snapshots would surface only the OLDEST 1000 and "restore latest" would pick
+  // a stale one (STRESS-TEST-2026-07-11.md H2).
   async listBackups() {
     if (!this.env.PHOTOS_BUCKET) return { backups: [], count: 0 };
-    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: this._backupPrefix(await this._getSlug()) });
-    const backups = (listed.objects || [])
+    const prefix = this._backupPrefix(await this._getSlug());
+    const objects = [];
+    let cursor;
+    do {
+      const listed = await this.env.PHOTOS_BUCKET.list({ prefix, cursor });
+      for (const o of (listed.objects || [])) objects.push(o);
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+    const backups = objects
       .map(o => ({ key: o.key, uploaded: o.uploaded, size: o.size }))
       .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
     return { backups, count: backups.length };

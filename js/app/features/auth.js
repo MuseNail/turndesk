@@ -5,7 +5,6 @@ import { getState } from '../store.js';
 import { dispatch, resync } from '../sync.js';
 import { showToast, escHtml, throttleWaitMsg } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
-import { STAFF_PIN } from '../config.js';
 import { serverLogin, serverFindLogin, urlSalonSlug } from '../apptoken.js';
 
 const cfg = () => getState().config;
@@ -122,11 +121,11 @@ function _finishPinLogin(user) {
 }
 
 // ── First-run manager PIN (brand-new salon) ───────────────────────────────────
-// A freshly provisioned salon has an owner (email/password) but no front-desk users,
-// so the temporary 1234 fallback is the only PIN. On the first admin sign-in we prompt
-// them to set a real 4-digit manager PIN — which creates a front-desk 'Manager' user
-// and, because a salon with any fd_users no longer accepts 1234, retires the fallback.
-// The operator can also see/change this PIN from the operator console.
+// A freshly provisioned salon has an owner (email/password) but no front-desk users.
+// The owner signs in with email/password ("Owner sign-in"); on that first admin sign-in
+// we prompt them to set a real 4-digit manager PIN — which creates the front-desk
+// 'Manager' user the front desk then signs in with. There is no 1234 fallback (the
+// server never accepts it). The operator can also see/change this PIN from the console.
 export function maybePromptManagerSetup() {
   const au = getActiveUser();
   if (!au || au.role !== 'admin' || au.kind === 'appadmin') return;   // owners/managers only; never the master app-admin
@@ -357,29 +356,27 @@ async function _serverPinLogin(pin) {
 
 function checkPin() {
   const fd = cfg().fd_users || [];
-  // The 1234 fallback is valid ONLY while no front-desk users exist — the same gate the
-  // server's authLogin uses. Once a manager PIN is set (fd_users non-empty), 1234 stops
-  // unlocking here too, so "set a manager PIN → 1234 is retired" holds client-side as well.
-  const fallbackOk = pinBuffer === STAFF_PIN && !fd.length;
-  const matched = fd.find(u => u.pin === pinBuffer) || (fallbackOk ? { name: 'Manager', role: 'admin' } : null);
+  // No 1234 fallback: a brand-new salon has no front-desk PIN. The owner signs in with
+  // "Owner sign-in" (email/password) and sets a manager PIN at first run; the front desk
+  // then uses that PIN. The server likewise never accepts 1234 (see authLogin).
+  const matched = fd.find(u => u.pin === pinBuffer);
   const matchedEl = document.getElementById('pin-matched-user');
   matchedEl.textContent = (matched && pinBuffer.length >= 4) ? `Welcome, ${matched.name}` : '';
 
   if (pinBuffer.length < 4) { _setPinStatus(); return; }
   const user = fd.find(u => u.pin === pinBuffer);
-  const isFallback = fallbackOk;
 
-  if (user || isFallback) {
+  if (user) {
     const pin = pinBuffer;
     _setPinStatus('Signing in…');
     setTimeout(() => {
-      _finishPinLogin(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
+      _finishPinLogin(user);
       // Background §13 session mint/refresh — the server reads the same PIN list,
       // so this normally just succeeds silently; resync makes the WS pick it up.
-      // But if the server WON'T issue a session for this code (e.g. the manager/fallback
-      // code, or a PIN that isn't a registered front-desk user), the device unlocks
-      // locally yet can never sync — so say that plainly instead of silently going offline.
-      serverLogin({ pin, userId: user?.id, device: 'dashboard' }).then(r => {
+      // But if the server WON'T issue a session for this code (a PIN that isn't a
+      // registered front-desk user), the device unlocks locally yet can never sync —
+      // so say that plainly instead of silently going offline.
+      serverLogin({ pin, userId: user.id, device: 'dashboard' }).then(r => {
         if (r.ok) { resync(); return; }
         // Only warn if the device GENUINELY can't sync: with enforcement off, a code the
         // server rejects still syncs tokenless, so don't cry wolf. Give the WS/snapshot a
@@ -411,12 +408,13 @@ function updatePinDots() {
 }
 
 // ── Admin-code gate (for destructive actions) ─────
-// A code is "admin" if it's the default Manager PIN or an fd_user with role 'admin'.
+// A code is "admin" if it belongs to an fd_user with role 'admin'. (There is no 1234
+// fallback: on a brand-new salon the owner sets a manager PIN at first run, and that
+// admin PIN is what authorizes destructive actions.)
 let _adminCodeOnSuccess = null;
 function isAdminCode(code) {
   if (!code) return false;
   const fd = cfg().fd_users || [];
-  if (code === STAFF_PIN && !fd.length) return true;   // 1234 only while no front-desk users exist
   return fd.some(u => u.pin === code && u.role === 'admin');
 }
 export function requireAdminCode(onSuccess, msg) {
