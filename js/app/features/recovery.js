@@ -50,6 +50,9 @@ function probableLostCheckins(windowDays = 7) {
 function _entryName(op, payload) {
   if (op === 'queue.upsert') return payload?.entry?.name || '(queue entry)';
   if (op === 'record.save') return payload?.record?.name || '(transaction)';
+  if (op === 'giftcard.save') return payload?.card?.code || payload?.card?.id || '(gift card)';
+  if (op === 'customer.upsert') return [payload?.customer?.firstName, payload?.customer?.lastName].filter(Boolean).join(' ') || '(customer)';
+  if (op === 'appt.upsert') return payload?.appt?.name || '(appointment)';
   return op;
 }
 
@@ -61,13 +64,25 @@ export function recoveryRestoreFailed(mutationId) {
   // "never revive a deleted transaction" guard and create a duplicate financial record;
   // re-saving with the original id merges cleanly if the record still exists, and is
   // correctly blocked by the deletion guard if it was deliberately deleted.
+  const st = getState();
   if (item.op === 'queue.upsert' && item.payload?.entry) {
     dispatch('queue.upsert', { entry: { ...item.payload.entry } });
     showToast('Restored to queue ✓');
   } else if (item.op === 'record.save' && item.payload?.record) {
-    if (getState().deletions.includes(String(item.payload.record.id))) { showToast('That transaction was deleted — not restored'); return; }
+    if (st.deletions.includes(String(item.payload.record.id))) { showToast('That transaction was deleted — not restored'); return; }
     dispatch('record.save', { record: { ...item.payload.record } });
     showToast('Transaction restored ✓');
+  } else if (item.op === 'giftcard.save' && item.payload?.card) {
+    dispatch('giftcard.save', { card: { ...item.payload.card } });
+    showToast('Gift card restored ✓');
+  } else if (item.op === 'customer.upsert' && item.payload?.customer) {
+    if ((st.customerDeletions || []).includes(String(item.payload.customer.id))) { showToast('That customer was deleted — not restored'); return; }
+    dispatch('customer.upsert', { customer: { ...item.payload.customer } });
+    showToast('Customer restored ✓');
+  } else if (item.op === 'appt.upsert' && item.payload?.appt) {
+    if ((st.apptDeletions || []).includes(String(item.payload.appt.id))) { showToast('That appointment was cancelled — not restored'); return; }
+    dispatch('appt.upsert', { appt: { ...item.payload.appt } });
+    showToast('Appointment restored ✓');
   } else { showToast('This item can’t be auto-restored'); return; }
   clearFailedOp(mutationId);
   renderRecoveryReport();
@@ -124,12 +139,12 @@ export function renderRecoveryReport() {
   // B — failed (rejected) writes
   const failedHtml = failed.length ? failed.slice().reverse().map(f => {
     const when = f.at ? new Date(f.at).toLocaleString() : '—';
-    const restorable = (f.op === 'queue.upsert' && f.payload?.entry) || (f.op === 'record.save' && f.payload?.record);
+    const restorable = (f.op === 'queue.upsert' && f.payload?.entry) || (f.op === 'record.save' && f.payload?.record) || (f.op === 'giftcard.save' && f.payload?.card) || (f.op === 'customer.upsert' && f.payload?.customer) || (f.op === 'appt.upsert' && f.payload?.appt);
     return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-1.5 border border-error/40">
       <div class="flex items-center justify-between gap-2 mb-1"><div class="min-w-0"><span class="font-headline font-semibold text-on-surface text-sm">${_esc(_entryName(f.op, f.payload))}</span></div><span class="text-[11px] text-outline flex-shrink-0">${when}</span></div>
       <div class="text-[11px] font-body text-on-surface-variant mb-2">${f.op} · ${_esc(f.error || 'rejected')}</div>
       <div class="flex gap-2">
-        ${restorable ? `<button onclick="recoveryRestoreFailed('${_esc(f.mutationId)}')" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-body font-semibold">Restore to queue</button>` : ''}
+        ${restorable ? `<button onclick="recoveryRestoreFailed('${_esc(f.mutationId)}')" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-body font-semibold">Restore</button>` : ''}
         <button onclick="recoveryDismissFailed('${_esc(f.mutationId)}')" class="px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface-variant text-xs font-body font-semibold">Dismiss</button>
       </div></div>`;
   }).join('') : none('No failed writes recorded.');

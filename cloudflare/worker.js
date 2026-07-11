@@ -235,8 +235,14 @@ async function isSalonDisabled(env, salonId) {
   if (_regCache.size > 2000) _regCache.clear();
   return disabled;
 }
+let _authOffWarned = false;
 async function appAuthOk(request, url, env, salonId) {
-  if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return true;   // migration mode
+  if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') {
+    // Loud once-per-isolate: auth-off means EVERY route is open with no session — the exact state
+    // that exposed a customer directory when this flag was never set. Never a silent default.
+    if (!_authOffWarned) { _authOffWarned = true; console.warn('[auth] SECURITY: AUTH_ENFORCED is not "true" — all routes are OPEN (no sign-in required). Set AUTH_ENFORCED="true" in production.'); }
+    return true;
+  }
   if (salonId && await isSalonDisabled(env, salonId)) return false;            // disabled salon → locked out everywhere
   const path = url.pathname;
   if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
@@ -582,7 +588,7 @@ export default {
       // One-time consent (authorization-code flow, offline access → refresh token).
       if (path === '/gcal/connect') {
         if (!env.GCAL_CLIENT_SECRET) return json({ error: 'GCAL_CLIENT_SECRET not set on the Worker' }, 503);
-        const state = crypto.randomUUID();
+        const state = salonId + ':' + crypto.randomUUID();   // carry the salon through OAuth (the fixed callback URI has no ?salon=)
         const blob = await readBlob();
         blob.pending = { state, return: url.searchParams.get('return') || '', ts: Date.now() };
         await writeBlob(blob);
@@ -595,8 +601,15 @@ export default {
 
       // Google redirects back with ?code&state — exchange for tokens, store the refresh token.
       if (path === '/gcal/callback') {
-        const code = url.searchParams.get('code'), state = url.searchParams.get('state');
-        const blob = await readBlob(), pending = blob.pending;
+        const code = url.searchParams.get('code'), state = url.searchParams.get('state') || '';
+        // The callback carries no ?salon= (Google redirects to a fixed URI), so recover the salon from
+        // the state minted in /gcal/connect (`<salon>:<nonce>`) and read/write THAT salon's blob — not
+        // the empty-slug DO the top-level salonId ('') would otherwise resolve to. (Was: connect always failed.)
+        const cbSalon = state.split(':')[0];
+        const cbStub = cbSalon ? env.SALON_DO.get(env.SALON_DO.idFromName(cbSalon)) : stub;
+        const cbRead  = async () => { try { const r = await cbStub.fetch('https://do/gcal/blob'); return r.ok ? await r.json() : {}; } catch { return {}; } };
+        const cbWrite = async (b) => { await cbStub.fetch('https://do/gcal/blob', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); };
+        const blob = await cbRead(), pending = blob.pending;
         const okState = pending && pending.state && pending.state === state && (Date.now() - pending.ts) < 10 * 60 * 1000;
         if (!code || !okState) return htmlMsg('Calendar connect failed (expired or invalid). Close this and tap Connect again.', 400);
         const r = await fetch(GOOGLE_TOKEN_URI, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -604,7 +617,7 @@ export default {
         const tok = await r.json().catch(() => ({}));
         if (!r.ok || !tok.refresh_token) { console.warn('[gcal] code exchange failed', r.status, tok.error); return htmlMsg('Calendar connect failed (' + (tok.error || r.status) + '). Close this and tap Connect again — be sure to tap "Allow".', 400); }
         const ret = pending.return;
-        await writeBlob({ refresh: tok.refresh_token, access: { token: tok.access_token, expires: Date.now() + (tok.expires_in || 3600) * 1000 } });
+        await cbWrite({ refresh: tok.refresh_token, access: { token: tok.access_token, expires: Date.now() + (tok.expires_in || 3600) * 1000 } });
         if (ret) return Response.redirect(ret + (ret.includes('?') ? '&' : '?') + 'gcal=connected', 302);
         return htmlMsg('✓ Google Calendar connected. You can close this window.<script>try{window.opener&&window.opener.postMessage("gcal-connected","*")}catch(e){};setTimeout(function(){window.close&&window.close()},800)<\/script>');
       }
@@ -871,13 +884,20 @@ async function hashPassword(password, saltB64, iters = PBKDF2_ITERS) {
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' }, key, 256);
   return { salt: _b64(salt), hash: _b64(bits), iters };
 }
+// Constant-time string compare — no early exit on the first differing char, so a secret check
+// can't leak the secret's contents through response timing. Used for the operator/admin/restore
+// secret checks and the PBKDF2 hash compare below. (Length equality is not itself sensitive here.)
+export function safeEqual(a, b) {
+  a = String(a == null ? '' : a); b = String(b == null ? '' : b);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 async function verifyPassword(password, rec) {
   if (!rec || !rec.salt || !rec.hash) return false;
   const { hash } = await hashPassword(password, rec.salt, rec.iters || PBKDF2_ITERS);
-  if (hash.length !== rec.hash.length) return false;
-  let diff = 0;
-  for (let i = 0; i < hash.length; i++) diff |= hash.charCodeAt(i) ^ rec.hash.charCodeAt(i);
-  return diff === 0;
+  return safeEqual(hash, rec.hash);
 }
 // A fixed, never-matching credential used ONLY to normalize find-login timing when an
 // email maps to no salon (see TurnDeskDO.findLogin). The salt is valid base64 so the
@@ -953,7 +973,7 @@ async function indexOwnerEmail(env, email, slug) {
 async function handleOperator(request, env, url, method, path) {
   const auth = request.headers.get('Authorization') || '';
   const tok  = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (url.searchParams.get('op') || '');
-  if (!env.OPERATOR_TOKEN || tok !== env.OPERATOR_TOKEN) return json({ error: 'unauthorized' }, 401);
+  if (!env.OPERATOR_TOKEN || !safeEqual(tok, env.OPERATOR_TOKEN)) return json({ error: 'unauthorized' }, 401);
 
   // GET /operator/salons → list
   if (path === '/operator/salons' && method === 'GET') {
@@ -1196,10 +1216,14 @@ export class TurnDeskDO {
       const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
       if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
       if (rl.n >= 5) return new Response(JSON.stringify({ error: 'Too many requests — please try again later.' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
-      let pending = 0;
+      let pending = 0, perEmail = 0;
       const existing = await this.state.storage.list({ prefix: 'signup:' });
-      for (const [, x] of existing) if (x && x.status === 'pending') pending++;
+      for (const [, x] of existing) if (x && x.status === 'pending') { pending++; if (x.email && x.email === v.value.email) perEmail++; }
       if (pending >= 200) return new Response(JSON.stringify({ error: 'The request queue is full — please try again later.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      // Per-email pending cap: one owner can't pile up open requests (blunts duplicate-signup spam
+      // without penalizing unrelated salons behind the same shared IP). Broad rotation abuse still
+      // needs the operator to clear the queue — a known limitation. (`ip` is stored for operator triage.)
+      if (perEmail >= 3) return new Response(JSON.stringify({ error: 'You already have requests pending — please wait for a reply.' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
       rl.n++; await this.state.storage.put(rlKey, rl);
       const val = v.value;
       const cred = await hashPassword(val.password);
@@ -1209,7 +1233,7 @@ export class TurnDeskDO {
       const id = crypto.randomUUID();
       await this.state.storage.put('signup:' + id, {
         id, status: 'pending', business: val.business, ownerName: val.ownerName, email: val.email,
-        phone: val.phone, note: val.note, ownerRecord, proposedSlug: cand, finalSlug: '', createdAt: now, decidedAt: 0,
+        phone: val.phone, note: val.note, ownerRecord, proposedSlug: cand, finalSlug: '', createdAt: now, decidedAt: 0, ip,
       });
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1275,7 +1299,7 @@ export class TurnDeskDO {
     if (url.pathname === '/state/restore' && request.method === 'POST') {
       let body = {}; try { body = await request.json(); } catch {}
       if (!body.confirm) return new Response(JSON.stringify({ error: 'restore requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      if (!this.env.RESTORE_TOKEN || !safeEqual(body.token, this.env.RESTORE_TOKEN)) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       const res = await this.restoreFromBackup(body.key);
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1285,7 +1309,7 @@ export class TurnDeskDO {
     if (url.pathname === '/state/reset' && request.method === 'POST') {
       let body = {}; try { body = await request.json(); } catch {}
       if (!body.confirm) return new Response(JSON.stringify({ error: 'reset requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      if (!this.env.RESTORE_TOKEN || !safeEqual(body.token, this.env.RESTORE_TOKEN)) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       const res = await this.factoryReset();
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1295,7 +1319,7 @@ export class TurnDeskDO {
     // /state/restore and /state/reset. Bucket-wide; run once from any salon.
     if (url.pathname === '/state/prune-legacy' && request.method === 'POST') {
       let body = {}; try { body = await request.json(); } catch {}
-      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      if (!this.env.RESTORE_TOKEN || !safeEqual(body.token, this.env.RESTORE_TOKEN)) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       const res = await this.pruneLegacyBackups();
       return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1542,13 +1566,9 @@ export class TurnDeskDO {
         return;
       }
 
-      // Legacy relay — current production client ({type:'queue'|'config'}).
-      // Broadcast verbatim to all OTHER clients. Remove after cutover.
-      for (const socket of this.sockets) {
-        if (socket !== ws && socket.readyState === 1) {
-          try { socket.send(data); } catch {}
-        }
-      }
+      // Unknown message type: ignore. (The old ungated legacy relay that rebroadcast arbitrary
+      // frames verbatim to every peer in this salon has been removed — the current client only ever
+      // sends hello / ping / mutate, all handled above.)
     });
 
     ws.addEventListener('close', () => this.sockets.delete(ws));
@@ -1819,7 +1839,7 @@ export class TurnDeskDO {
     // ANY salon. Checked before the salon's own users + the fresh-system 1234 fallback,
     // so it works whether or not the salon has any staff configured. Shares the per-IP
     // slow-down above. The session name "App Admin" makes it visible in the audit log.
-    if (this.env.APP_ADMIN_PIN && pin && pin === this.env.APP_ADMIN_PIN) {
+    if (this.env.APP_ADMIN_PIN && pin && safeEqual(pin, this.env.APP_ADMIN_PIN)) {
       await this.state.storage.delete(failKey);
       const au = { kind: 'appadmin', id: 'appadmin', name: 'App Admin', role: 'admin' };
       const tok = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
@@ -1866,7 +1886,7 @@ export class TurnDeskDO {
   // a snapshot prefix, so they never reach clients), never echoes the password.
   async authOwnerSet(request) {
     let body = {}; try { body = await request.json(); } catch {}
-    if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return this._authJson({ error: 'unauthorized' }, 403);
+    if (!this.env.RESTORE_TOKEN || !safeEqual(body.token, this.env.RESTORE_TOKEN)) return this._authJson({ error: 'unauthorized' }, 403);
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
     if (!email || !email.includes('@') || password.length < 6) return this._authJson({ error: 'bad_request' }, 400);

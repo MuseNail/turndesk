@@ -95,6 +95,7 @@ export function migrateLegacySalonStorage() {
     localStorage.removeItem('turndesk_staff_id');        // staff app: which tech signed in here
     localStorage.removeItem('turndesk_staff_fd_id');     // staff app: which front-desk user signed in here
     localStorage.removeItem('turndesk_reports_uid');     // reports app: which user signed in here
+    localStorage.removeItem('turndesk_bo_token');        // Back Office push token (re-enter once per salon)
     if (!salonSlug()) return;                           // no salon yet → defer outbox/dead-letter
     let legacyFailed = [], legacyOutbox = [];
     try { legacyFailed = JSON.parse(localStorage.getItem('turndesk_failed_ops') || '[]'); } catch {}

@@ -18,9 +18,10 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, localDateStr } from '../utils.js';
 import { computeMetrics, payrollComputedRows, payrollFdRows } from './reports.js';
+import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local BO push token
 
 const cfg = () => getState().config;
-const TOKEN_KEY = 'turndesk_bo_token';
+const TOKEN_KEY = scopedKey('turndesk_bo_token');   // per-salon device-local Back Office push token
 const cents = v => Math.round((v || 0) * 100);
 
 // Net cash-drawer over/short (dollars; + over, − short) across drawers CLOSED on
