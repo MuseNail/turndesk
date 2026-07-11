@@ -1119,10 +1119,17 @@ export class TurnDeskDO {
   constructor(state, env) {
     this.state = state;
     this.env   = env;
-    this.sockets = new Set();
     this.SCHEMA_VERSION = 1;
     this.BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
     this.slug = '';   // this salon's tenant slug; learned from requests, persisted to meta:slug
+    // WebSocket Hibernation: answer the client's 20s keepalive ping at the edge so the heartbeat
+    // never wakes (or bills) the DO. Sockets live in the runtime (state.getWebSockets), not an
+    // in-memory Set a hibernation eviction would drop. Guarded so unit tests (no WS runtime) build.
+    try {
+      if (typeof WebSocketRequestResponsePair !== 'undefined' && this.state.setWebSocketAutoResponse) {
+        this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair(JSON.stringify({ type: 'ping' }), JSON.stringify({ type: 'pong' })));
+      }
+    } catch {}
   }
 
   async fetch(request) {
@@ -1137,7 +1144,7 @@ export class TurnDeskDO {
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
       const pair             = new WebSocketPair();
       const [client, server] = Object.values(pair);
-      this.handleSession(server);
+      this.state.acceptWebSocket(server);   // hibernatable: the runtime holds the socket, not the isolate
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -1372,7 +1379,7 @@ export class TurnDeskDO {
       let b = {}; try { b = await request.json(); } catch {}
       if (b && b.invoiceNumber) {
         const msg = JSON.stringify({ type: 'helcim_result', invoiceNumber: b.invoiceNumber, status: b.status || '', transactionId: b.transactionId || null, amount: (b.amount ?? null) });
-        for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(msg); } catch {} } }
+        this._broadcast(msg);
       }
       return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1539,40 +1546,47 @@ export class TurnDeskDO {
     } catch {}
   }
 
-  handleSession(ws) {
-    ws.accept();
-    this.sockets.add(ws);
+  // Hibernation message handler: the runtime invokes this when a frame arrives, waking the DO
+  // only for real work (hello / mutate). The 20s keepalive ping is auto-responded at the edge
+  // (see constructor) and normally never reaches here — the ping branch stays as a correct
+  // fallback if a client ever sends one raw. `data` is a string (or ArrayBuffer for binary).
+  async webSocketMessage(ws, data) {
+    let msg;
+    try { msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data)); } catch { return; }
 
-    ws.addEventListener('message', async ({ data }) => {
-      let msg;
-      try { msg = JSON.parse(data); } catch { return; }
+    if (msg.type === 'ping') {
+      try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
+      return;
+    }
 
-      if (msg.type === 'ping') {
-        try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
-        return;
-      }
+    // New protocol: hydrate
+    if (msg.type === 'hello') {
+      const snap = await this.buildSnapshot();
+      try { ws.send(JSON.stringify({ type: 'snapshot', state: snap.state, seq: snap.seq, schemaVersion: snap.schemaVersion })); } catch {}
+      return;
+    }
 
-      // New protocol: hydrate
-      if (msg.type === 'hello') {
-        const snap = await this.buildSnapshot();
-        try { ws.send(JSON.stringify({ type: 'snapshot', state: snap.state, seq: snap.seq, schemaVersion: snap.schemaVersion })); } catch {}
-        return;
-      }
+    // New protocol: mutate (apply → ack sender → broadcast change to peers)
+    if (msg.type === 'mutate') {
+      const res = await this.applyMutation(msg, ws);
+      try { ws.send(JSON.stringify({ type: 'applied', mutationId: msg.mutationId, seq: res.seq, error: res.error })); } catch {}
+      return;
+    }
+    // Unknown message type: ignore. (The current client only ever sends hello / ping / mutate.)
+  }
 
-      // New protocol: mutate (apply → ack sender → broadcast change to peers)
-      if (msg.type === 'mutate') {
-        const res = await this.applyMutation(msg, ws);
-        try { ws.send(JSON.stringify({ type: 'applied', mutationId: msg.mutationId, seq: res.seq, error: res.error })); } catch {}
-        return;
-      }
+  // Hibernation close: getWebSockets() drops closed sockets automatically, so there's no Set to
+  // maintain — just cleanly close the server end.
+  async webSocketClose(ws) { try { ws.close(); } catch {} }
 
-      // Unknown message type: ignore. (The old ungated legacy relay that rebroadcast arbitrary
-      // frames verbatim to every peer in this salon has been removed — the current client only ever
-      // sends hello / ping / mutate, all handled above.)
-    });
-
-    ws.addEventListener('close', () => this.sockets.delete(ws));
-    ws.addEventListener('error', () => this.sockets.delete(ws));
+  // Send one frame to every connected client, optionally excluding one socket (the sender of a
+  // mutation, so it isn't echoed its own change). Enumerates via getWebSockets() — the
+  // hibernation-safe source of truth that survives DO eviction. (Guarded for unit tests.)
+  _broadcast(payload, exclude) {
+    const peers = this.state.getWebSockets ? this.state.getWebSockets() : [];
+    for (const ws of peers) {
+      if (ws !== exclude && ws.readyState === 1) { try { ws.send(payload); } catch {} }
+    }
   }
 
   async nextSeq() {
@@ -1789,11 +1803,7 @@ export class TurnDeskDO {
 
     // Broadcast the change to every OTHER connected client.
     const change = JSON.stringify({ type: 'change', op, payload, seq, device: msg.device || null });
-    for (const socket of this.sockets) {
-      if (socket !== fromWs && socket.readyState === 1) {
-        try { socket.send(change); } catch {}
-      }
-    }
+    this._broadcast(change, fromWs);
 
     await this.ensureBackupScheduled();
     return { applied: true, seq };
@@ -2200,7 +2210,7 @@ export class TurnDeskDO {
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
-    for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
+    this._broadcast(payload);
     return { restored: true, key: useKey, counts: { config: Object.keys(st.config||{}).length, queue: (st.queue||[]).length, records: (st.records||[]).length, giftcards: (st.giftcards||[]).length, customers: (st.customers||[]).length, appointments: (st.appointments||[]).length } };
   }
 
@@ -2216,7 +2226,7 @@ export class TurnDeskDO {
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
-    for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
+    this._broadcast(payload);
     return { reset: true, seq: fresh.seq, safetyBackup: safety.key };
   }
 }
