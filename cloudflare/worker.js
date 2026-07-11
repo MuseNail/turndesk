@@ -426,7 +426,7 @@ export default {
       const id    = env.SALON_DO.idFromName(salonId);
       const stub  = env.SALON_DO.get(id);
       const doRes = await stub.fetch(request);
-      if (doRes.status >= 500) console.error('[state]', method, path, '->', doRes.status);
+      if (doRes.status >= 500) console.error('[state]', salonId, method, path, '->', doRes.status);
       // Re-wrap with CORS so cross-origin clients (GitHub Pages, local dev) are allowed.
       const body  = await doRes.text();
       return new Response(body, {
@@ -681,7 +681,7 @@ export default {
         body:    JSON.stringify({ currency: 'USD', transactionAmount: amount, invoiceNumber, ...(b.customerCode ? { customerCode: String(b.customerCode) } : {}) }),
       });
       const body = await r.text();
-      if (r.status >= 400) console.error('[helcim purchase]', r.status, body.slice(0, 300));
+      if (r.status >= 400) console.error('[helcim purchase]', salonId, r.status, body.slice(0, 300));
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
     if (path === '/helcim/result' && method === 'GET') {
@@ -689,7 +689,7 @@ export default {
       if (!inv) return json({ error: 'invoiceNumber required' }, 400);
       const r = await fetch(`https://api.helcim.com/v2/card-transactions?invoiceNumber=${encodeURIComponent(inv)}`, { headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' } });
       const body = await r.text();
-      if (r.status >= 400) console.error('[helcim result]', r.status, body.slice(0, 200));
+      if (r.status >= 400) console.error('[helcim result]', salonId, r.status, body.slice(0, 200));
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
     // Reconcile: list card transactions for a date range (Mountain Time per Helcim). Match to records.
@@ -770,7 +770,7 @@ export default {
       const text = await r.text();
       let j = {}; try { j = JSON.parse(text); } catch {}
       if (r.status >= 400) {
-        console.error('[helcim refund]', r.status, text.slice(0, 400));
+        console.error('[helcim refund]', salonId, r.status, text.slice(0, 400));
         const msg = (j.errors ? JSON.stringify(j.errors) : (j.message || j.error)) || `Helcim refund error ${r.status}`;
         return json({ error: String(msg).slice(0, 300) }, r.status >= 500 ? 502 : 400);
       }
@@ -1627,6 +1627,11 @@ export class TurnDeskDO {
           if (e.status === 'paid' || e.status === 'done') break;   // never let a stale device un-pay
           const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
           if (idx < 0) break;                                      // assignment reassigned away — ignore
+          // Stale-patch guard (mirrors _mergeNewerAssignments): keep the stored assignment when it's
+          // newer than this patch, so a stale offline replay or a concurrent per-assignment edit can't
+          // revert it. Unstamped patches (legacy clients) still apply.
+          const storedAsg = e.assignments[idx];
+          if (typeof storedAsg.updatedAt === 'number' && (typeof payload.assignment.updatedAt !== 'number' || payload.assignment.updatedAt < storedAsg.updatedAt)) { stale = true; break; }
           e.assignments[idx] = payload.assignment;
           _deriveEntryStatus(e);
           await this.state.storage.put('queue:' + payload.entryId, e);
@@ -1639,8 +1644,12 @@ export class TurnDeskDO {
           const e = await this.state.storage.get('queue:' + payload.entryId);
           if (!e) break;
           if (e.status === 'paid' || e.status === 'done') break;   // don't touch a closed ticket
+          // Stale-patch guard: reject a patch older than the last one applied to this entry (a stale
+          // offline replay). The client stamps payload.updatedAt (sync.js); unstamped patches still apply.
+          if (typeof payload.updatedAt === 'number' && typeof e._patchedAt === 'number' && payload.updatedAt < e._patchedAt) { stale = true; break; }
           const patch = payload.patch || {};
           for (const k of Object.keys(patch)) e[k] = patch[k];
+          if (typeof payload.updatedAt === 'number') e._patchedAt = payload.updatedAt;
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }
@@ -2150,14 +2159,18 @@ export class TurnDeskDO {
   // restored state to every connected client.
   async restoreFromBackup(key) {
     if (!this.env.PHOTOS_BUCKET) return { error: 'no backup storage configured' };
+    const slug = await this._getSlug();
     let useKey = key;
     if (!useKey) { const l = await this.listBackups(); useKey = l.backups[0]?.key; }
     if (!useKey) return { error: 'no backup found' };
+    // A caller-supplied key must live under THIS salon's own backup prefix — never restore
+    // another salon's snapshot into this DO. (Skipped when the DO hasn't learned its slug —
+    // a single-tenant/legacy instance with no other tenant to cross into.)
+    if (slug && !useKey.startsWith(this._backupPrefix(slug))) return { error: 'backup key is outside this salon' };
     const obj = await this.env.PHOTOS_BUCKET.get(useKey);
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
     const st = snap.state || {};
-    const slug = await this._getSlug();
     await this.backupNow();                           // safety snapshot before wiping
     // Preserve the durable keys that are intentionally NOT in the snapshot (a password hash / OAuth
     // token must never ride the broadcast channel to clients) — deleteAll() would otherwise erase

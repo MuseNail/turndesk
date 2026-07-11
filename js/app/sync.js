@@ -230,6 +230,9 @@ export function dispatch(op, payload) {
   if (op === 'customer.bulkUpsert' && payload && Array.isArray(payload.customers)) { const ts = Date.now(); payload.customers.forEach(c => { c.updatedAt = ts; c.updatedBy = DEVICE_ID; }); }
   // Appointments — stamp so a stale offline copy can't clobber a newer edit (mirrors record.save).
   if (op === 'appt.upsert' && payload && payload.appt) { payload.appt.updatedAt = Date.now(); payload.appt.updatedBy = DEVICE_ID; }
+  // Entry-level patches (e.g. the staff visit note) — stamp at the payload level (a patch has no
+  // full entry to stamp) so the DO can reject a stale replay that would revert a newer patch.
+  if (op === 'queue.entryPatch' && payload) { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   // Stamp the salon this write belongs to, so a replay can never send it to another salon
   // (isForeignWrite guard) — the per-write half of the cross-salon isolation.

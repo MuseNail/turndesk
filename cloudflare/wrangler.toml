@@ -11,13 +11,11 @@ account_id         = "7e47fe5134a4b77582cf7746bff3fb62"
 enabled = true
 head_sampling_rate = 1
 
-# ── Cron Trigger ───────────────────────────────────────────────────────────────
-# Fires at 10:30 UTC = 2:30 AM PST (winter) / 3:30 AM PDT (summer) — always BEFORE
-# the client's 4 AM day-reset, so the queue is still intact. Exports yesterday's
-# turns/queue/transactions one-way to Google Sheets (write-only backup) + emails
-# the daily summary. The app never reads from the sheet.
-[triggers]
-crons = ["30 10 * * *"]
+# ── Cron Trigger (removed 2026-07-11) ───────────────────────────────────────────
+# There is no scheduled() handler in worker.js, so the daily cron only fired a no-op
+# invocation (the Sheets export/email it once described was never built in TurnDesk).
+# Backups are per-DO alarm() → R2 snapshots. Re-add a [triggers] crons block only
+# together with an actual scheduled() handler.
 
 # ── R2 bucket binding ─────────────────────────────────────────────────────────
 # Create the bucket first:  wrangler r2 bucket create turndesk-photos

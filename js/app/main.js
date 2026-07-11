@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.37', items: [
+    { icon: 'shield', t: 'Reliability & safety improvements', d: 'Behind-the-scenes hardening: when two devices touch the same ticket at once (a tech updating a service, someone editing a visit note), a slower/stale device can no longer overwrite the newer change; backup restores are safer; and error logs now identify which salon they came from. Nothing changes in how you use TurnDesk.' },
+  ] },
   { v: 'td-v0.36', items: [
     { icon: 'lock', t: 'More secure sign-in for new salons', d: 'The temporary “1234” front-desk code has been retired. A brand-new salon now signs in first with the owner’s email and password, then sets its own front-desk PIN — so a salon’s link can no longer be used to get in with a default code. Your existing PINs keep working exactly as before, and you can always set or reset the front-desk PIN from the operator console.' },
     { icon: 'restore', t: 'More reliable backups', d: 'Restoring from a backup now always finds your most recent snapshot, even for a salon with a long history.' },
