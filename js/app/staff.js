@@ -455,7 +455,7 @@ function renderHistoryHtml() {
 // (state.appointments) — filtered to booking lines assigned to this tech's staffId.
 let _appts = null, _apptsAt = 0, _apptsLoading = false;
 const APPTS_TTL_MS = 60000, APPTS_DAYS = 7;
-function loadMyAppts() {
+function loadMyAppts(fromRender) {
   const meStaff = me();
   if (!meStaff) { _appts = []; _apptsAt = Date.now(); return; }
   const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -479,12 +479,16 @@ function loadMyAppts() {
   });
   out.sort((x, y) => x.startMs - y.startMs);
   _appts = out; _apptsAt = Date.now();
-  if (_view === 'appts' && !priceInputFocused()) render();
+  // Never re-render when called FROM a render (fromRender): renderApptsHtml calls this to populate
+  // _appts for the current draw, and loadMyAppts is now synchronous — a render() here would re-enter
+  // render → renderApptsHtml → loadMyAppts → render… (infinite recursion / stack overflow). External
+  // triggers (the Refresh button, the store subscription) re-render on their own.
+  if (!fromRender && _view === 'appts' && !priceInputFocused()) render();
 }
 window.staffApptsRefresh = () => { loadMyAppts(); showToast('Refreshing…'); };
 
 function renderApptsHtml() {
-  loadMyAppts();   // fire-and-forget — re-renders this tab when the load lands
+  loadMyAppts(true);   // populate _appts for THIS draw only — must NOT re-render from here (would recurse)
   if (_appts === null) {
     return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event</span>
