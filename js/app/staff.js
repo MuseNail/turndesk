@@ -453,11 +453,11 @@ function renderHistoryHtml() {
 // ── My appointments (app-native, read-only) ───────────────────────────────────
 // The tech's upcoming bookings, read synchronously from the synced DO state
 // (state.appointments) — filtered to booking lines assigned to this tech's staffId.
-let _appts = null, _apptsAt = 0, _apptsLoading = false, _apptsErr = '';
+let _appts = null, _apptsAt = 0, _apptsLoading = false;
 const APPTS_TTL_MS = 60000, APPTS_DAYS = 7;
 function loadMyAppts() {
   const meStaff = me();
-  if (!meStaff) { _appts = []; _apptsErr = ''; _apptsAt = Date.now(); return; }
+  if (!meStaff) { _appts = []; _apptsAt = Date.now(); return; }
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + APPTS_DAYS + 1);
   const myId = meStaff.id;
@@ -478,7 +478,7 @@ function loadMyAppts() {
     });
   });
   out.sort((x, y) => x.startMs - y.startMs);
-  _appts = out; _apptsErr = ''; _apptsAt = Date.now();
+  _appts = out; _apptsAt = Date.now();
   if (_view === 'appts' && !priceInputFocused()) render();
 }
 window.staffApptsRefresh = () => { loadMyAppts(); showToast('Refreshing…'); };
@@ -490,10 +490,6 @@ function renderApptsHtml() {
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event</span>
       <div class="mt-3 text-xl font-headline font-bold">Loading your appointments…</div></div>`;
   }
-  let note = '';
-  if (_apptsErr === 'not_connected') note = 'Google Calendar isn’t connected on the dashboard yet — ask the front desk.';
-  else if (_apptsErr === 'nocal') note = `No Google calendar named “${esc(me()?.name || '')}” was found — ask the front desk to check that your calendar matches your staff name.`;
-  else if (_apptsErr === 'error') note = 'Couldn’t reach Google Calendar — check your connection and tap Refresh.';
   const rows = _appts.filter(a => !a.noShow);
   const refreshBar = `<div class="flex items-center justify-between mb-3 px-1">
     <span class="text-xs font-body text-on-surface-variant">Today + next ${APPTS_DAYS} days${_apptsAt ? ' · updated ' + new Date(_apptsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}</span>
@@ -502,16 +498,15 @@ function renderApptsHtml() {
   if (rows.length === 0) {
     return refreshBar + `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event_upcoming</span>
-      <div class="mt-3 text-xl font-headline font-bold">${note ? 'Appointments unavailable' : 'No upcoming appointments'}</div>
-      <div class="text-sm mt-1 text-outline-variant">${esc(note) || 'New bookings for you show up here — and ping your phone when alerts are on.'}</div></div>`;
+      <div class="mt-3 text-xl font-headline font-bold">No upcoming appointments</div>
+      <div class="text-sm mt-1 text-outline-variant">New bookings for you show up here — and ping your phone when alerts are on.</div></div>`;
   }
-  const errBanner = note ? `<div class="mb-3 rounded-xl px-4 py-3 text-sm font-body" style="background:#fdecea;color:#7a2a1a">${esc(note)} Showing the last loaded list.</div>` : '';
   const byDate = {};
   rows.forEach(a => { const d = localDateStr(new Date(a.startMs)); (byDate[d] = byDate[d] || []).push(a); });
   const today = todayStr();
   const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return localDateStr(d); })();
   const fmtT = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return refreshBar + errBanner + Object.keys(byDate).sort().map(date => {
+  return refreshBar + Object.keys(byDate).sort().map(date => {
     const items = byDate[date];
     const d = new Date(date + 'T12:00:00');
     const dayName = date === today ? 'Today' : date === tomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
@@ -770,7 +765,7 @@ window.staffPinSubmit = async () => {
     if (res.ok) {
       if (res.user.kind === 'tech') { myId = res.user.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY); }
       else { myFdId = res.user.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY); }
-      _appts = null; _apptsAt = 0; _apptsErr = '';
+      _appts = null; _apptsAt = 0;
       sync.resync();                                   // reconnect with the session → snapshot arrives
       render();
       registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
@@ -783,7 +778,7 @@ window.staffPinSubmit = async () => {
   const match = staffByPin(cfg().staff, cfg().inactive_staff, pin);
   if (match) {
     myId = match.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY);
-    _appts = null; _apptsAt = 0; _apptsErr = '';   // never show another tech's cached appointments
+    _appts = null; _apptsAt = 0;   // never show another tech's cached appointments
     if (input) input.value = ''; render();
     registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
     serverLogin({ pin, userId: match.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
@@ -811,7 +806,7 @@ window.staffPinInput = () => {
     || (cfg().fd_users || []).some(u => u.pin && String(u.pin) !== pin && String(u.pin).startsWith(pin));
   if (!ambiguous) window.staffPinSubmit();
 };
-window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; _appts = null; _apptsAt = 0; _apptsErr = ''; render(); };
+window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; _appts = null; _apptsAt = 0; render(); };
 window.staffLogout = window.staffSwitch;
 
 // ── Push notifications (assignment alerts) ────────
