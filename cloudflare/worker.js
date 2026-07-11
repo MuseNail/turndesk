@@ -2127,9 +2127,21 @@ export class TurnDeskDO {
     const st = snap.state || {};
     const slug = await this._getSlug();
     await this.backupNow();                           // safety snapshot before wiping
+    // Preserve the durable keys that are intentionally NOT in the snapshot (a password hash / OAuth
+    // token must never ride the broadcast channel to clients) — deleteAll() would otherwise erase
+    // them for good: owner/manager LOGIN credentials (else the owner is locked out of their own salon
+    // after a restore), the Google Calendar refresh token, and staff push subscriptions.
+    const preserved = new Map();
+    for (const prefix of ['owner:', 'push:']) {
+      for (const [k, v] of await this.state.storage.list({ prefix })) preserved.set(k, v);
+    }
+    const gcalBlob = await this.state.storage.get('gcal:blob');
+    if (gcalBlob !== undefined) preserved.set('gcal:blob', gcalBlob);
     await this.state.storage.deleteAll();
     if (slug) await this.state.storage.put('meta:slug', slug);   // deleteAll wiped it; keep our identity
+    for (const [k, v] of preserved) await this.state.storage.put(k, v);   // owner login + gcal token + push subs survive the restore
     for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
+    for (const [k, v] of Object.entries(st.configMeta || {})) await this.state.storage.put('cfgmeta:' + k, v);   // restore the stale-write baseline (else a stale device can clobber restored settings)
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
     for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
     for (const g of (st.giftcards || [])) await this.state.storage.put('giftcard:' + String(g.id), g);
@@ -2138,6 +2150,7 @@ export class TurnDeskDO {
     for (const d of (st.deletions || [])) await this.state.storage.put('deletion:' + String(d.id), d);
     for (const c of (st.customerDeletions || [])) await this.state.storage.put('custdeletion:' + String(c.id), c);
     for (const a of (st.apptDeletions || [])) await this.state.storage.put('apptdeletion:' + String(a.id), a);
+    for (const ev of (st.audit || [])) { if (ev && ev.id) await this.state.storage.put('audit:' + String(ev.id), ev); }   // restore the audit trail
     await this.state.storage.put('meta:seq', (snap.seq || 0) + 1);
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();

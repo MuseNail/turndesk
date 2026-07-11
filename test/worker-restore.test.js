@@ -68,3 +68,55 @@ test('restoreFromBackup rebuilds customers, appointments + both tombstone sets',
   assert.equal(res.counts.customers, 2);
   assert.equal(res.counts.appointments, 1);
 });
+
+// C1 — owner/manager login credentials are intentionally kept OUT of the snapshot (so a
+// password hash never rides the broadcast channel to clients). deleteAll() would erase them,
+// locking the owner out of their own salon after a restore. They must be preserved across the wipe.
+test('restoreFromBackup PRESERVES owner login credentials across the wipe (C1)', async () => {
+  const storage = makeStorage();
+  const bucket = makeBucket();
+  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
+  const cred = { email: 'owner@demo.app', role: 'owner', salt: 's', hash: 'h' };
+  await storage.put('owner:owner@demo.app', cred);
+  await storage.put('config:business_name', 'Lush');
+  const snap = await doInst.buildSnapshot();
+  assert.equal(snap.state.owner, undefined, 'owner credentials must never appear in the snapshot');
+  await bucket.put('backups/t.json', JSON.stringify(snap));
+  await doInst.restoreFromBackup('backups/t.json');
+  assert.deepEqual(await storage.get('owner:owner@demo.app'), cred, 'owner login must survive a restore (no lockout)');
+});
+
+// C2 — the Google Calendar refresh token and staff push subscriptions are also not in the
+// snapshot; they must survive a restore so calendar sync + push alerts keep working.
+test('restoreFromBackup PRESERVES the Google token + push subscriptions across the wipe (C2)', async () => {
+  const storage = makeStorage();
+  const bucket = makeBucket();
+  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
+  await storage.put('gcal:blob', { refresh: 'REFRESH_TOKEN' });
+  await storage.put('push:staff-1:abc', { endpoint: 'https://push/1' });
+  await storage.put('push:staff-2:def', { endpoint: 'https://push/2' });
+  const snap = await doInst.buildSnapshot();
+  await bucket.put('backups/t.json', JSON.stringify(snap));
+  await doInst.restoreFromBackup('backups/t.json');
+  assert.deepEqual(await storage.get('gcal:blob'), { refresh: 'REFRESH_TOKEN' }, 'Google token must survive');
+  assert.ok(await storage.get('push:staff-1:abc'), 'push sub 1 must survive');
+  assert.ok(await storage.get('push:staff-2:def'), 'push sub 2 must survive');
+});
+
+// C3 + C4 — cfgmeta (the per-key stale-write baseline) and the audit log ARE captured in the
+// snapshot, but the restore rebuild never re-persisted them. Rebuild both.
+test('restoreFromBackup rebuilds config change-stamps (C3) and the audit log (C4)', async () => {
+  const storage = makeStorage();
+  const bucket = makeBucket();
+  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
+  await storage.put('config:services', [{ id: 'svc-1' }]);
+  await storage.put('cfgmeta:services', { updatedAt: 12345, updatedBy: 'dev-a' });
+  await storage.put('audit:2026-07-10T00-00-00-000Z-x', { id: '2026-07-10T00-00-00-000Z-x', at: '2026-07-10T00:00:00Z', action: 'signed in' });
+  const snap = await doInst.buildSnapshot();
+  assert.ok(snap.state.configMeta.services, 'snapshot captures cfgmeta');
+  assert.equal(snap.state.audit.length, 1, 'snapshot captures audit');
+  await bucket.put('backups/t.json', JSON.stringify(snap));
+  await doInst.restoreFromBackup('backups/t.json');
+  assert.deepEqual(await storage.get('cfgmeta:services'), { updatedAt: 12345, updatedBy: 'dev-a' }, 'stale-write baseline restored (C3)');
+  assert.ok(await storage.get('audit:2026-07-10T00-00-00-000Z-x'), 'audit trail restored (C4)');
+});
