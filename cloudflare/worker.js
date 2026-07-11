@@ -970,7 +970,7 @@ async function indexOwnerEmail(env, email, slug) {
   } catch {}
 }
 
-async function handleOperator(request, env, url, method, path) {
+export async function handleOperator(request, env, url, method, path) {
   const auth = request.headers.get('Authorization') || '';
   const tok  = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (url.searchParams.get('op') || '');
   if (!env.OPERATOR_TOKEN || !safeEqual(tok, env.OPERATOR_TOKEN)) return json({ error: 'unauthorized' }, 401);
@@ -992,15 +992,26 @@ async function handleOperator(request, env, url, method, path) {
       return json({ error: 'ownerEmail + ownerPassword (≥6 chars) required' }, 400);
     }
     const salonStub = env.SALON_DO.get(env.SALON_DO.idFromName(slug));
-    // 1) seed starter config (DO internal route), 2) set owner credential, 3) registry entry LAST
-    await salonStub.fetch(new Request('https://do/provision/seed', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug, name: b.name || slug, template: b.template !== false }),
-    }));
-    await salonStub.fetch(new Request('https://do/auth/owner-set', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: env.RESTORE_TOKEN, email: b.ownerEmail, password: b.ownerPassword, name: b.name ? b.name + ' Owner' : 'Owner', role: 'owner' }),
-    }));
+    // 1) seed starter config, 2) set owner credential, 3) registry entry LAST — but only after
+    // 1+2 actually succeeded. Checking the sub-responses stops a transient failure from leaving a
+    // salon in the registry with NO owner credential (owner locked out) or reporting { ok:true }
+    // for a half-provisioned salon. (Seeded config from a stopped-short provision is a harmless
+    // orphan with no registry entry; re-running the same slug re-seeds only absent keys + retries.)
+    let seedRes, ownerRes;
+    try {
+      seedRes = await salonStub.fetch(new Request('https://do/provision/seed', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, name: b.name || slug, template: b.template !== false }),
+      }));
+      ownerRes = await salonStub.fetch(new Request('https://do/auth/owner-set', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: env.RESTORE_TOKEN, email: b.ownerEmail, password: b.ownerPassword, name: b.name ? b.name + ' Owner' : 'Owner', role: 'owner' }),
+      }));
+    } catch (e) {
+      return json({ error: 'provision failed: ' + ((e && e.message) || String(e)) }, 502);
+    }
+    if (!seedRes.ok)  return json({ error: 'provision seed failed (' + seedRes.status + ') — salon NOT registered' }, 502);
+    if (!ownerRes.ok) return json({ error: 'owner credential setup failed (' + ownerRes.status + ') — salon NOT registered' }, 502);
     const entry = { slug, name: b.name || slug, status: 'active', ownerEmail: String(b.ownerEmail).toLowerCase(), plan: b.plan || '', createdAt: new Date().toISOString() };
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
     await indexOwnerEmail(env, entry.ownerEmail, slug);
@@ -1121,6 +1132,7 @@ export class TurnDeskDO {
     this.env   = env;
     this.SCHEMA_VERSION = 1;
     this.BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
+    this.KEEP_BACKUPS = 120;   // retention: newest ~30 days of 6-hourly snapshots per salon; alarm() prunes older
     this.slug = '';   // this salon's tenant slug; learned from requests, persisted to meta:slug
     // WebSocket Hibernation: answer the client's 20s keepalive ping at the edge so the heartbeat
     // never wakes (or bills) the DO. Sockets live in the runtime (state.getWebSockets), not an
@@ -2100,6 +2112,7 @@ export class TurnDeskDO {
         await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'state-' + ts + '.json', JSON.stringify(snap), {
           httpMetadata: { contentType: 'application/json' },
         });
+        await this.pruneOldBackups();   // retention: cap per-salon snapshot growth (keep newest KEEP_BACKUPS)
       }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
       const muts = await this.state.storage.list({ prefix: 'mut:' });
@@ -2140,6 +2153,21 @@ export class TurnDeskDO {
       .map(o => ({ key: o.key, uploaded: o.uploaded, size: o.size }))
       .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
     return { backups, count: backups.length };
+  }
+
+  // Retention: keep the newest KEEP_BACKUPS snapshots for this salon, delete the older surplus.
+  // listBackups() is newest-first (H2), so slice(KEEP_BACKUPS) is exactly the oldest overflow.
+  // Only ever deletes within THIS salon's own backups/<slug>/ prefix, and never the newest N.
+  async pruneOldBackups() {
+    if (!this.env.PHOTOS_BUCKET) return { pruned: 0 };
+    const { backups } = await this.listBackups();
+    if (backups.length <= this.KEEP_BACKUPS) return { pruned: 0 };
+    const prefix = this._backupPrefix(await this._getSlug());
+    let pruned = 0;
+    for (const b of backups.slice(this.KEEP_BACKUPS)) {
+      if (b.key && b.key.startsWith(prefix)) { try { await this.env.PHOTOS_BUCKET.delete(b.key); pruned++; } catch {} }
+    }
+    return { pruned };
   }
 
   // Force a snapshot to R2 right now (used for testing + before a restore).
