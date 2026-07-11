@@ -27,6 +27,41 @@ Everything is fixable without an architecture change. A prioritized roadmap is a
 
 ---
 
+## ✅ RESOLUTION STATUS — updated 2026-07-10 (end of day)
+
+All findings below were worked the same day. **The review is COMPLETE except the deliberately-deferred card-processing / shared-account track.** Current live: client **`td-v0.35`** (`fdaa387`), Worker **`be4bbe01`**. This section supersedes the "four that deserve action first" list and the roadmap below.
+
+| ID | Finding | Status |
+|---|---|---|
+| **B1** | `turndesk_customers` PII cache not salon-scoped | ✅ **Shipped** `td-v0.31` (scopedKey + migration drop) |
+| **B2** | turns-history not salon-scoped | ✅ **Shipped** `td-v0.31` |
+| **B3** | staff/reports identity keys not salon-scoped | ✅ **Shipped** `td-v0.31` |
+| **B4** | Back Office token not salon-scoped | ✅ **Shipped** `td-v0.35` |
+| **A1** | `/photos/*` not salon-bound + backup namespace readable via public GET | ✅ **Shipped** Worker `404ca782` (writes bound to caller's salon; `backups/` refused on every method) |
+| **A2** | `/gcal/callback` resolved empty-salon DO (connect broken) | ✅ **Shipped** `td-v0.35` (salon carried in OAuth `state`) |
+| **A3** | Helcim webhook salon-routing fragile | ⏸ **Deferred** (card-processing track) |
+| **C1** | Restore wipes owner login | ✅ **Shipped** Worker `05704e99` (owner/gcal/push preserved across the wipe) |
+| **C2** | Restore wipes gcal token + push subs | ✅ **Shipped** Worker `05704e99` |
+| **C3** | Restore drops `cfgmeta` (stale-write baseline) | ✅ **Shipped** Worker `05704e99` (rebuilt from snapshot) |
+| **C4** | Restore drops the audit trail | ✅ **Shipped** Worker `05704e99` (rebuilt from snapshot) |
+| **D1** | `RESTORE_TOKEN` gates fail OPEN if secret unset | ✅ **Shipped** `td-v0.35` (fail closed on all 4 gates) |
+| **D2** | `APP_ADMIN_PIN` throttle resettable by rotating salon | ✅ **Closed** — owner confirmed the PIN is long + random (2026-07-10) |
+| **D3** | `AUTH_ENFORCED` off is a silent open door | ✅ **Shipped** `td-v0.35` (loud once-per-isolate warning) |
+| **D4** | Non-constant-time secret compares | ✅ **Shipped** `td-v0.35` (`safeEqual`) |
+| **D5** | Signup pending-cap DoS via IP rotation | ✅ **Shipped** `td-v0.35` (per-email pending cap) |
+| **D6** | Isolate auth cache 60s revoke window | ☑︎ **Accepted** (documented performance tradeoff) |
+| **E1/E2/E3/E4** | Shared Square/Helcim/SMS/AI accounts authorize on "any session" not ownership | ⏸ **DEFERRED by owner** ("card processing later") — the last big open item |
+| **F1** | Ungated legacy WS relay | ✅ **Shipped** `td-v0.35` (removed) |
+| **F2** | Transient DO error dead-letters instead of retrying | ⏸ **Deferred** — needs a reliable transient-vs-real signal; current behavior is safe (recoverable in Data Recovery) |
+| **F3** | DO WebSocket hibernation not implemented | ↗ **Separate track** (scale/cost infra, not data-safety) |
+| **G1** | Data Recovery can't restore rejected giftcard/customer/appt writes | ✅ **Shipped** `td-v0.35` |
+
+**Also fixed the same day (found during verification, not in the original list):** `td-v0.30` — the upgrade migration no longer flags harmless `audit.log` breadcrumbs as failed writes; `td-v0.33` — removed dead Google-Calendar copy from the staff app; `td-v0.34` — **fixed a pre-existing infinite-recursion crash on the staff Appts tab** (uncovered by live testing). The app-native calendar was verified live to work fully **without** Google Calendar connected (Google is an optional overlay).
+
+All server-side changes were adversarially reviewed by a multi-agent pass before deploy. Full deploy history: commits `1ce2544`→`fdaa387` on `main`.
+
+---
+
 # Section A — Cross-salon isolation (server side)
 
 ### A1 · Photo endpoint trusts the client-supplied key — cross-tenant image overwrite/delete  — **HIGH** *(confirmed)*
