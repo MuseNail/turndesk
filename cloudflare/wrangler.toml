@@ -59,3 +59,57 @@ VAPID_SUBJECT    = "mailto:admin@turndesk.app"
 # SQUARE_BASE_URL = "https://connect.squareup.com"
 # Uncomment and set to the sandbox URL during testing:
 # SQUARE_BASE_URL = "https://connect.squareupsandbox.com"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STAGING ENVIRONMENT (M2 — deploy safety)   →  runbook: cloudflare/STAGING.md
+# ═══════════════════════════════════════════════════════════════════════════════
+# `wrangler deploy --env staging` publishes a SEPARATE worker `turndesk-staging`
+# with its OWN Durable Object namespace + its OWN R2 bucket, so a change — or even a
+# bad DO migration — validated here can NEVER touch a production salon. Prod stays a
+# plain `wrangler deploy` (no --env).
+#
+# ⚠ Wrangler RULE: for a named env, bindings + vars + secrets are NOT inherited from
+#   the top level — every block below is re-declared on purpose. (main,
+#   compatibility_date, account_id ARE inherited, so they're omitted here.)
+# ⚠ Secrets are per-env and never live in this file. Set them separately:
+#     wrangler secret put OPERATOR_TOKEN --env staging   (throwaway value, NOT prod's)
+#     wrangler secret put RESTORE_TOKEN  --env staging
+#     wrangler secret put APP_ADMIN_PIN  --env staging
+#   Leave HELCIM_API_TOKEN / SQUARE_TOKEN / SHEETS_URL / VAPID_PRIVATE_KEY UNSET so
+#   payments, Sheets and push stay inert on staging (guardrail: no test card ever hits
+#   the shared live processor).
+# ⚠ Do NOT add script_name to the DO binding (that would point staging at PROD DOs).
+# ⚠ The bucket_name MUST differ from prod's turndesk-photos, and be created first:
+#     wrangler r2 bucket create turndesk-photos-staging
+# ═══════════════════════════════════════════════════════════════════════════════
+[env.staging]
+name = "turndesk-staging"
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+# vars are non-inheritable — re-declared. AUTH_ENFORCED is a plain string the worker
+# compares to "true", so it lives here as a var (not a secret) and mirrors prod's
+# enforced-auth so staging exercises the real sign-in path.
+[env.staging.vars]
+VAPID_PUBLIC_KEY = "BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30VYBq7Xzvf5Xl5DqsuqUchNE7xnfcaCrvgUvfJ2uKk"
+VAPID_SUBJECT    = "mailto:admin@turndesk.app"
+AUTH_ENFORCED    = "true"
+
+# R2: SAME binding name (worker code unchanged), DIFFERENT bucket → isolated photos + backups.
+[[env.staging.r2_buckets]]
+binding     = "PHOTOS_BUCKET"
+bucket_name = "turndesk-photos-staging"
+
+# DO binding: non-inherited, NO script_name → binds to turndesk-staging's OWN
+# TurnDeskDO namespace = storage physically separate from prod salons.
+[[env.staging.durable_objects.bindings]]
+name       = "SALON_DO"
+class_name = "TurnDeskDO"
+
+# Migration registers TurnDeskDO as a SQLite class on the staging worker (its own
+# migration history; same tag/class as prod).
+[[env.staging.migrations]]
+tag                = "v1"
+new_sqlite_classes = ["TurnDeskDO"]
