@@ -2,7 +2,7 @@
 <html lang="en" class="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <!-- Force browsers to always fetch fresh HTML — prevents stale cached versions after deploys -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -281,7 +281,7 @@ tailwind.config = {
       </div>
 
   <!-- Top bar: logo left, nav centered, sync+user right -->
-  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:62px;padding:0 12px;min-width:0">
+  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:calc(62px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;min-width:0">
     <!-- Logo -->
     <img id="logo-desk" src="" alt="" class="h-[60px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
     <!-- Nav — centered, takes remaining space -->
@@ -754,7 +754,7 @@ tailwind.config = {
 
       <!-- ── TURNS PANEL ── -->
       <div class="dash-panel" id="panel-turns">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-y-2">
           <div class="flex items-center gap-3">
             <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
             <span class="subnav-slot" id="subnav-slot-turns" style="flex:0 1 auto"></span>
@@ -880,7 +880,7 @@ tailwind.config = {
               </button>
               <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl p-3 min-w-56" style="background:#ffffff;border:1.5px solid var(--md-outline-variant);box-shadow:0 8px 32px rgba(0,0,0,0.18)">
                 <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 px-1">Show / Hide &amp; Reorder</div>
-                <div id="cal-selector-list" class="space-y-0.5 mb-2"></div>
+                <div id="cal-selector-list" class="space-y-0.5 mb-2 max-h-[60vh] overflow-y-auto"></div>
                 <div class="border-t border-surface-container-high pt-2 flex gap-2">
                   <button onclick="calDraftSelectAll(true)" class="text-xs font-body text-primary hover:underline px-1">All</button>
                   <button onclick="calDraftSelectAll(false)" class="text-xs font-body text-outline hover:underline px-1 mr-auto">None</button>
@@ -1794,7 +1794,7 @@ tailwind.config = {
      SERVICE EDIT MODAL
 ═══════════════════════════════════════════════ -->
 <div id="service-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 id="service-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Service</h2>
       <button onclick="closeServiceModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
@@ -1925,7 +1925,7 @@ tailwind.config = {
      FRONT DESK USER MODAL
 ═══════════════════════════════════════════════ -->
 <div id="fduser-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 id="fduser-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Front Desk User</h2>
       <button onclick="closeFdUserModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
@@ -2013,7 +2013,7 @@ tailwind.config = {
      EDIT SERVICES MODAL
 ═══════════════════════════════════════════════ -->
 <div id="edit-services-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-md shadow-2xl fade-up mx-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-md shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-xl font-headline font-bold text-on-surface">Edit Services</h2>
       <button onclick="closeEditServicesModal()" class="text-on-surface-variant hover:text-on-surface">
@@ -2322,7 +2322,7 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      TECH STATUS MENU (click on tech photo)
 ═══════════════════════════════════════════════ -->
-<div id="tech-status-menu" class="fixed z-[60] hidden bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4 w-72" style="min-width:240px">
+<div id="tech-status-menu" class="fixed z-[60] hidden bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4 w-72" style="min-width:240px;max-height:calc(100vh - 24px);overflow-y:auto">
   <div class="flex items-center justify-between mb-3 gap-2">
     <div class="flex items-center gap-3 min-w-0">
       <div id="tech-status-menu-photo" class="flex-shrink-0"></div>

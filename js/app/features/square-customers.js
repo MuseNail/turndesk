@@ -394,7 +394,7 @@ export function renderCustomersTab(query) {
     </div>` : '';
   host.innerHTML = `
     <div class="text-[11px] font-body text-on-surface-variant mb-2">Showing ${from}–${to} of ${filtered.length} customer${filtered.length !== 1 ? 's' : ''}${q ? ' (filtered)' : ''}</div>
-    <div class="overflow-x-auto"><table class="data-table w-full text-sm">
+    <div class="overflow-auto max-h-[calc(100vh-240px)]"><table class="data-table w-full text-sm">
       <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="text-right">Visits</th><th>Last visit</th><th class="text-right">Total</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="text-center py-6 text-on-surface-variant">No matches.</td></tr>'}</tbody>
     </table></div>

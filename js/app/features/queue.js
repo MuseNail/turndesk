@@ -1746,7 +1746,7 @@ export function showSplitMergeModal(entryId) {
   document.getElementById('split-merge-title').textContent = 'Split Party';
   document.getElementById('split-merge-content').innerHTML = `
     <p class="text-sm font-body text-on-surface-variant mb-4">Select guests to split into a separate ticket. They keep their services but are unlinked from the group.</p>
-    <div class="space-y-2 mb-5">
+    <div class="space-y-2 mb-5 max-h-64 overflow-y-auto">
       ${groupMembers.map(m => `<label class="flex items-center gap-3 p-3 rounded-xl bg-surface-container cursor-pointer hover:bg-surface-container-high transition-colors">
         <input type="checkbox" id="split-cb-${m.id}" class="w-4 h-4 accent-primary">
         <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${entry.groupColor}"></span>

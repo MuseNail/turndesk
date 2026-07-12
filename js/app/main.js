@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.38', items: [
+    { icon: 'tablet_mac', t: 'Cleaner on the iPad', d: 'Polished the front-desk iPad layout. Pop-ups and edit panels (Edit Services, staff, appointments, the tech status card) now scroll so their Save/action button is always reachable — even with the on-screen keyboard up; the customer-list header stays put while you scroll a long list; and nothing runs off the screen edge in either orientation.' },
+  ] },
   { v: 'td-v0.37', items: [
     { icon: 'shield', t: 'Reliability & safety improvements', d: 'Behind-the-scenes hardening: when two devices touch the same ticket at once (a tech updating a service, someone editing a visit note), a slower/stale device can no longer overwrite the newer change; backup restores are safer; and error logs now identify which salon they came from. Nothing changes in how you use TurnDesk.' },
   ] },

@@ -161,12 +161,13 @@
     #logged-in-name { display: none !important; }
   }
 
-  /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤820px) ──
+  /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤834px) ──
      Tab S9 portrait CSS viewport ≈ 753px
-     iPad 11" portrait CSS viewport = 820px
+     iPad 11" portrait CSS viewport = 834px  (breakpoint MUST be ≥834 or these rules
+     never fire on the actual iPad — it was 820px, 14px too narrow, so they silently missed).
      Customer screen needs bigger touch targets & readable text.
      Dashboard header gets tighter.                            */
-  @media (max-width: 820px) {
+  @media (max-width: 834px) {
     /* Customer welcome screen — larger buttons */
     #screen-welcome .text-2xl { font-size: 1.35rem !important; }
     #screen-welcome .py-7 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
@@ -176,6 +177,10 @@
     #panel-turns .flex-shrink-0[style*="width:300px"] { width: 220px !important; }
     /* Modals: full width on small screens */
     .fixed.inset-0 > div[class*="max-w-"] { margin: 0.5rem !important; }
+    /* Assign & Price / Add-Guest: stack the notes panel BELOW the form instead of beside it,
+       so the fixed 300px side panel can't cram the form at portrait widths. */
+    #group-assign-modal > div.flex, #manual-modal > div.flex { flex-direction: column; align-items: center; overflow-y: auto; }
+    #assign-notes-panel, #manual-note-panel { width: 100% !important; max-height: 40vh; }
   }
 
   /* ── Galaxy Tab S9 portrait specifically (≤760px) ──

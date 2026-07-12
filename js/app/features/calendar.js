@@ -1050,7 +1050,7 @@ export function calEventClick(e, apptId) {
   if (noShow) statusBadge = '<span style="color:#dc2626;font-size:11px;font-weight:700">⊘ No Show</span>';
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   const when = startDt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' + startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
-  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
     <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     <div class="space-y-2">

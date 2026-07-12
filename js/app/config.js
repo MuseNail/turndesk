@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'td-v0.37';
+export const APP_VERSION = 'td-v0.38';
 export const APP_NAME    = 'turndesk';
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 
