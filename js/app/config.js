@@ -1,9 +1,10 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'td-v0.38';
+import { apiOrigin } from './apiorigin.js';
+export const APP_VERSION = 'td-v0.39';
 export const APP_NAME    = 'turndesk';
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 
-const ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
+const ORIGIN = apiOrigin();
 export const SQUARE_PROXY = ORIGIN + '/square';
 export const HELCIM_PROXY = ORIGIN + '/helcim';
 export const PHOTOS_PROXY = ORIGIN + '/photos';

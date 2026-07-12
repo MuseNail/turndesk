@@ -10,14 +10,12 @@
 // feature code keeps calling fetch() plainly. Contexts that can't send headers
 // (the WebSocket, the /gcal/connect navigation) append the token with withAuth().
 // Import it FIRST in every entry point (main.js, staff.js, reports-app.js).
+import { apiOrigin, WORKER_ORIGINS } from './apiorigin.js';
 
 const KEY = 'turndesk_session';
 
-// Same origin rule as sync.js: localhost page → local `wrangler dev`, else prod.
-const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
-const AUTH_ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
-  ? 'http://localhost:8787'
-  : PROD_ORIGIN;
+// Origin resolution shared with config.js + sync.js (prod / local dev / allowed ?api= override) — see apiorigin.js.
+const AUTH_ORIGIN = apiOrigin();
 
 function readSession() {
   try { return JSON.parse(localStorage.getItem(scopedKey(KEY)) || 'null'); } catch { return null; }
@@ -181,11 +179,7 @@ export async function serverLogin({ pin, email, password, userId, kind, device }
 // ── Fetch wrapper: attach the session token to Worker-bound requests ──────────
 // Covers prod and the local `wrangler dev` origin. Anything else passes through
 // untouched. Defensive on purpose: a wrapper bug must never break fetch itself.
-const WORKER_ORIGINS = [
-  PROD_ORIGIN,
-  'http://localhost:8787',
-  'http://127.0.0.1:8787',
-];
+// WORKER_ORIGINS (prod + staging + localhost) is imported from apiorigin.js.
 
 // Appends the token (?auth=) and salon (?salon=) for contexts that can't send
 // headers — the WebSocket URL and the /gcal/connect navigation.

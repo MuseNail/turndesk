@@ -7,13 +7,11 @@
 
 import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache } from './store.js';
 import { withAuth, salonSlug, scopedKey } from './apptoken.js';
+import { apiOrigin } from './apiorigin.js';
 
-const PROD_ORIGIN = 'https://turndesk.musenailandspa.workers.dev';
-// When served from localhost (a static server in front of `wrangler dev`), talk to
-// the local Worker on :8787; otherwise the production Worker.
-const ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname))
-  ? 'http://localhost:8787'
-  : PROD_ORIGIN;
+// Origin (prod / local wrangler dev / allowed ?api= staging override) is shared with
+// config.js + apptoken.js so all three agree — see apiorigin.js.
+const ORIGIN = apiOrigin();
 const WS_URL     = ORIGIN.replace(/^http/, 'ws') + '/ws';
 const STATE      = ORIGIN + '/state';
 const OUTBOX_KEY = 'turndesk_outbox';
