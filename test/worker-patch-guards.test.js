@@ -1,9 +1,13 @@
-// Hygiene LOWs (stress-test 2026-07-11):
-//  - queue.assignmentPatch / queue.entryPatch had no stale-write guard → a stale offline
-//    replay or a concurrent edit could silently revert a newer per-assignment change / note.
-//  - restoreFromBackup(key) trusted a caller-supplied key with no check that it lives under
-//    THIS salon's own backups/<slug>/ prefix (operator cross-tenant restore footgun).
-// See cloudflare/worker.js applyMutation (queue.assignmentPatch/entryPatch) + restoreFromBackup.
+// Device-scoped stale-write guards (Phase 4, ported from Muse v5.41). The per-assignment /
+// per-entry patch guard rejects ONLY a stale replay from the SAME device (matched by updatedBy)
+// — never a cross-device action. This closes the offline-replay gap WITHOUT the clock-skew
+// data-loss of a naive wall-clock compare: a tech's genuinely-later Start/Complete/price from a
+// phone whose clock lags the front desk is never dropped. See worker.js applyMutation
+// queue.assignmentPatch / queue.entryPatch (+ the queue.upsert _patchedAt marker preservation).
+//
+// The two restoreFromBackup tests below guard a separate TurnDesk-only concern: restoreFromBackup(key)
+// must refuse a caller-supplied key outside THIS salon's own backups/<slug>/ prefix (operator
+// cross-tenant restore footgun). Kept from the original stress-test hygiene pass.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TurnDeskDO } from '../cloudflare/worker.js';
@@ -29,33 +33,97 @@ function makeBucket() {
     async list({ prefix } = {}) { return { objects: [...store.keys()].filter(k => !prefix || k.startsWith(prefix)).map(k => ({ key: k, uploaded: new Date().toISOString(), size: store.get(k).length })) }; },
   };
 }
+const makeDO = () => new TurnDeskDO({ storage: makeStorage() }, {});
+const seed = (d, entry) => d.state.storage.put('queue:' + entry.id, entry);
+const apply = (d, op, payload) => d.applyMutation({ op, payload }, null);
+const asg = o => ({ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40, ...o });
 
-test('queue.assignmentPatch keeps a NEWER stored assignment (rejects a stale patch)', async () => {
-  const s = makeStorage();
-  const doInst = new TurnDeskDO({ storage: s }, {});
-  await s.put('queue:e1', { id: 'e1', status: 'in_service', assignments: [{ serviceId: 's1', techId: 't1', updatedAt: 200, cost: 40 }] });
-  await doInst.applyMutation({ op: 'queue.assignmentPatch', payload: { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', updatedAt: 100, cost: 10 } } }, null);
-  assert.equal((await s.get('queue:e1')).assignments[0].cost, 40, 'a stale (older) assignment patch must not overwrite the newer stored one');
+// ── queue.assignmentPatch ──────────────────────────────────────────────────
+test('assignmentPatch rejects a stale replay from the SAME device', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'inservice', assignments: [asg({ updatedAt: 200, updatedBy: 'devA' })] });
+  const res = await apply(d, 'queue.assignmentPatch', { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: asg({ status: 'complete', cost: 99, updatedAt: 100, updatedBy: 'devA' }) });
+  assert.equal(res.stale, true, 'same-device older replay is rejected');
+  const stored = await d.state.storage.get('queue:e1');
+  assert.equal(stored.assignments[0].cost, 40);
+  assert.equal(stored.assignments[0].updatedAt, 200);
 });
 
-test('queue.assignmentPatch applies a NEWER patch', async () => {
-  const s = makeStorage();
-  const doInst = new TurnDeskDO({ storage: s }, {});
-  await s.put('queue:e1', { id: 'e1', status: 'in_service', assignments: [{ serviceId: 's1', techId: 't1', updatedAt: 200, cost: 40 }] });
-  await doInst.applyMutation({ op: 'queue.assignmentPatch', payload: { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', updatedAt: 300, cost: 55 } } }, null);
-  assert.equal((await s.get('queue:e1')).assignments[0].cost, 55, 'a newer per-assignment patch still applies');
+test('assignmentPatch applies a newer patch from the same device', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'inservice', assignments: [asg({ updatedAt: 200, updatedBy: 'devA' })] });
+  const res = await apply(d, 'queue.assignmentPatch', { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: asg({ status: 'complete', cost: 55, updatedAt: 300, updatedBy: 'devA' }) });
+  assert.notEqual(res.stale, true);
+  assert.equal((await d.state.storage.get('queue:e1')).assignments[0].cost, 55);
 });
 
-test('queue.entryPatch rejects a stale patch and applies a newer one', async () => {
-  const s = makeStorage();
-  const doInst = new TurnDeskDO({ storage: s }, {});
-  await s.put('queue:e2', { id: 'e2', status: 'waiting', txnNote: 'A', _patchedAt: 200 });
-  await doInst.applyMutation({ op: 'queue.entryPatch', payload: { entryId: 'e2', patch: { txnNote: 'OLD' }, updatedAt: 100 } }, null);
-  assert.equal((await s.get('queue:e2')).txnNote, 'A', 'a stale entry patch must not revert a newer note');
-  await doInst.applyMutation({ op: 'queue.entryPatch', payload: { entryId: 'e2', patch: { txnNote: 'NEW' }, updatedAt: 300 } }, null);
-  assert.equal((await s.get('queue:e2')).txnNote, 'NEW', 'a newer entry patch applies');
+test('assignmentPatch NEVER drops a cross-device patch, even with an older timestamp (clock-skew safety)', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'inservice', assignments: [asg({ updatedAt: 200, updatedBy: 'frontdesk' })] });   // front desk stamped it
+  // tech phone (slower clock) sends its genuinely-later Start with a SMALLER timestamp
+  const res = await apply(d, 'queue.assignmentPatch', { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: asg({ cost: 45, updatedAt: 100, updatedBy: 'techphone' }) });
+  assert.notEqual(res.stale, true, 'a different device is never rejected on a timestamp compare');
+  assert.equal((await d.state.storage.get('queue:e1')).assignments[0].cost, 45, 'the cross-device tech action is applied, not silently dropped');
 });
 
+test('assignmentPatch applies when the stored assignment has no updatedBy (front-desk-set, no device stamp)', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'inservice', assignments: [asg({ updatedAt: 200 })] });   // no updatedBy
+  const res = await apply(d, 'queue.assignmentPatch', { entryId: 'e1', serviceId: 's1', techId: 't1', assignment: asg({ status: 'complete', cost: 55, updatedAt: 100, updatedBy: 'techphone' }) });
+  assert.notEqual(res.stale, true);
+  assert.equal((await d.state.storage.get('queue:e1')).assignments[0].cost, 55);
+});
+
+// ── queue.entryPatch ───────────────────────────────────────────────────────
+test('entryPatch rejects a stale replay from the same device', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'waiting', txnNote: 'original', _patchedAt: 200, _patchedBy: 'devA', assignments: [] });
+  const res = await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'stale' }, updatedAt: 100, updatedBy: 'devA' });
+  assert.equal(res.stale, true);
+  assert.equal((await d.state.storage.get('queue:e1')).txnNote, 'original');
+});
+
+test('entryPatch applies a newer same-device patch and advances _patchedAt/_patchedBy', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'waiting', txnNote: 'original', _patchedAt: 200, _patchedBy: 'devA', assignments: [] });
+  const res = await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'newer' }, updatedAt: 300, updatedBy: 'devA' });
+  assert.notEqual(res.stale, true);
+  const stored = await d.state.storage.get('queue:e1');
+  assert.equal(stored.txnNote, 'newer');
+  assert.equal(stored._patchedAt, 300);
+  assert.equal(stored._patchedBy, 'devA');
+});
+
+test('entryPatch NEVER drops a cross-device patch even with an older timestamp', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'waiting', txnNote: 'original', _patchedAt: 200, _patchedBy: 'devA', assignments: [] });
+  const res = await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'fromB' }, updatedAt: 100, updatedBy: 'devB' });
+  assert.notEqual(res.stale, true);
+  assert.equal((await d.state.storage.get('queue:e1')).txnNote, 'fromB');
+});
+
+test('entryPatch applies an unstamped patch (back-compat)', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'waiting', txnNote: 'original', assignments: [] });
+  const res = await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'note2' } });
+  assert.notEqual(res.stale, true);
+  assert.equal((await d.state.storage.get('queue:e1')).txnNote, 'note2');
+});
+
+test('queue.upsert preserves the entryPatch guard marker so a later stale replay is still rejected', async () => {
+  const d = makeDO();
+  await seed(d, { id: 'e1', status: 'waiting', txnNote: 'orig', _patchedAt: 200, _patchedBy: 'devA', assignments: [] });
+  // front desk does a whole-entry upsert — its client copy carries no _patchedAt marker
+  await apply(d, 'queue.upsert', { entry: { id: 'e1', status: 'waiting', txnNote: 'orig', fees: 5, updatedAt: 500, assignments: [] } });
+  let stored = await d.state.storage.get('queue:e1');
+  assert.equal(stored._patchedAt, 200, 'marker carried forward across the whole-entry write');
+  assert.equal(stored._patchedBy, 'devA');
+  const res = await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'stale' }, updatedAt: 100, updatedBy: 'devA' });
+  assert.equal(res.stale, true, 'stale same-device replay still guarded after the upsert');
+  assert.equal((await d.state.storage.get('queue:e1')).txnNote, 'orig');
+});
+
+// ── restoreFromBackup (TurnDesk salon-isolation — kept from the original hygiene pass) ──────
 test('restoreFromBackup REJECTS a key outside this salon\'s own backup prefix (no cross-tenant restore)', async () => {
   const s = makeStorage();
   const bucket = makeBucket();

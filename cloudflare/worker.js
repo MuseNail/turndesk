@@ -1673,6 +1673,9 @@ export class TurnDeskDO {
           const prevEntry = await this.state.storage.get(qKey);
           if (_isStaleWrite(prevEntry, payload.entry)) { stale = true; break; }   // older copy — don't clobber a newer one
           if (_mergeNewerAssignments(payload.entry, prevEntry)) _deriveEntryStatus(payload.entry);   // 3c: protect a concurrent per-assignment change
+          // Preserve the entryPatch guard marker across a whole-entry write (the client entry doesn't
+          // carry it) so a later stale entryPatch replay is still rejected (not silently disarmed).
+          if (prevEntry && typeof prevEntry._patchedAt === 'number' && typeof payload.entry._patchedAt !== 'number') { payload.entry._patchedAt = prevEntry._patchedAt; payload.entry._patchedBy = prevEntry._patchedBy; }
           await this.state.storage.put(qKey, payload.entry);
           this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
           this._notifyAwaitingPrice(prevEntry, payload.entry);    // push when a service is newly "awaiting price"
@@ -1686,11 +1689,14 @@ export class TurnDeskDO {
           if (e.status === 'paid' || e.status === 'done') break;   // never let a stale device un-pay
           const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
           if (idx < 0) break;                                      // assignment reassigned away — ignore
-          // Stale-patch guard (mirrors _mergeNewerAssignments): keep the stored assignment when it's
-          // newer than this patch, so a stale offline replay or a concurrent per-assignment edit can't
-          // revert it. Unstamped patches (legacy clients) still apply.
+          // Device-scoped stale-patch guard: reject ONLY a stale replay from the SAME device
+          // (updatedBy match) — never a cross-device action, so clock skew between the front desk
+          // and a tech phone can't silently drop a genuine Start/Complete/price. Rejecting a
+          // same-device older replay keeps the value that device already shows → no divergence.
           const storedAsg = e.assignments[idx];
-          if (typeof storedAsg.updatedAt === 'number' && (typeof payload.assignment.updatedAt !== 'number' || payload.assignment.updatedAt < storedAsg.updatedAt)) { stale = true; break; }
+          if (typeof payload.assignment.updatedAt === 'number' && typeof storedAsg.updatedAt === 'number' &&
+              payload.assignment.updatedBy && payload.assignment.updatedBy === storedAsg.updatedBy &&
+              payload.assignment.updatedAt < storedAsg.updatedAt) { stale = true; break; }
           e.assignments[idx] = payload.assignment;
           _deriveEntryStatus(e);
           await this.state.storage.put('queue:' + payload.entryId, e);
@@ -1703,12 +1709,16 @@ export class TurnDeskDO {
           const e = await this.state.storage.get('queue:' + payload.entryId);
           if (!e) break;
           if (e.status === 'paid' || e.status === 'done') break;   // don't touch a closed ticket
-          // Stale-patch guard: reject a patch older than the last one applied to this entry (a stale
-          // offline replay). The client stamps payload.updatedAt (sync.js); unstamped patches still apply.
-          if (typeof payload.updatedAt === 'number' && typeof e._patchedAt === 'number' && payload.updatedAt < e._patchedAt) { stale = true; break; }
+          // Device-scoped stale-patch guard (same rule as assignmentPatch): reject only a
+          // same-device older replay; a cross-device edit always applies. Unstamped patches apply.
+          // Version lives on _patchedAt/_patchedBy — NOT the entry's own updatedAt/updatedBy (the
+          // whole-entry queue.upsert version); reusing those keys would collide with that guard.
+          if (typeof payload.updatedAt === 'number' && typeof e._patchedAt === 'number' &&
+              payload.updatedBy && payload.updatedBy === e._patchedBy &&
+              payload.updatedAt < e._patchedAt) { stale = true; break; }
           const patch = payload.patch || {};
           for (const k of Object.keys(patch)) e[k] = patch[k];
-          if (typeof payload.updatedAt === 'number') e._patchedAt = payload.updatedAt;
+          if (typeof payload.updatedAt === 'number') { e._patchedAt = payload.updatedAt; e._patchedBy = payload.updatedBy || null; }
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }

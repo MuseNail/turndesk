@@ -216,6 +216,10 @@ export function dispatch(op, payload) {
   // applyChange + the DO) can reject a write that's OLDER than what's already saved — this is
   // what stops a lingering stale device copy from clobbering a good record (e.g. dropping a fee).
   if (op === 'queue.upsert' && payload && payload.entry)  { payload.entry.updatedAt  = Date.now(); payload.entry.updatedBy  = DEVICE_ID; }
+  // Per-patch DEVICE stamp so the DO's device-scoped guards reject a stale SAME-DEVICE replay
+  // (offline outbox) without ever dropping a cross-device action. assignmentPatch already carries
+  // assignment.updatedAt (status.js applyAssignmentStatus); entryPatch is stamped below.
+  if (op === 'queue.assignmentPatch' && payload && payload.assignment) { payload.assignment.updatedAt = payload.assignment.updatedAt || Date.now(); payload.assignment.updatedBy = DEVICE_ID; }
   if (op === 'record.save'  && payload && payload.record) { payload.record.updatedAt = Date.now(); payload.record.updatedBy = DEVICE_ID; }
   // Stamp config writes too (per-key version) so a stale offline replay or a clobbering concurrent
   // edit of the catalog / turns roster / settings is rejected by the guard instead of last-writer-wins.
