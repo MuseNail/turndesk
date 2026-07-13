@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel, xlsxBlob } from '../utils.js';
+import { showToast, escHtml, businessName, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel, xlsxBlob } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -672,7 +672,7 @@ function buildAnalyticsSummary() {
     (r.assignments || []).forEach(a => { const name = svc(a.serviceId)?.label || 'Service'; (bySvc[name] = bySvc[name] || { rev: 0, n: 0 }); bySvc[name].rev += a.cost || 0; bySvc[name].n++; });
   });
   const L = [];
-  L.push(`Muse Nails & Spa — ${rangeLabel()}`);
+  L.push(`${businessName()} — ${rangeLabel()}`);
   L.push(`Totals: revenue $${totalIncome.toFixed(2)}, guests ${guests}, avg ticket $${avg.toFixed(2)}`);
   L.push(`By hour (rev/guests): ${byHour.map((b, i) => b.n ? `${_fmtHour(i)} $${b.rev.toFixed(0)}/${b.n}` : null).filter(Boolean).join(', ') || 'none'}`);
   L.push(`By weekday (rev/guests): ${byDow.map((b, i) => b.n ? `${_DOW[i].slice(0, 3)} $${b.rev.toFixed(0)}/${b.n}` : null).filter(Boolean).join(', ') || 'none'}`);
@@ -1348,7 +1348,7 @@ function buildDrillHtml(d) {
     <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>${_eTxn(d.title)}</h1><p class="sub">${_eTxn(rangeLabel())}</p></div></div>
     <div class="cards">${cards}</div>
     <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>
-    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+    <div class="footer">Generated ${new Date().toLocaleString()} · ${escHtml(businessName())}</div></body></html>`;
 }
 
 // ── Payroll page (per-tech commission / check / cash by pay period, prev-period compare) ─
@@ -1949,7 +1949,7 @@ export function payrollExportExcel() {
   const totals = {
     name: 'Totals',
     rows: [
-      ['Muse Nails & Spa — Payroll'], [period], [],
+      [businessName() + ' — Payroll'], [period], [],
       ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash deduction', 'Cash', 'Total paid'],
       ...rows.map(x => [x.tech.name, r2(x.c.billed), r2(x.c.commission), x.c.refund ? -r2(Math.abs(x.c.refund)) : 0, r2(x.cChk), x.cDed ? -r2(x.cDed) : 0, r2(x.cCash), r2(x.cTotal)]),
       [],
@@ -2039,7 +2039,7 @@ export function payrollExportPDF() {
     const th3 = G.map(() => `<th class="num sep">Billed</th><th class="num">Comm</th><th class="num lsep">Billed</th><th class="num">Comm</th>`).join('');
     const pageNo = Math.floor(p / TECHS_PER_PAGE) + 1, pageCount = Math.ceil(T.length / TECHS_PER_PAGE);
     pages.push(`<div class="pg"${p + TECHS_PER_PAGE < T.length ? ' style="page-break-after:always"' : ''}>
-      <h1>Muse Nails &amp; Spa — Payroll · ${_eTxn(period)}${pageCount > 1 ? ` <span class="pgno">· staff ${p + 1}–${p + G.length} of ${T.length} (page ${pageNo}/${pageCount})</span>` : ''}</h1>
+      <h1>${escHtml(businessName())} — Payroll · ${_eTxn(period)}${pageCount > 1 ? ` <span class="pgno">· staff ${p + 1}–${p + G.length} of ${T.length} (page ${pageNo}/${pageCount})</span>` : ''}</h1>
       <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr><tr><th class="rl"></th>${th3}</tr></thead><tbody>${rows}</tbody></table>
     </div>`);
   }
@@ -2130,7 +2130,7 @@ function _staffReceiptsPdf(idSet) {
     const net = x.c.billed + (x.c.refund || 0);
     const rf = x.c.refund ? `<div class="line"><span>Refunds</span><span>-$${Math.abs(x.c.refund).toFixed(2)}</span></div><div class="line"><span>Net</span><span>$${net.toFixed(2)}</span></div>` : '';
     return `<div class="receipt">
-      <div class="ctr">Muse Nails &amp; Spa</div>
+      <div class="ctr">${escHtml(businessName())}</div>
       <div class="ctr">${_eTxn(x.tech.name)}</div>
       <div class="ctr">${_eTxn(period)}</div>
       <div class="dash"></div>
@@ -2450,7 +2450,7 @@ export function exportTransactionsCSV() {
   if (!rows.length) { showToast('No transactions to export.'); return; }
   const net = rows.reduce((s,r)=>s+r.totalNum,0);
   const matrix = [
-    ['Muse Nails & Spa — Transactions'], [`Showing: ${rangeLabel()}`], [`Tickets: ${rows.length}`, `Net total: $${net.toFixed(2)}`], [],
+    [businessName() + ' — Transactions'], [`Showing: ${rangeLabel()}`], [`Tickets: ${rows.length}`, `Net total: $${net.toFixed(2)}`], [],
     ['Date','Time','Customer','Phone','Party','Services','Technicians','Items','Fees','Discount','Tip','Total','Status'],
     ...rows.map(r => [r.date, r.time, r.customer, r.phone, r.party, r.services, r.techs, r.items, r.fees, r.discount, r.tip, r.total, r.status]),
   ];
@@ -2480,10 +2480,10 @@ function buildTxnHtml(rows) {
     table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;vertical-align:top}tr:nth-child(even) td{background:#fafafa}
     .footer{margin-top:20px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
-    <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Transactions</h1><p class="sub">${_eTxn(rangeLabel())} · ${rows.length} ticket${rows.length===1?'':'s'}</p></div></div>
+    <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>${escHtml(businessName())} — Transactions</h1><p class="sub">${_eTxn(rangeLabel())} · ${rows.length} ticket${rows.length===1?'':'s'}</p></div></div>
     <div class="tot"><div class="v">$${net.toFixed(2)}</div><div class="l">Net total</div></div>
     <table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Party</th><th>Services</th><th>Tech</th><th>Items</th><th>Fees</th><th>Disc</th><th>Tip</th><th>Total</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table>
-    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+    <div class="footer">Generated ${new Date().toLocaleString()} · ${escHtml(businessName())}</div></body></html>`;
 }
 
 // ── CSV export ────────────────────────────────────
@@ -2503,7 +2503,7 @@ export function exportReportExcel() {
     return [new Date(k + 'T12:00:00').toLocaleDateString(), guests, `$${billed.toFixed(2)}`, `$${tips.toFixed(2)}`, `$${mix.cardMix.toFixed(2)}`, `$${mix.cashMix.toFixed(2)}`, `$${mix.zelleMix.toFixed(2)}`, `$${mix.giftMix.toFixed(2)}`, `$${mix.otherMix.toFixed(2)}`];
   });
   const rows = [
-    ['Muse Nails & Spa — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
+    [businessName() + ' — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
     [`Total Billed: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`],
     [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
     [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Zelle: $${(d.zelleMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
@@ -2540,11 +2540,11 @@ function buildReportHtml(d) {
     .summary{display:flex;gap:24px;margin:12px 0 20px;flex-wrap:wrap}.card{background:#f5f5f5;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center}.card .val{font-size:20px;font-weight:bold;color:#1a5252}.card .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}.card.amber .val{color:#a05000}
     table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1a5252;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
-    <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
+    <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>${escHtml(businessName())} — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
     <div class="summary"><div class="card"><div class="val">$${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}</div><div class="lbl">Total Money Collected</div></div><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${(d.tipsTotal||0).toFixed(2)}</div><div class="lbl">Total Tips</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
     <h2>Staff Breakdown</h2><table><thead><tr><th>Technician</th><th>Services</th><th>Turns</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Shop Keeps</th></tr></thead><tbody>${staffRows}</tbody></table>
     <h2>Transactions (${d.filtered.length})</h2><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th>Staff</th><th>Total</th><th>Status</th></tr></thead><tbody>${txRows}</tbody></table>
-    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+    <div class="footer">Generated ${new Date().toLocaleString()} · ${escHtml(businessName())}</div></body></html>`;
 }
 
 export function exportReportPDF() {

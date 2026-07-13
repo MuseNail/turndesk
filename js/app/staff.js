@@ -13,7 +13,7 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin, scopedKey } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg, businessName } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
@@ -546,17 +546,17 @@ function buildStaffTodayHtml(techName, lines) {
   const total = lines.reduce((s, l) => s + l.cost, 0);
   const logo = cfg().logo || '';
   const rows = lines.map(l => `<tr><td>${esc(svc(l.serviceId)?.label || 'Service')}</td><td>${esc(l.name)}</td><td>${l.paid ? 'Paid' : 'Pending'}</td><td style="text-align:right">$${l.cost.toFixed(2)}</td></tr>`).join('');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse — ${esc(techName)} — ${dateLabel}</title><style>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(businessName())} — ${esc(techName)} — ${dateLabel}</title><style>
     body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:24px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
     h1{color:#1a5252;font-size:19px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
     .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 18px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
     table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:7px 9px;text-align:left;font-size:12px}td{padding:6px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
     .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
-    <div class="h">${logo ? `<img src="${esc(logo)}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>
+    <div class="h">${logo ? `<img src="${esc(logo)}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>${esc(businessName())}</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>
     <div class="tot"><div class="v">$${total.toFixed(2)}</div><div class="l">${lines.length} service${lines.length === 1 ? '' : 's'} today</div></div>
     <table><thead><tr><th>Service</th><th>Customer</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+    <div class="footer">Generated ${new Date().toLocaleString()} · ${esc(businessName())}</div></body></html>`;
 }
 window.staffDownloadTodayPdf = () => {
   if (!appPerm('pdf')) { showToast('PDF download is turned off for your account.'); return; }

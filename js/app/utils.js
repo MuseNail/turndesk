@@ -3,6 +3,11 @@
 // Functions used by inline HTML handlers are exported and attached to window in main.js.
 import { getState } from './store.js';
 
+// The salon's own business name (config.business is an object { name, address, … }). Falls back to
+// the platform name so printed/exported docs (receipts, reports, payroll, day-sheets) are never blank
+// — and never another salon's name. Set by the owner in Settings → business identity.
+export const businessName = () => ((getState().config.business || {}).name || 'TurnDesk');
+
 // Numpad price entry mode: whole dollars (digits build $, dot adds optional cents) vs the
 // default cents accumulator. Read from synced config; store.js has no imports so no cycle.
 const _wholeDollars = () => !!getState().config?.numpad_whole_dollars;

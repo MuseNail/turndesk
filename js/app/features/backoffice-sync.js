@@ -16,7 +16,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr } from '../utils.js';
+import { showToast, localDateStr, businessName } from '../utils.js';
 import { computeMetrics, payrollComputedRows, payrollFdRows } from './reports.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local BO push token
 
@@ -43,17 +43,17 @@ export function buildBoDayRows(dateStr) {
     const a = cents(dollars);
     if (a > 0) rows.push({ sourceId: `${dateStr}:${type}`, type, date: dateStr, amountCents: a, desc, ...(memo ? { memo } : {}) });
   };
-  add('sales_cash',    m.cashMix,   `Muse — cash sales ${pretty}`);
-  add('sales_card',    m.cardMix,   `Muse — card sales ${pretty}`, m.tipsTotal > 0 ? `includes $${m.tipsTotal.toFixed(2)} tips` : '');
-  add('sales_zelle',   m.zelleMix,  `Muse — Zelle sales ${pretty}`);
-  add('sales_other',   m.otherMix,  `Muse — untracked sales ${pretty}`, 'tickets with no recorded tender');
-  add('gift_sold',     m.gcSold,    `Muse — gift cards sold ${pretty}`, 'charged on top of bills — money rides the day’s card/cash');
-  add('gift_redeemed', m.giftMix,   `Muse — gift cards redeemed ${pretty}`);
+  add('sales_cash',    m.cashMix,   `${businessName()} — cash sales ${pretty}`);
+  add('sales_card',    m.cardMix,   `${businessName()} — card sales ${pretty}`, m.tipsTotal > 0 ? `includes $${m.tipsTotal.toFixed(2)} tips` : '');
+  add('sales_zelle',   m.zelleMix,  `${businessName()} — Zelle sales ${pretty}`);
+  add('sales_other',   m.otherMix,  `${businessName()} — untracked sales ${pretty}`, 'tickets with no recorded tender');
+  add('gift_sold',     m.gcSold,    `${businessName()} — gift cards sold ${pretty}`, 'charged on top of bills — money rides the day’s card/cash');
+  add('gift_redeemed', m.giftMix,   `${businessName()} — gift cards redeemed ${pretty}`);
   // Cash drawer over/short for the day → books the cash account to what was actually
   // counted, not just recorded sales. Net across drawers closed that day; + = over.
   const os = drawerOverShortForDay(dateStr);
-  if (os > 0)      add('cash_over',  os,  `Muse — cash drawer over ${pretty}`,  'counted more than expected');
-  else if (os < 0) add('cash_short', -os, `Muse — cash drawer short ${pretty}`, 'counted less than expected');
+  if (os > 0)      add('cash_over',  os,  `${businessName()} — cash drawer over ${pretty}`,  'counted more than expected');
+  else if (os < 0) add('cash_short', -os, `${businessName()} — cash drawer short ${pretty}`, 'counted less than expected');
   return { rows, metrics: m };
 }
 
@@ -66,7 +66,7 @@ export function buildBoPayrollRow(offset) {
   return {
     row: total > 0 ? {
       sourceId: `payroll:${key}`, type: 'payroll', date: localDateStr(cur.to), amountCents: cents(total),
-      desc: `Muse — payroll ${fmtD(cur.from)} – ${fmtD(cur.to)}`,
+      desc: `${businessName()} — payroll ${fmtD(cur.from)} – ${fmtD(cur.to)}`,
       memo: locked ? 'locked period snapshot' : 'period NOT locked yet — numbers may still change',
     } : null,
     cur, locked, total,

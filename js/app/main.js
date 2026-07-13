@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.41', items: [
+    { icon: 'storefront', t: 'Your business name on every document', d: 'Reports, payroll, transactions, daily summaries, cash-drawer reports, and technician day-sheets now all show YOUR business name — matching your receipts — instead of a placeholder. Set your name in Settings if you haven’t yet.' },
+  ] },
   { v: 'td-v0.38', items: [
     { icon: 'tablet_mac', t: 'Cleaner on the iPad', d: 'Polished the front-desk iPad layout. Pop-ups and edit panels (Edit Services, staff, appointments, the tech status card) now scroll so their Save/action button is always reachable — even with the on-screen keyboard up; the customer-list header stays put while you scroll a long list; and nothing runs off the screen edge in either orientation.' },
   ] },
@@ -585,7 +588,7 @@ function handleSquarePosReturn() {
     if (!errored) { const pend = JSON.parse(localStorage.getItem('turndesk_sq_pending') || 'null'); if (pend && pend.ids && pend.ids.length) localStorage.setItem('turndesk_sq_paid', JSON.stringify({ ids: pend.ids, at: Date.now() })); }
     localStorage.removeItem('turndesk_sq_pending');
   } catch (e) {}
-  document.title = 'Muse — Payment';
+  document.title = utils.businessName() + ' — Payment';
   document.body.innerHTML = `
     <div style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8ecee;font-family:-apple-system,system-ui,sans-serif;">
       <div style="text-align:center;padding:32px;max-width:340px;">

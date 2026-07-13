@@ -13,7 +13,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
-import { showToast, todayStr, localDateStr, newEntryId, commitNumpad } from '../utils.js';
+import { showToast, todayStr, localDateStr, newEntryId, commitNumpad, escHtml, businessName } from '../utils.js';
 import { isPaidStatus } from './status.js';
 
 const cfg = () => getState().config;
@@ -332,7 +332,7 @@ function buildShiftHtml(s, countsOnly) {
     .footer{margin-top:9px;font-size:10px;text-align:center;line-height:1.4}
   </style></head><body>
     <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}
-      <h1>Muse Nails &amp; Spa</h1>
+      <h1>${escHtml(businessName())}</h1>
       <div class="sub">${countsOnly ? 'CASH COUNT' : 'CASH DRAWER REPORT'}</div>
       <div class="sub">${fmtDate(s.openedAt)}</div>
       <div class="sub">${fmtTime(s.openedAt)} &ndash; ${fmtTime(s.closedAt)}</div>
