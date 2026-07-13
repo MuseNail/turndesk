@@ -5,6 +5,8 @@ node_modules/
 cloudflare/.wrangler/
 .wrangler/
 .dev.vars
+.dev.vars.*
+cloudflare/.staging-secrets
 
 # OS / editor noise
 .DS_Store
