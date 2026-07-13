@@ -1,69 +1,89 @@
-// Item 3 (stress-test 2026-07-11 LOW): the DO alarm() wrote 4 R2 snapshots/salon/day forever
-// with no rotation, so backups grew unbounded. Add retention: keep the newest KEEP_BACKUPS per
-// salon, delete only the older surplus (never the newest N, never outside the salon's prefix).
-// See cloudflare/worker.js TurnDeskDO.pruneOldBackups (called from alarm()).
+// Phase 1 tiered retention (replaces the old keep-newest-120 pruneOldBackups): the
+// grandfather-father-son keep-set (6h/1wk · daily/1mo · monthly/1yr · yearly/7yr) with a
+// hard floor + a DR safety-snapshot exemption, GATED by BACKUP_RETENTION, per-salon
+// prefix-scoped. See TurnDeskDO.pruneBackups + computeBackupKeepSet.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TurnDeskDO } from '../cloudflare/worker.js';
+import { TurnDeskDO, computeBackupKeepSet } from '../cloudflare/worker.js';
+
+const DAY = 86400000;
+const iso = t => new Date(t).toISOString();
 
 function makeStorage() {
   const m = new Map();
   return {
-    async get(k) { return m.has(k) ? m.get(k) : undefined; },
-    async put(k, v) { m.set(k, v); },
-    async delete(k) { if (Array.isArray(k)) k.forEach(x => m.delete(x)); else m.delete(k); },
-    async deleteAll() { m.clear(); },
+    async get(k) { return m.has(k) ? m.get(k) : undefined; }, async put(k, v) { m.set(k, v); },
+    async delete(k) { if (Array.isArray(k)) k.forEach(x => m.delete(x)); else m.delete(k); }, async deleteAll() { m.clear(); },
     async list({ prefix } = {}) { const r = new Map(); for (const [k, v] of m) if (!prefix || k.startsWith(prefix)) r.set(k, v); return r; },
     async getAlarm() { return null; }, async setAlarm() {},
   };
 }
-// R2-like bucket with distinct, monotonic `uploaded` per put (so newest-first ordering is
-// deterministic) + a delete() so retention can prune.
 function makeBucket() {
   const store = new Map();
-  let seq = 0;
   return {
     _store: store,
-    async put(k, body) { store.set(k, { body, uploaded: new Date(Date.UTC(2020, 0, 1) + (seq++) * 1000).toISOString() }); },
-    async get(k) { const v = store.get(k); return v ? { text: async () => v.body } : null; },
-    async delete(k) { store.delete(k); },
-    async list({ prefix } = {}) { return { objects: [...store.entries()].filter(([k]) => !prefix || k.startsWith(prefix)).map(([k, v]) => ({ key: k, uploaded: v.uploaded, size: (v.body || '').length })) }; },
+    seed(key, uploaded) { store.set(key, { body: '{}', uploaded }); },
+    async put(k, body) { store.set(k, { body: String(body), uploaded: new Date().toISOString() }); },
+    async get(k) { const o = store.get(k); return o ? { text: async () => o.body } : null; },
+    async list({ prefix } = {}) { const keys = [...store.keys()].filter(k => !prefix || k.startsWith(prefix)); return { objects: keys.map(k => ({ key: k, uploaded: store.get(k).uploaded, size: store.get(k).body.length })), truncated: false }; },
+    async delete(keys) { (Array.isArray(keys) ? keys : [keys]).forEach(k => store.delete(k)); },
   };
 }
+async function mkSalon(slug, env) {
+  const storage = makeStorage();
+  await storage.put('meta:slug', slug);
+  return new TurnDeskDO({ storage }, env);
+}
+function seedYear(bucket, slug, now, days) {
+  for (let d = 0; d < days; d++) for (const h of [0, 6, 12, 18]) { const t = now - d * DAY - h * 3600000; bucket.seed(`backups/${slug}/state-` + iso(t).replace(/[:.]/g, '-') + '.json', iso(t)); }
+}
 
-test('pruneOldBackups keeps the newest KEEP_BACKUPS and deletes older snapshots', async () => {
-  const storage = makeStorage(), bucket = makeBucket();
-  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
-  doInst.KEEP_BACKUPS = 5;
-  await storage.put('meta:slug', 'acme');
-  const keys = [];
-  for (let i = 0; i < 8; i++) { const k = `backups/acme/state-${i}.json`; keys.push(k); await bucket.put(k, JSON.stringify({ state: {}, seq: i })); }
-
-  const res = await doInst.pruneOldBackups();
-  assert.equal(res.pruned, 3, 'deletes the 3 oldest beyond the newest 5');
-  assert.ok(await bucket.get(keys[7]), 'the newest snapshot is kept');
-  assert.equal(await bucket.get(keys[0]), null, 'the oldest snapshot is deleted');
-  assert.equal((await doInst.listBackups()).count, 5, 'exactly KEEP_BACKUPS remain');
+test('computeBackupKeepSet detects safety snapshots through the per-salon slug segment', () => {
+  const now = Date.parse('2026-07-13T00:00:00.000Z');
+  const backups = [
+    { key: 'backups/acme/state-a.json', uploaded: iso(now) },
+    { key: 'backups/acme/safety-b.json', uploaded: iso(now - 40 * DAY) },              // mid-history safety
+    { key: 'backups/acme/state-c.json', uploaded: iso(now - 40 * DAY - 5 * 3600000) },
+  ];
+  const { keep } = computeBackupKeepSet(backups, now);
+  assert.ok(keep.has('backups/acme/safety-b.json'), 'a per-salon safety snapshot is kept even mid-history');
 });
 
-test('pruneOldBackups is a no-op at or below the keep-window', async () => {
-  const storage = makeStorage(), bucket = makeBucket();
-  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
-  doInst.KEEP_BACKUPS = 5;
-  await storage.put('meta:slug', 'acme');
-  for (let i = 0; i < 3; i++) await bucket.put(`backups/acme/state-${i}.json`, '{}');
-  const res = await doInst.pruneOldBackups();
-  assert.equal(res.pruned, 0, 'nothing deleted below the window');
-  assert.equal((await doInst.listBackups()).count, 3);
+test('pruneBackups is log-only by default (deletes nothing, reports would-prune)', async () => {
+  const bucket = makeBucket(); const now = Date.now();
+  const doInst = await mkSalon('acme', { PHOTOS_BUCKET: bucket });   // BACKUP_RETENTION unset
+  seedYear(bucket, 'acme', now, 200);
+  const before = bucket._store.size;
+  const res = await doInst.pruneBackups();
+  assert.equal(res.live, false, 'not live by default');
+  assert.ok(res.wouldPrune > 100, 'reports a large would-prune count');
+  assert.equal(bucket._store.size, before, 'log-only deletes nothing');
 });
 
-test('pruneOldBackups only deletes within the salon\'s own prefix', async () => {
-  const storage = makeStorage(), bucket = makeBucket();
-  const doInst = new TurnDeskDO({ storage }, { PHOTOS_BUCKET: bucket });
-  doInst.KEEP_BACKUPS = 1;
-  await storage.put('meta:slug', 'acme');
-  for (let i = 0; i < 3; i++) await bucket.put(`backups/acme/state-${i}.json`, '{}');
-  await bucket.put('backups/other/state-0.json', '{}');   // a different salon's backup
-  await doInst.pruneOldBackups();
-  assert.ok(await bucket.get('backups/other/state-0.json'), 'another salon\'s backups are never touched');
+test('pruneBackups live keeps newest + safety, prunes the rest, and never touches another salon', async () => {
+  const bucket = makeBucket(); const now = Date.now();
+  const doInst = await mkSalon('acme', { PHOTOS_BUCKET: bucket, BACKUP_RETENTION: 'on' });
+  seedYear(bucket, 'acme', now, 200);
+  const safetyKey = 'backups/acme/safety-' + iso(now - 40 * DAY - 7 * 3600000).replace(/[:.]/g, '-') + '.json';
+  bucket.seed(safetyKey, iso(now - 40 * DAY - 7 * 3600000));
+  const newestKey = 'backups/acme/state-' + iso(now).replace(/[:.]/g, '-') + '.json';
+  bucket.seed('backups/other/state-old.json', iso(now - 500 * DAY));   // a different salon's backup
+  const res = await doInst.pruneBackups();
+  assert.equal(res.live, true);
+  assert.ok(res.pruned > 100, 'prunes a lot of old points');
+  assert.ok(bucket._store.has(safetyKey), 'safety snapshot survives');
+  assert.ok(bucket._store.has(newestKey), 'newest survives');
+  assert.ok(bucket._store.has('backups/other/state-old.json'), "another salon's backup is never touched");
+  assert.ok(bucket._store.size <= 82, 'acme reduced to ~70 (+1 other salon), got ' + bucket._store.size);
+});
+
+test('pruneBackups refuses to run on a slug-less DO (never prunes the shared backups/ root)', async () => {
+  const bucket = makeBucket(); const now = Date.now();
+  bucket.seed('backups/acme/state-x.json', iso(now - 500 * DAY));
+  bucket.seed('backups/other/state-y.json', iso(now - 500 * DAY));
+  const doInst = new TurnDeskDO({ storage: makeStorage() }, { PHOTOS_BUCKET: bucket, BACKUP_RETENTION: 'on' });   // NO meta:slug
+  const res = await doInst.pruneBackups();
+  assert.equal(res.skipped, 'no-slug');
+  assert.equal(res.pruned, 0);
+  assert.equal(bucket._store.size, 2, 'nothing deleted when the slug is unknown (cross-tenant safety)');
 });

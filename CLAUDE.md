@@ -4,6 +4,20 @@ This file contains rules and context for AI coding assistants working on this pr
 
 ---
 
+## ⭐ Working agreement (owner's standing rules — always apply)
+
+These govern HOW to work, on top of everything else in this file:
+
+1. **Explain both ways.** Always give the technical explanation AND a plain-English version for a non-technical owner.
+2. **Criticize, don't comply.** Never blindly agree. Review the owner's input coldly and objectively — push back, surface tradeoffs, and go back and forth until there's a shared understanding and a genuinely good result.
+3. **Quality over speed.** Always prefer the correct, root-cause solution. Never ship a band-aid unless the owner expressly asks for one.
+4. **Plan before code.** For any non-trivial change, draft a written plan first; have it adversarially reviewed by subagents (grounded in the real code); rewrite it from the findings; then **get the owner's sign-off before coding.**
+5. **Review before presenting.** After coding, and BEFORE showing the owner, run three review-only subagents — (a) line-by-line correctness, (b) subject-matter/necessity, (c) cosmetics/ergonomics — then a final senior-engineer pass; apply fixes between rounds; report the iterations.
+
+Rules 4–5 are packaged as the **`rigorous-build`** skill — invoke it for any non-trivial code change or substantial task (trivial mechanical edits still get the correctness check). Rules 1–3 apply to every response, always.
+
+---
+
 ## What This Is
 
 **TurnDesk** is the public, **multi-tenant SaaS** version of a live single-salon app (`musedashboard`). It is a nail-salon front-desk PWA: check-in queue, a fair-rotation "turns" engine, floor plan, reports, payroll, gift cards, and **pluggable payment processors** (Square / Stripe / Helcim) — each salon connects whichever processor it already uses.

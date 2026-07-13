@@ -1126,13 +1126,46 @@ export async function handleOperator(request, env, url, method, path) {
   return json({ error: 'not found' }, 404);
 }
 
+// ── Backup retention (Phase 1) ───────────────────────────────────────────────
+// Tiered (grandfather-father-son) keep-set for the timestamped R2 snapshots: every
+// 6h point for 1 week, the newest-per-day for 1 month, newest-per-month for 1 year,
+// newest-per-year for 7 years — plus a hard floor (always keep the newest few) and an
+// exemption for DR "safety" snapshots (…/safety-*). Pure + stateless: recomputed from
+// scratch each run so a missed run self-corrects. Buckets by R2 `uploaded` time (never
+// by parsing the mangled key). Operates on the already-per-salon list from listBackups.
+// Returns { keep:Set, del:string[] }.
+export function computeBackupKeepSet(backups, nowMs) {
+  const DAY = 86400000;
+  const items = (backups || [])
+    .map(b => ({ key: b && b.key, t: +new Date(b && b.uploaded), safety: /^safety-/.test((((b && b.key) || '').split('/').pop()) || '') }))
+    .filter(x => x.key && Number.isFinite(x.t))
+    .sort((a, b) => b.t - a.t);   // newest first → first-seen-per-bucket is the end-of-period one
+  const keep = new Set();
+  for (const x of items) if (x.t >= nowMs - 7 * DAY) keep.add(x.key);            // 6h points, last week
+  const bucketNewest = (windowMs, periodKey) => {
+    const seen = new Set();
+    for (const x of items) {
+      if (x.t < nowMs - windowMs) continue;
+      const pk = periodKey(x.t);
+      if (!seen.has(pk)) { seen.add(pk); keep.add(x.key); }
+    }
+  };
+  bucketNewest(30 * DAY,      t => new Date(t).toISOString().slice(0, 10));      // daily, last month
+  bucketNewest(365 * DAY,     t => new Date(t).toISOString().slice(0, 7));       // monthly, last year
+  bucketNewest(7 * 365 * DAY, t => new Date(t).toISOString().slice(0, 4));       // yearly, last 7 years
+  for (let i = 0; i < Math.min(8, items.length); i++) keep.add(items[i].key);    // hard floor: newest few, always
+  let safe = 0;                                                                  // DR safety snapshots: newest few, always
+  for (const x of items) { if (x.safety && safe < 5) { keep.add(x.key); safe++; } }
+  const del = items.filter(x => !keep.has(x.key)).map(x => x.key);
+  return { keep, del };
+}
+
 export class TurnDeskDO {
   constructor(state, env) {
     this.state = state;
     this.env   = env;
     this.SCHEMA_VERSION = 1;
     this.BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
-    this.KEEP_BACKUPS = 120;   // retention: newest ~30 days of 6-hourly snapshots per salon; alarm() prunes older
     this.slug = '';   // this salon's tenant slug; learned from requests, persisted to meta:slug
     // WebSocket Hibernation: answer the client's 20s keepalive ping at the edge so the heartbeat
     // never wakes (or bills) the DO. Sockets live in the runtime (state.getWebSockets), not an
@@ -2112,7 +2145,7 @@ export class TurnDeskDO {
         await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'state-' + ts + '.json', JSON.stringify(snap), {
           httpMetadata: { contentType: 'application/json' },
         });
-        await this.pruneOldBackups();   // retention: cap per-salon snapshot growth (keep newest KEEP_BACKUPS)
+        try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }   // tiered retention (own try — never blocks the backup)
       }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
       const muts = await this.state.storage.list({ prefix: 'mut:' });
@@ -2155,25 +2188,32 @@ export class TurnDeskDO {
     return { backups, count: backups.length };
   }
 
-  // Retention: keep the newest KEEP_BACKUPS snapshots for this salon, delete the older surplus.
-  // listBackups() is newest-first (H2), so slice(KEEP_BACKUPS) is exactly the oldest overflow.
-  // Only ever deletes within THIS salon's own backups/<slug>/ prefix, and never the newest N.
-  async pruneOldBackups() {
-    if (!this.env.PHOTOS_BUCKET) return { pruned: 0 };
+  // Tiered retention prune (Phase 1) — the grandfather-father-son keep-set from
+  // computeBackupKeepSet, replacing the old keep-newest-120. GATED: only deletes when
+  // BACKUP_RETENTION === 'on' (otherwise logs what it WOULD delete — safe by default).
+  // Only ever deletes within THIS salon's own backups/<slug>/ prefix; the keep-set's hard
+  // floor + safety exemption mean the newest points and recovery snapshots are never removed.
+  async pruneBackups() {
+    const live = this.env.BACKUP_RETENTION === 'on' || this.env.BACKUP_RETENTION === 'true';   // accept either (rest of codebase uses 'true')
+    if (!this.env.PHOTOS_BUCKET) return { total: 0, keep: 0, pruned: 0, wouldPrune: 0, live };
+    const slug = await this._getSlug();
+    if (!slug) return { total: 0, keep: 0, pruned: 0, wouldPrune: 0, live, skipped: 'no-slug' };   // NEVER let a slug-less DO prune the shared backups/ root (cross-tenant safety)
     const { backups } = await this.listBackups();
-    if (backups.length <= this.KEEP_BACKUPS) return { pruned: 0 };
-    const prefix = this._backupPrefix(await this._getSlug());
-    let pruned = 0;
-    for (const b of backups.slice(this.KEEP_BACKUPS)) {
-      if (b.key && b.key.startsWith(prefix)) { try { await this.env.PHOTOS_BUCKET.delete(b.key); pruned++; } catch {} }
-    }
-    return { pruned };
+    const { keep, del } = computeBackupKeepSet(backups, Date.now());
+    const prefix = this._backupPrefix(slug);
+    const safeDel = del.filter(k => typeof k === 'string' && k.startsWith(prefix));   // only THIS salon's own prefix, never another's
+    const batch = safeDel.slice(0, 1000);   // R2 array-delete cap; steady state ~0-1, one-time cleanup ~470
+    console.log(`[retention] salon=${prefix} total=${backups.length} keep=${keep.size} prune=${safeDel.length}${batch.length < safeDel.length ? ` (capped ${batch.length}/run)` : ''} mode=${live ? 'LIVE' : 'log-only'}`);
+    if (live && batch.length) await this.env.PHOTOS_BUCKET.delete(batch);
+    return { total: backups.length, keep: keep.size, pruned: live ? batch.length : 0, wouldPrune: safeDel.length, live };
   }
 
   // Force a snapshot to R2 right now (used for testing + before a restore).
-  async backupNow() {
+  async backupNow(opts = {}) {
     const snap = await this.buildSnapshot();
-    const key  = this._backupPrefix(await this._getSlug()) + 'state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    // 'safety' = a pre-restore/reset recovery point; tagged so retention pruning never deletes it.
+    const kind = opts.safety ? 'safety' : 'state';
+    const key  = this._backupPrefix(await this._getSlug()) + kind + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
     if (this.env.PHOTOS_BUCKET) await this.env.PHOTOS_BUCKET.put(key, JSON.stringify(snap), { httpMetadata: { contentType: 'application/json' } });
     return { backedUp: true, key, seq: snap.seq };
   }
@@ -2209,7 +2249,7 @@ export class TurnDeskDO {
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
     const st = snap.state || {};
-    await this.backupNow();                           // safety snapshot before wiping
+    await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
     // Preserve the durable keys that are intentionally NOT in the snapshot (a password hash / OAuth
     // token must never ride the broadcast channel to clients) — deleteAll() would otherwise erase
     // them for good: owner/manager LOGIN credentials (else the owner is locked out of their own salon
@@ -2247,7 +2287,7 @@ export class TurnDeskDO {
   // connected client clears immediately.
   async factoryReset() {
     const slug = await this._getSlug();
-    const safety = await this.backupNow();            // recovery point before wiping
+    const safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
     await this.state.storage.deleteAll();
     if (slug) await this.state.storage.put('meta:slug', slug);   // deleteAll wiped it; keep our identity
     await this.state.storage.put('meta:seq', 1);
