@@ -560,8 +560,10 @@ export function renderTurnsQueue() {
         const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:4px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
         return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="${rowStyle}">
           <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
-          <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
-          ${techHtml}${a.cost ? `<span class="font-semibold text-primary">$${a.cost}</span>` : ''}
+          <span class="min-w-0 flex-1 truncate">
+            <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
+            ${techHtml}${a.cost ? ` <span class="font-semibold text-primary">$${a.cost}</span>` : ''}
+          </span>
           <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
         </div>`;
       }).join('');
@@ -569,8 +571,11 @@ export function renderTurnsQueue() {
       const ls = serviceLineStyle('waiting');
       serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${ls.bar};padding-left:4px;opacity:${ls.rowOpacity}">
         <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
-        <span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>
-        ${sug ? `<span class="text-on-surface-variant">→ ${escHtml(sug.techName)}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}` : ''}
+        <span class="min-w-0 flex-1 truncate">
+          <span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>
+          ${sug ? `<span class="text-on-surface-variant">→ ${escHtml(sug.techName)}?</span>` : ''}
+        </span>
+        ${sug ? acceptBtnHtml(e.id, sid, sug.techName) : ''}
         <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
       </div>`; }).join('');
     }

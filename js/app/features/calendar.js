@@ -587,7 +587,10 @@ export function calRenderGrid() {
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
   const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
   const railEl = document.getElementById('cal-right-rail');
-  const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
+  // Total right-side overhead the day/week grid must clear = the 260px rail + the
+  // flex gap + panel padding + scrollbar (~290px measured), NOT just the rail's own
+  // width — undershooting here leaves the grid a hair wider than its track (h-scroll).
+  const railW = (railEl && railEl.style.display !== 'none') ? 290 : 0;
   const COL_W = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / visible.length));
   // When few calendars are shown a column gets very wide. Normally we cap each
   // bubble at ~2.5× its all-calendars width so a lone wide column doesn't stretch
@@ -739,7 +742,10 @@ function calRenderWeekGrid() {
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
   const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
   const railEl = document.getElementById('cal-right-rail');
-  const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
+  // Total right-side overhead the day/week grid must clear = the 260px rail + the
+  // flex gap + panel padding + scrollbar (~290px measured), NOT just the rail's own
+  // width — undershooting here leaves the grid a hair wider than its track (h-scroll).
+  const railW = (railEl && railEl.style.display !== 'none') ? 290 : 0;
   const COL_W = Math.max(110, Math.floor((window.innerWidth - TIME_W - railW - 48) / 7));
   const ws = calWeekStart(_calDate);
   const days = [...Array(7)].map((_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });

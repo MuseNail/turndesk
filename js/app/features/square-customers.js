@@ -241,9 +241,19 @@ export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId,
   }).join('');
   dropdown.classList.remove('hidden');
   const input = document.getElementById(phoneId) || document.getElementById(firstId);
-  if (input) _attachAcKeyNav(input, dropdown, idx => fillFromCustomer(
-    { id: customers[idx].id, phone: customers[idx].phone, given_name: customers[idx].given_name, family_name: customers[idx].family_name },
-    guestIdx, '', phoneId, firstId, lastId));
+  if (input) {
+    // Open the list upward when the anchor sits low in the viewport, so its lowest rows
+    // aren't clipped by the check-in kiosk's scroll container / fixed footer. Both edges
+    // are rewritten every show so the direction never sticks from a prior render.
+    const r = input.getBoundingClientRect();
+    const needed = Math.min(dropdown.scrollHeight, 220) + 4 + 120;   // list height + gap + footer clearance
+    const up = (window.innerHeight - r.bottom) < needed;
+    dropdown.style.top = up ? 'auto' : 'calc(100% + 4px)';
+    dropdown.style.bottom = up ? 'calc(100% + 4px)' : 'auto';
+    _attachAcKeyNav(input, dropdown, idx => fillFromCustomer(
+      { id: customers[idx].id, phone: customers[idx].phone, given_name: customers[idx].given_name, family_name: customers[idx].family_name },
+      guestIdx, '', phoneId, firstId, lastId));
+  }
 }
 
 function _attachAcKeyNav(input, dropdown, onSelect) {
