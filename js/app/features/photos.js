@@ -8,6 +8,7 @@ import { dispatch } from '../sync.js';
 import { showToast } from '../utils.js';
 import { PHOTOS_PROXY, LOGO_PATH } from '../config.js';
 import { salonSlug, urlSalonSlug } from '../apptoken.js';
+import { getActiveUser } from '../session.js';
 
 const cfg = () => getState().config;
 
@@ -64,7 +65,16 @@ export function setLogo() {
   });
   // Per-salon branding: fill the name fallback (replaces the old hardcoded "MUSE") + tab title.
   document.querySelectorAll('[data-biz-name]').forEach(n => { n.textContent = bizName || 'Welcome'; });
-  if (bizName) document.title = bizName;
+  // Tab title: brand it with the salon name ONLY in a real salon context — a ?salon=
+  // link, the front-desk kiosk, or a signed-in session. On the bare marketing front
+  // door, a device that merely CACHED a salon (e.g. after visiting its link once) must
+  // still read "TurnDesk" — setLogo runs on every config sync, so without this guard it
+  // would stamp the stale cached bizName over landing.js's marketing title. This makes
+  // setLogo authoritative + race-proof.
+  let _kiosk = false; try { _kiosk = localStorage.getItem('turndesk_kiosk_device') === '1'; } catch {}
+  const inSalonContext = !!(urlSalonSlug() || getActiveUser() || _kiosk);
+  if (inSalonContext) { if (bizName) document.title = bizName; }
+  else document.title = 'TurnDesk — salon front desk, free beta';
   const preview   = document.getElementById('logo-settings-preview');
   const recropBtn = document.getElementById('logo-recrop-btn');
   if (preview) {

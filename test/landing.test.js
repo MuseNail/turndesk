@@ -7,7 +7,7 @@ import { LANDING_FEATURES, getLandingFeature } from '../js/app/features/landing.
 // mis-flag a "launching soon" claim (which would put a false/overclaimed statement on
 // a live public page).
 
-const REQUIRED = ['key', 'icon', 'problem', 'solution', 'title', 'body'];
+const REQUIRED = ['key', 'name', 'icon', 'problem', 'solution', 'title', 'body'];
 
 test('every feature has all required non-empty string fields', () => {
   assert.ok(Array.isArray(LANDING_FEATURES) && LANDING_FEATURES.length === 8,

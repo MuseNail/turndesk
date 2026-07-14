@@ -17,6 +17,8 @@
 <meta property="og:title" content="TurnDesk — everything your salon needs, in one system">
 <meta property="og:description" content="Walk-in check-in, fair-turn rotation, reports and payroll — one system, built for nail salons. Free beta.">
 <meta property="og:type" content="website">
+<!-- Tab/favicon: the TurnDesk rotation mark (SVG scales crisp at any tab size). -->
+<link rel="icon" type="image/svg+xml" href="/turndesk/assets/logo/turndesk-appicon.svg">
 
 <!-- PWA -->
 <link rel="manifest" href="/turndesk/manifest.json">
@@ -160,10 +162,15 @@ tailwind.config = {
        populated from landing.js's LANDING_FEATURES (single tested source). -->
   <div id="landing" class="text-left">
 
-    <nav class="w-full max-w-3xl mx-auto flex items-center justify-between mb-8">
+    <nav class="w-full max-w-6xl mx-auto flex items-center justify-between mb-8">
       <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-primary bg-gradient-to-br from-primary to-primary-dim flex items-center justify-center">
-          <span class="material-symbols-outlined text-primary-container" style="font-size:16px">auto_awesome</span>
+        <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+          <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/>
+            <circle cx="32" cy="12" r="6" fill="#f5c870"/>
+            <circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/>
+            <circle cx="32" cy="32" r="5.4" fill="#eafffb"/>
+          </svg>
         </div>
         <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
       </div>
@@ -173,9 +180,9 @@ tailwind.config = {
       </div>
     </nav>
 
-    <div class="w-full max-w-3xl mx-auto">
-      <div class="flex flex-wrap gap-6 items-center">
-        <div class="flex-1 min-w-[260px]">
+    <div class="w-full max-w-6xl mx-auto">
+      <div class="flex flex-wrap gap-8 items-center justify-between">
+        <div class="flex-1 min-w-[280px] max-w-2xl">
           <span class="inline-block bg-secondary-container text-on-secondary-container text-[11px] font-headline font-bold tracking-wide uppercase px-3 py-1.5 rounded-full mb-3.5">Free beta — now onboarding nail salons</span>
           <h1 class="text-3xl md:text-4xl font-headline font-extrabold text-on-surface leading-[1.14] mb-2">Everything your salon needs, in one system.</h1>
           <p class="text-sm md:text-base font-body font-semibold text-primary mb-4">Everything connected. Everything in one place.</p>
@@ -186,15 +193,15 @@ tailwind.config = {
           </div>
         </div>
         <div class="shrink-0 mx-auto">
-          <svg width="150" height="150" viewBox="0 0 200 200" aria-hidden="true">
-            <circle cx="100" cy="100" r="72" fill="none" stroke="#0f3d3d" stroke-width="2" stroke-dasharray="4 7" opacity=".45"/>
-            <circle cx="100" cy="100" r="20" fill="#1a5252"/><text x="100" y="106" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="13" fill="#8fd4d3">4</text>
-            <circle cx="100" cy="28" r="17" fill="#f5c870"/><text x="100" y="33" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="11" fill="#3a2800">A</text>
-            <circle cx="163" cy="65" r="14" fill="#8fd4d3"/><text x="163" y="69" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="10" fill="#0a2e2e">B</text>
-            <circle cx="163" cy="135" r="14" fill="#8fd4d3"/><text x="163" y="139" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="10" fill="#0a2e2e">C</text>
-            <circle cx="37" cy="135" r="14" fill="#8fd4d3"/><text x="37" y="139" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="10" fill="#0a2e2e">D</text>
-            <circle cx="37" cy="65" r="14" fill="#8fd4d3"/><text x="37" y="69" text-anchor="middle" font-family="Manrope" font-weight="700" font-size="10" fill="#0a2e2e">E</text>
-            <path d="M 115 30 A 72 72 0 0 1 150 52" fill="none" stroke="#1a5252" stroke-width="2.5" marker-end="url(#ld-arrow)"/>
+          <svg width="180" height="180" viewBox="0 0 200 200" aria-hidden="true" role="img" aria-label="Technicians rotating fairly around the dashboard; gold marks who is next">
+            <circle cx="100" cy="100" r="68" fill="none" stroke="#0f3d3d" stroke-width="2" stroke-dasharray="4 8" opacity=".4"/>
+            <circle cx="100" cy="32" r="16" fill="#f5c870"/>
+            <circle cx="158.9" cy="66" r="12" fill="#1a5252"/><circle cx="158.9" cy="134" r="12" fill="#1a5252"/>
+            <circle cx="100" cy="168" r="12" fill="#1a5252"/><circle cx="41.1" cy="134" r="12" fill="#1a5252"/>
+            <circle cx="41.1" cy="66" r="12" fill="#1a5252"/>
+            <rect x="87.5" y="87.5" width="11" height="11" rx="2.5" fill="#1a5252"/><rect x="101.5" y="87.5" width="11" height="11" rx="2.5" fill="#1a5252"/>
+            <rect x="87.5" y="101.5" width="11" height="11" rx="2.5" fill="#1a5252"/><rect x="101.5" y="101.5" width="11" height="11" rx="2.5" fill="#1a5252"/>
+            <path d="M 120 36 A 68 68 0 0 1 156 62" fill="none" stroke="#1a5252" stroke-width="2.5" marker-end="url(#ld-arrow)"/>
             <defs><marker id="ld-arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a5252"/></marker></defs>
           </svg>
         </div>
@@ -208,10 +215,16 @@ tailwind.config = {
       </div>
     </div>
 
-    <div class="w-full max-w-3xl mx-auto mt-12">
+    <div class="w-full max-w-6xl mx-auto mt-12">
       <p class="text-center text-[11px] font-headline font-bold tracking-wide uppercase text-primary mb-1">Every problem your front desk actually has</p>
       <p class="text-center text-xs font-body text-on-surface-variant mb-4 opacity-70">Tap any card for the details.</p>
-      <div id="landing-tiles" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      <div id="landing-tiles" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5"></div>
+    </div>
+
+    <div class="w-full max-w-6xl mx-auto mt-14">
+      <p class="text-center text-[11px] font-headline font-bold tracking-wide uppercase text-primary mb-1">See it in action</p>
+      <p class="text-center text-xs font-body text-on-surface-variant mb-5 opacity-70">A quick look at the screens your front desk lives in.</p>
+      <div id="landing-showcase" class="grid grid-cols-1 md:grid-cols-3 gap-5"></div>
     </div>
 
     <div class="w-full max-w-xl mx-auto mt-12">
