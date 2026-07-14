@@ -10,88 +10,94 @@
 // `soon` line, shown only inside the click-through detail — never on the teaser card.
 
 // ── Sample "windows" ─────────────────────────────────────────────────────────
-// Screenshot-like recreations built from the app's own tokens (owner chose
-// recreations over real captures, so details can be blurred later to deter copycats).
-// Margin-free + w-full so the SAME panel works in both the feature popups and the
-// showcase row. Brand hexes are inline on purpose — these are "screenshots" of a
-// specific dark-teal product surface, not themeable UI.
-function recWindow(title, inner) {
-  return `<div class="rounded-xl overflow-hidden w-full" style="background:#0f3d3d">
-    <div class="flex items-center gap-1.5 px-3 py-2" style="background:rgba(255,255,255,.05)">
-      <span style="width:7px;height:7px;border-radius:50%;background:#f5c870;opacity:.85"></span>
-      <span style="width:7px;height:7px;border-radius:50%;background:#8fd4d3;opacity:.45"></span>
-      <span style="width:7px;height:7px;border-radius:50%;background:#8fd4d3;opacity:.45"></span>
-      <span class="text-[10px] font-body ml-1.5" style="color:#8fd4d3;letter-spacing:.08em;text-transform:uppercase">${title}</span>
+// FAITHFUL recreations of the REAL app screens — light surface + the app's ACTUAL
+// status colors and structure (from status.js serviceLineStyle, turns.js availability
+// chips, floorplan.js status tints, reports.js metric cards), so the previews look
+// exactly like the product. Margin-free + w-full so the SAME panel works in both the
+// feature popups and the showcase row. Owner chose recreations over live screenshots so
+// details can be blurred later to deter copycats. Brand hexes are inline on purpose —
+// these mirror specific app surfaces, not themeable UI.
+function recWindow(icon, title, inner) {
+  return `<div class="rounded-xl overflow-hidden w-full border border-surface-container-high shadow-sm" style="background:#f5f7f8">
+    <div class="flex items-center gap-2 px-3.5 py-2.5" style="background:#fff;border-bottom:1px solid #e4eae9">
+      <span class="material-symbols-outlined text-primary" style="font-size:16px">${icon}</span>
+      <span class="text-[12px] font-headline font-bold text-on-surface">${title}</span>
     </div>
     <div class="p-3">${inner}</div>
   </div>`;
 }
 
-const _turnRow = (name, turns, o = {}) => {
-  const badge = o.next ? `<span class="text-[8px] font-headline font-bold px-1.5 py-0.5 rounded" style="background:#f5c870;color:#3a2800">UP NEXT</span>` : '';
-  return `<div class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${o.dim ? 'opacity-55' : ''}" style="background:rgba(255,255,255,.06)">
-    <span style="width:7px;height:7px;border-radius:50%;background:${o.dot || '#8fd4d3'};flex-shrink:0"></span>
-    <span class="text-[12px] font-body text-white flex-1 truncate">${name}</span>
-    ${badge}
-    <span class="text-[11px] font-headline font-semibold" style="color:#8fd4d3">${turns}t</span>
+const _fdot = c => `<span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block;flex-shrink:0"></span>`;
+// Availability chips mirror turns.js exactly (Working now / Next up / Available / Off).
+const _CHIP = {
+  working: { ring: '#2a7a4f', style: 'background:#e9f4ee;color:#1b5e3b', lead: _fdot('#2a7a4f'), label: 'Working now' },
+  nextup:  { ring: '#1a5252', style: 'background:#1a5252;color:#fff', lead: '<span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>', label: 'Next up' },
+  avail:   { ring: '#1a5252', style: 'background:#fff;border:1px solid #b9c8c2;color:#1a5252', lead: _fdot('#1a5252'), label: 'Available' },
+  off:     { ring: '#b0b6ba', style: 'background:#eceef0;color:#7a858a', lead: _fdot('#b0b6ba'), label: 'Off' },
+};
+const _turnRow = (name, initial, turns, chipKey) => {
+  const c = _CHIP[chipKey];
+  return `<div class="flex items-center gap-2.5 px-1 py-1">
+    <div class="w-9 h-9 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-xs font-headline font-bold" style="background:${c.ring}1f;border-color:${c.ring};color:${c.ring}">${initial}</div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-1.5"><span class="font-headline font-semibold text-on-surface text-[13px] truncate">${name}</span><span class="text-[13px] font-headline font-bold flex-shrink-0" style="color:#1a5252">${turns}t</span></div>
+      <div class="mt-1"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${c.style}">${c.lead}${c.label}</span></div>
+    </div>
   </div>`;
 };
-const REC_TURNS = recWindow('Turns · Today', `
-  <div class="grid grid-cols-2 gap-1.5">
-    ${_turnRow('Amy', '6.5', { dot: '#2a7a4f' })}
-    ${_turnRow('Bao', '5.0', { next: true, dot: '#f5c870' })}
-    ${_turnRow('Chi', '4.5')}
-    ${_turnRow('Dao · skipped', '4.0', { dim: true, dot: '#7a858a' })}
-    ${_turnRow('Evy', '3.5')}
-    ${_turnRow('Kim', '3.0')}
+const REC_TURNS = recWindow('swap_vert', 'Turns · Today', `
+  <div class="grid grid-cols-1 gap-0.5">
+    ${_turnRow('Amy', 'A', '6.5', 'working')}
+    ${_turnRow('Bao', 'B', '5.0', 'nextup')}
+    ${_turnRow('Chi', 'C', '4.5', 'avail')}
+    ${_turnRow('Dao', 'D', '4.0', 'off')}
   </div>`);
 
-const _station = (label, o = {}) => {
-  if (o.open) return `<div class="rounded-md flex items-center justify-center" style="height:34px;border:1.5px dashed rgba(143,212,211,.4)"><span class="text-[9px] font-body" style="color:#8fd4d3;opacity:.7">${label}</span></div>`;
-  return `<div class="rounded-md flex flex-col items-center justify-center gap-0.5" style="height:34px;background:${o.bg || '#1a5252'}">
-    <span class="text-[10px] font-headline font-bold text-white leading-none">${o.who}</span>
-    <span class="text-[7px] font-body leading-none" style="color:rgba(255,255,255,.7)">${label}</span></div>`;
+const _FP = { inservice: { bg: '#d8ecdf', bd: '#2a7a4f' }, complete: { bg: '#d3e4ef', bd: '#1a5c7a' }, waiting: { bg: '#ffe9c4', bd: '#d4860a' } };
+const _fpTile = (label, name, status) => {
+  if (!name) return `<div class="rounded-lg flex items-center justify-center" style="height:50px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">${label}</span></div>`;
+  const c = _FP[status];
+  return `<div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:50px;border:2px solid ${c.bd};background:${c.bg}">
+    <span class="absolute" style="top:2px;left:5px;font-size:8px;font-weight:700;color:${c.bd};opacity:.7">${label}</span>
+    <span class="text-[11px] font-semibold" style="color:#1f2937;line-height:1.1;margin-top:6px">${name}</span></div>`;
 };
-const REC_FLOOR = recWindow('Floor Plan', `
-  <div class="rounded-lg p-2" style="background:rgba(255,255,255,.04)">
-    <div class="grid grid-cols-4 gap-1.5 mb-1.5">
-      ${_station('Mani 1', { who: 'AM', bg: '#2a7a4f' })}
-      ${_station('Mani 2', { who: 'BA' })}
-      ${_station('Mani 3', { open: true })}
-      ${_station('Mani 4', { who: 'CH' })}
-    </div>
-    <div class="grid grid-cols-3 gap-1.5">
-      ${_station('Pedi 1', { who: 'DA', bg: '#1a5c7a' })}
-      ${_station('Pedi 2', { open: true })}
-      ${_station('Wax', { who: 'EV', bg: '#6b4fb0' })}
-    </div>
+const REC_FLOOR = recWindow('chair', 'Floor Plan', `
+  <div class="grid grid-cols-4 gap-1.5 mb-1.5">
+    ${_fpTile('Mani 1', 'Sarah', 'inservice')}
+    ${_fpTile('Mani 2', 'Amy', 'complete')}
+    ${_fpTile('Mani 3', '')}
+    ${_fpTile('Mani 4', 'Mia', 'waiting')}
+  </div>
+  <div class="grid grid-cols-3 gap-1.5">
+    ${_fpTile('Pedi 1', 'Bao', 'inservice')}
+    ${_fpTile('Pedi 2', '')}
+    ${_fpTile('Wax', 'Evy', 'complete')}
   </div>`);
 
-const _bar = (h, hi) => `<div class="flex-1 rounded-t" style="height:${h}%;background:${hi ? '#f5c870' : '#8fd4d3'};opacity:${hi ? 1 : .55}"></div>`;
-const REC_REPORTS = recWindow('Daily Report', `
-  <div class="grid grid-cols-3 gap-2 mb-3">
-    <div class="rounded-lg px-2 py-2 text-center" style="background:rgba(255,255,255,.06)">
-      <p class="text-[9px] font-body uppercase tracking-wide" style="color:#8fd4d3">Sales</p>
-      <p class="text-[15px] font-headline font-extrabold text-white mt-0.5">$1,240</p></div>
-    <div class="rounded-lg px-2 py-2 text-center" style="background:rgba(255,255,255,.06)">
-      <p class="text-[9px] font-body uppercase tracking-wide" style="color:#8fd4d3">Tips</p>
-      <p class="text-[15px] font-headline font-extrabold text-white mt-0.5">$186</p></div>
-    <div class="rounded-lg px-2 py-2 text-center" style="background:rgba(255,255,255,.06)">
-      <p class="text-[9px] font-body uppercase tracking-wide" style="color:#8fd4d3">Tickets</p>
-      <p class="text-[15px] font-headline font-extrabold text-white mt-0.5">28</p></div>
+const _metric = (label, val, primary) => `<div class="rounded-lg px-2 py-2 text-center" style="${primary ? 'background:rgba(26,82,82,0.07)' : 'background:#fff;border:1px solid #e4eae9'}"><div class="text-[9px] font-body uppercase tracking-wide text-on-surface-variant leading-tight">${label}</div><div class="font-headline font-bold text-[15px] leading-tight mt-0.5 ${primary ? 'text-primary' : 'text-on-surface'}">${val}</div></div>`;
+const _rptRow = (tech, turns, billed) => `<tr style="border-top:1px solid #e4eae9"><td class="py-1 text-on-surface">${tech}</td><td class="py-1 text-right text-on-surface-variant">${turns}</td><td class="py-1 text-right font-headline font-semibold" style="color:#1a5252">${billed}</td></tr>`;
+const REC_REPORTS = recWindow('bar_chart', 'Daily Report', `
+  <div class="grid grid-cols-3 gap-2">
+    ${_metric('Sales', '$1,240', true)}
+    ${_metric('Tips', '$186')}
+    ${_metric('Tickets', '28')}
   </div>
-  <div class="flex items-end gap-1.5" style="height:46px">
-    ${_bar(40)}${_bar(62)}${_bar(30)}${_bar(78)}${_bar(55)}${_bar(92, true)}${_bar(48)}
-  </div>
-  <p class="text-[9px] font-body mt-1.5" style="color:#8fd4d3;opacity:.7">Mon–Sun · Saturday highest</p>`);
+  <table class="w-full mt-3 text-[11px] font-body">
+    <thead><tr class="text-on-surface-variant"><th class="text-left font-semibold pb-1">Tech</th><th class="text-right font-semibold pb-1">Turns</th><th class="text-right font-semibold pb-1">Billed</th></tr></thead>
+    <tbody>
+      ${_rptRow('Amy', '6.5', '$410')}
+      ${_rptRow('Bao', '5.0', '$355')}
+      ${_rptRow('Chi', '4.5', '$300')}
+    </tbody>
+  </table>`);
 
-const REC_PAYMENTS = recWindow('Effective rate', `
+const REC_PAYMENTS = recWindow('credit_card', 'Effective rate', `
   <div class="flex items-end gap-3">
-    <div><p class="text-[26px] leading-none font-headline font-extrabold text-white">~1.8%</p>
-      <p class="text-[10px] font-body mt-1" style="color:#8fd4d3">Helcim · no added per-txn fee</p></div>
-    <div class="flex-1 pl-3" style="border-left:1px solid rgba(255,255,255,.15)">
-      <p class="text-[15px] leading-none font-headline font-semibold line-through" style="color:rgba(255,255,255,.6)">2.6% + 15¢</p>
-      <p class="text-[10px] font-body mt-1" style="color:#8fd4d3">typical processor</p></div>
+    <div><p class="text-[26px] leading-none font-headline font-extrabold text-primary">~1.8%</p>
+      <p class="text-[10px] font-body text-on-surface-variant mt-1">Helcim · no added per-txn fee</p></div>
+    <div class="flex-1 pl-3" style="border-left:1px solid #e4eae9">
+      <p class="text-[15px] leading-none font-headline font-semibold line-through text-on-surface-variant">2.6% + 15¢</p>
+      <p class="text-[10px] font-body text-on-surface-variant mt-1">typical processor</p></div>
   </div>`);
 
 const li = t => `<li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary text-[18px] leading-5">check</span><span>${t}</span></li>`;
@@ -279,7 +285,7 @@ export function renderLandingShowcase() {
   host.innerHTML =
       panel(REC_TURNS,   'The turn grid — whose turn, at a glance.')
     + panel(REC_FLOOR,   'Your floor plan — open and busy stations.')
-    + panel(REC_REPORTS, 'Daily report — sales, tips, and the week’s trend.');
+    + panel(REC_REPORTS, 'Daily report — sales, tips, and payroll.');
 }
 
 // Init once the DOM exists (module scripts run after parse, but guard anyway):
