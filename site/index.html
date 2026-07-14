@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TurnDesk — everything your salon needs, in one system</title>
+<meta name="description" content="TurnDesk runs your nail salon's front desk in one system — walk-in check-in, a fair-turn rotation, floor plan, reports and payroll. Free beta, now onboarding salons.">
+<meta name="robots" content="index">
+<meta property="og:title" content="TurnDesk — everything your salon needs, in one system">
+<meta property="og:description" content="Walk-in check-in, fair-turn rotation, reports and payroll — one system, built for nail salons. Free beta.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="assets/turndesk-appicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { primary:'#1a5252','primary-dim':'#0f3d3d','primary-container':'#8fd4d3','on-primary':'#ffffff','on-primary-container':'#0a2e2e','secondary-container':'#f5c870','on-secondary-container':'#3a2800',surface:'#e8ecee','surface-lowest':'#f5f7f8','surface-high':'#c2cacd','on-surface':'#0b1f1f','on-surface-variant':'#4a5258' },
+  fontFamily: { headline:['Manrope','sans-serif'], body:['Inter','sans-serif'] },
+} } }
+</script>
+<!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
+     JS can drive them. No JS → content is fully visible (progressive enhancement). -->
+<script>document.documentElement.classList.add('has-js')</script>
+<link rel="stylesheet" href="assets/site.css?v=4">
+<style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
+</head>
+<body class="bg-surface text-on-surface font-body">
+
+<!-- ═══ Header ═══ -->
+<header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
+  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-2">
+      <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
+      </span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-7 text-sm font-body font-semibold text-on-surface-variant">
+      <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+      <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+      <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+      <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    </nav>
+    <div class="hidden md:flex items-center gap-3">
+      <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+    </div>
+    <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu"><span class="material-symbols-outlined">menu</span></button>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden border-t border-surface-high px-5 py-4 flex flex-col gap-3 text-sm font-body font-semibold">
+    <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+    <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+    <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+    <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    <div class="flex gap-3 pt-2">
+      <a href="https://musenail.github.io/turndesk/" class="flex-1 text-center border border-primary text-primary rounded-lg px-4 py-2.5">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="flex-1 text-center bg-primary text-on-primary rounded-lg px-4 py-2.5">Start free beta</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ Hero ═══ -->
+<section class="max-w-6xl mx-auto px-5 pt-16 pb-10">
+  <div class="flex flex-wrap gap-10 items-center justify-between">
+    <div class="flex-1 min-w-[300px] max-w-2xl">
+      <span class="reveal inline-block bg-secondary-container text-on-secondary-container text-[11px] font-headline font-bold tracking-wide uppercase px-3 py-1.5 rounded-full mb-4">Free beta — now onboarding nail salons</span>
+      <h1 class="reveal text-4xl md:text-5xl font-headline font-extrabold leading-[1.12] mb-3" style="transition-delay:.06s">Everything your salon needs, in one system.</h1>
+      <p class="reveal text-lg font-body font-semibold text-primary mb-6" style="transition-delay:.12s">Everything connected. Everything in one place.</p>
+      <div class="reveal flex flex-wrap gap-3 items-center" style="transition-delay:.18s">
+        <a href="https://musenail.github.io/turndesk/signup.html" class="inline-flex items-center gap-1.5 bg-primary text-on-primary text-sm font-headline font-semibold px-6 py-3.5 rounded-xl hover:opacity-90 transition-opacity">Start free beta <span class="material-symbols-outlined" style="font-size:17px">arrow_forward</span></a>
+        <a href="https://musenail.github.io/turndesk/" class="border-[1.5px] border-primary text-primary text-sm font-headline font-semibold px-6 py-3.5 rounded-xl hover:bg-primary/[0.06] transition-colors">Sign in</a>
+        <a href="contact.html" class="text-sm font-body text-on-surface-variant underline hover:text-primary">or request a live demo</a>
+      </div>
+    </div>
+    <div class="reveal shrink-0 mx-auto" style="transition-delay:.1s">
+      <svg width="210" height="210" viewBox="0 0 200 200" aria-hidden="true">
+        <circle cx="100" cy="100" r="68" fill="none" stroke="#0f3d3d" stroke-width="2" stroke-dasharray="4 8" opacity=".4"/>
+        <circle cx="100" cy="32" r="16" fill="#f5c870"/>
+        <circle cx="158.9" cy="66" r="12" fill="#1a5252"/><circle cx="158.9" cy="134" r="12" fill="#1a5252"/>
+        <circle cx="100" cy="168" r="12" fill="#1a5252"/><circle cx="41.1" cy="134" r="12" fill="#1a5252"/><circle cx="41.1" cy="66" r="12" fill="#1a5252"/>
+        <rect x="87.5" y="87.5" width="11" height="11" rx="2.5" fill="#1a5252"/><rect x="101.5" y="87.5" width="11" height="11" rx="2.5" fill="#1a5252"/>
+        <rect x="87.5" y="101.5" width="11" height="11" rx="2.5" fill="#1a5252"/><rect x="101.5" y="101.5" width="11" height="11" rx="2.5" fill="#1a5252"/>
+        <path d="M 120 36 A 68 68 0 0 1 156 62" fill="none" stroke="#1a5252" stroke-width="2.5" marker-end="url(#ar)"/>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1a5252"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+
+  <div class="reveal grid grid-cols-2 md:grid-cols-4 border-t border-b border-surface-high mt-10 py-5 gap-y-4">
+    <div class="text-center px-2"><p class="text-2xl font-headline font-extrabold text-primary">$0</p><p class="text-xs font-body text-on-surface-variant mt-0.5">to start the free beta</p></div>
+    <div class="text-center px-2"><p class="text-2xl font-headline font-extrabold text-primary">1</p><p class="text-xs font-body text-on-surface-variant mt-0.5">system, check-in through payroll</p></div>
+    <div class="text-center px-2"><p class="text-2xl font-headline font-extrabold text-primary">100%</p><p class="text-xs font-body text-on-surface-variant mt-0.5">of walk-ins in the rotation</p></div>
+    <div class="text-center px-2"><p class="text-2xl font-headline font-extrabold text-primary">All-in-1</p><p class="text-xs font-body text-on-surface-variant mt-0.5">no extra apps to duct-tape</p></div>
+  </div>
+</section>
+
+<!-- ═══ See it in action (large samples) ═══ -->
+<section class="max-w-6xl mx-auto px-5 py-14">
+  <p class="reveal text-center text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">See it in action</p>
+  <h2 class="reveal text-center text-2xl md:text-3xl font-headline font-extrabold mb-2">The screens your front desk lives in.</h2>
+  <p class="reveal text-center text-sm text-on-surface-variant mb-10 max-w-xl mx-auto">A real look at the product — the turn grid, your floor, and the day's numbers.</p>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+    <div class="reveal">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">swap_vert</span><span class="text-[13px] font-headline font-bold">Turns · Today</span></div>
+        <div class="p-4 space-y-1">
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#2a7a4f1f;border-color:#2a7a4f;color:#2a7a4f">A</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Amy</span><span class="text-sm font-headline font-bold text-primary">6.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#e9f4ee;color:#1b5e3b"><span style="width:6px;height:6px;border-radius:50%;background:#2a7a4f;display:inline-block"></span>Working now</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">B</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Bao</span><span class="text-sm font-headline font-bold text-primary">5.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next up</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">C</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Chi</span><span class="text-sm font-headline font-bold text-primary">4.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252"><span style="width:6px;height:6px;border-radius:50%;background:#1a5252;display:inline-block"></span>Available</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#b0b6ba1f;border-color:#b0b6ba;color:#b0b6ba">D</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Dao</span><span class="text-sm font-headline font-bold text-primary">4.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#eceef0;color:#7a858a"><span style="width:6px;height:6px;border-radius:50%;background:#b0b6ba;display:inline-block"></span>Off</span></div></div></div>
+        </div>
+      </div>
+      <p class="text-center text-sm text-on-surface-variant mt-3">The turn grid — whose turn, at a glance.</p>
+    </div>
+
+    <div class="reveal" style="transition-delay:.1s">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">chair</span><span class="text-[13px] font-headline font-bold">Floor Plan</span></div>
+        <div class="p-4">
+          <div class="grid grid-cols-4 gap-2 mb-2">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Sarah</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Mani 2</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Amy</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Mani 3</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #d4860a;background:#ffe9c4"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#d4860a;opacity:.7">Mani 4</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Mia</span></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Bao</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Pedi 2</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Wax</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Evy</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="text-center text-sm text-on-surface-variant mt-3">Your floor plan — open and busy stations.</p>
+    </div>
+
+    <div class="reveal" style="transition-delay:.2s">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">bar_chart</span><span class="text-[13px] font-headline font-bold">Daily Report</span></div>
+        <div class="p-4">
+          <div class="grid grid-cols-3 gap-2.5">
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:rgba(26,82,82,0.07)"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Sales</div><div class="font-headline font-bold text-lg text-primary mt-0.5">$1,240</div></div>
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tips</div><div class="font-headline font-bold text-lg mt-0.5">$186</div></div>
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tickets</div><div class="font-headline font-bold text-lg mt-0.5">28</div></div>
+          </div>
+          <table class="w-full mt-4 text-xs">
+            <thead><tr class="text-on-surface-variant"><th class="text-left font-semibold pb-1.5">Tech</th><th class="text-right font-semibold pb-1.5">Turns</th><th class="text-right font-semibold pb-1.5">Billed</th></tr></thead>
+            <tbody>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Amy</td><td class="py-1.5 text-right text-on-surface-variant">6.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$410</td></tr>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Bao</td><td class="py-1.5 text-right text-on-surface-variant">5.0</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$355</td></tr>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Chi</td><td class="py-1.5 text-right text-on-surface-variant">4.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$300</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="text-center text-sm text-on-surface-variant mt-3">Daily report — sales, tips, and payroll.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══ Feature grid ═══ -->
+<section class="max-w-6xl mx-auto px-5 py-14 border-t border-surface-high">
+  <p class="reveal text-center text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Every problem your front desk actually has</p>
+  <h2 class="reveal text-center text-2xl md:text-3xl font-headline font-extrabold mb-10">Built for how a busy nail salon really runs.</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <a href="features.html#turns" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">swap_vert</span></span><span class="font-headline font-extrabold">Turn Grid</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">“Whose turn is it?” turns into a daily argument.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">An ordered, visible rotation the whole team can check for themselves.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#checkin" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.05s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">how_to_reg</span></span><span class="font-headline font-extrabold">Check-In Kiosk</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Walk-ins arrive with no appointment and no clean way to get in line.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Self check-in at the door — no clipboard, no calling names.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#floorplan" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.1s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">chair</span></span><span class="font-headline font-extrabold">Floor Plan</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">A list of names doesn’t show you how your floor actually works.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">See your real layout — drag, drop, and color it to match your salon.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#reports" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.15s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">bar_chart</span></span><span class="font-headline font-extrabold">Reports &amp; Payroll</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Payroll by hand eats hours — and you can’t see the numbers off-site.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Sales, tips, and payroll figured automatically — checkable from your phone.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#payments" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">credit_card</span></span><span class="font-headline font-extrabold">Payments</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Most salon software locks you into their processor — at a steep rate.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Bring your own processor — via Helcim, an effective rate around 1.8%.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#texting" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.05s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">sms</span></span><span class="font-headline font-extrabold">Text Updates</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Customers forget appointments — and don’t know when their turn is close.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Text updates that don’t depend on someone remembering to send them.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#booking" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.1s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">event_available</span></span><span class="font-headline font-extrabold">Smart Booking</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Slow Tuesday afternoons sit empty while Saturday mornings overbook.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Booking that steers toward your slow hours and guards against overcommitting.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+    <a href="features.html#ai" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.15s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">insights</span></span><span class="font-headline font-extrabold">AI Insights</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Digging insight out of raw numbers takes time you don’t have.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Ask a question about your numbers in plain English and get an answer.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
+  </div>
+  <div class="reveal text-center mt-8"><a href="features.html" class="inline-flex items-center gap-1.5 text-sm font-headline font-semibold text-primary hover:underline">See all features <span class="material-symbols-outlined" style="font-size:17px">arrow_forward</span></a></div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="max-w-4xl mx-auto px-5 py-14">
+  <div class="reveal rounded-3xl bg-primary-dim px-8 py-12 text-center">
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
+    <p class="text-primary-container mb-7 max-w-md mx-auto">Free during beta. No credit card, no pressure — set it up, or have us walk you through it live.</p>
+    <div class="flex flex-wrap gap-3 justify-center">
+      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="contact.html" class="border-[1.5px] border-primary-container text-primary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:bg-white/5 transition-colors">Request a live demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Footer ═══ -->
+<footer class="border-t border-surface-high">
+  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </div>
+    <nav class="flex flex-wrap gap-5 text-sm font-body text-on-surface-variant">
+      <a href="index.html" class="hover:text-primary">Home</a>
+      <a href="features.html" class="hover:text-primary">Features</a>
+      <a href="pricing.html" class="hover:text-primary">Pricing</a>
+      <a href="contact.html" class="hover:text-primary">Contact</a>
+      <a href="https://musenail.github.io/turndesk/" class="hover:text-primary">Sign in</a>
+    </nav>
+    <p class="text-xs text-on-surface-variant w-full md:w-auto">© 2026 TurnDesk · Free beta</p>
+  </div>
+</footer>
+
+<script src="assets/site.js?v=2"></script>
+</body>
+</html>
