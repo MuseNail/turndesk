@@ -68,6 +68,12 @@ GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), a
 
 ## Open follow-ups
 
+- **Domain migration (owner-agreed sequencing, 2026-07-14):** landing page → Cloudflare Pages @ `turndesk.net`
+  → per-salon path URLs, in that order, each its own effort. The old `musenail.github.io/turndesk/` link
+  stays live indefinitely (Krystal Nails Lounge's current link, and the safety net during transition) — it
+  is never auto-decommissioned by this work. Full plan, key finding (the cross-salon "sign in → your salon"
+  login already exists and ships today — don't rebuild it), and non-goals →
+  `docs/superpowers/plans/2026-07-14-turndesk-domain-migration.md`.
 - **Enable GitHub Pages** — repo Settings → Pages → deploy from `main` branch, so the twin serves at `musenail.github.io/turndesk/`. (Last P0 step.)
 - **VAPID Web Push keypair** — `config.js` `VAPID_PUBLIC_KEY` + `wrangler.toml` `[vars]` still hold musedashboard's public key, and no `VAPID_PRIVATE_KEY` secret is set on the turndesk Worker yet, so Web Push is inert. Generate a fresh keypair and `wrangler secret put VAPID_PRIVATE_KEY` before relying on push.
 - **Google OAuth client** — `js/app/features/calendar.js` `GCAL_CLIENT_ID` is musedashboard's. Create a TurnDesk Google Cloud OAuth client before the Calendar feature is used in production.
