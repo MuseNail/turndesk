@@ -44,8 +44,11 @@ file, one code path, real content wrapped around the same working sign-in card.
 
 **Explicitly out of scope for this step:** the domain/hosting move (step 2) and per-salon path URLs (step 3).
 
-A prompt for a fresh session to build this lives in the owner's chat history (2026-07-14) — regenerate it
-from this doc's "Key finding" + "Recommended architecture" sections if it's been lost.
+**Owner decisions locked in 2026-07-14** (bake these into the build, don't re-ask): visual tone = a
+**distinct marketing-site look** (bigger hero, more visual punch than the existing in-app aesthetic — first
+impression matters most here); messaging = **openly say "Free beta"** (no pricing, no named customers yet).
+
+The exact build prompt used is in Appendix A below — reuse it verbatim for a fresh session.
 
 ### 2. Move client hosting to Cloudflare Pages @ turndesk.net (only after step 1 ships)
 - **Host:** Cloudflare Pages, a new deploy of this same repo, DNS pointed at `turndesk.net` (root domain —
@@ -85,3 +88,46 @@ This is a real, scoped routing change, deliberately deferred to its own pass:
 - The Worker's own domain / OAuth client / webhook URLs — untouched (see step 2).
 - Any change to `signup.html`'s self-serve request flow (may be *linked from* the new landing page; not
   itself part of this work).
+
+---
+
+## Appendix A — build prompt for Step 1 (landing page), ready to paste into a fresh session
+
+Build a real marketing landing page for TurnDesk's public "bare front door" — the screen a visitor sees at
+the root URL with no salon context yet (no `?salon=`). Right now it's a bare "Sign in to your business"
+card with zero marketing content; turn it into a real product landing page while leaving the actual
+sign-in mechanism completely untouched.
+
+**Read first:** `docs/superpowers/plans/2026-07-14-turndesk-domain-migration.md` (this doc) for full context
+on what already exists and what comes after this step.
+
+**Critical constraint — do not rebuild or duplicate auth.** The "sign in and get routed to your own salon"
+flow already exists and is live: `index.html` `#screen-signin` → `#signin-email-mode` (shown only when no
+salon is known) → `js/app/features/auth.js` calls `serverFindLogin()` in `js/app/apptoken.js` → Worker
+`POST /auth/find-login` looks the owner up by email across all salons and returns a session scoped to the
+matched one. This is security-sensitive, tested (`test/worker-cross-salon-login.test.js`), and shipped.
+Your job is the content and visual design around this existing sign-in card, not its logic.
+
+**Scope:** modify `index.html`'s `#screen-signin` / `#signin-email-mode` block (plus whatever supporting
+CSS/markup it needs) so the bare front door reads like a real product page: a headline/value prop, a
+handful of feature highlights (front-desk check-in queue, the fair-rotation "turns" engine, reports/payroll
+— see `CLAUDE.md` "What This Is" for the accurate feature list), and the existing sign-in card kept intact
+as the primary call-to-action. Add a path for brand-new prospects who don't have an account yet, linking to
+the existing `signup.html` self-serve request flow.
+
+**Visual tone and messaging (owner-decided, don't re-ask):** go for a distinct marketing-site look — a
+real hero section, more visual punch than the existing in-app screens, first impression matters most here.
+Openly say **"Free beta"** somewhere prominent; no pricing, no named customers yet.
+
+**Stay in the existing stack:** plain ES2020+ modules, Tailwind CDN utility classes, no build step, no new
+frameworks — reuse the CSS variable tokens and Material Symbols icons already used elsewhere in `index.html`.
+
+**Explicitly out of scope — do not do these:**
+- Do not move hosting or touch the domain (that's Step 2, later, tracked in this same doc).
+- Do not build path-based per-salon URLs (`/dashboard/<slug>`) — deliberately deferred as Step 3.
+- Do not touch `#signin-pin-mode`, the PIN pad, `serverLogin()`, or any Worker auth route.
+
+**Before you're done:** preview it in a browser at the bare URL (no `?salon=`) and separately confirm the
+salon-specific PIN flow (`?salon=<slug>`) still renders exactly as before — this change must not regress
+that path. Follow this repo's own conventions (`CLAUDE.md` — commit freely, ask before `git push`;
+version-trio bump if the change is user-visible).
