@@ -305,6 +305,7 @@ export function renderSigninScreen({ openPin = false } = {}) {
   document.getElementById('signin-email-mode')?.classList.toggle('hidden', pinFirst);
   document.getElementById('signin-kiosk-btn')?.classList.toggle('hidden', !pinFirst);
   document.getElementById('signin-brand')?.classList.toggle('hidden', pinFirst);   // TurnDesk welcome mark only on the bare front door
+  document.getElementById('screen-signin')?.classList.toggle('landing-active', !pinFirst);   // marketing landing wraps the bare front door only (CSS reveals #landing)
   const bizName = ((cfg().business || {}).name || '').trim();
   const heading = document.getElementById('signin-heading');
   const sub     = document.getElementById('signin-subheading');

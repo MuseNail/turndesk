@@ -1,6 +1,6 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
 import { apiOrigin } from './apiorigin.js';
-export const APP_VERSION = 'td-v0.43';
+export const APP_VERSION = 'td-v0.44';
 export const APP_NAME    = 'turndesk';
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 

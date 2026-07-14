@@ -79,6 +79,18 @@
   }
   .fade-up { animation: fadeUp 0.4s ease forwards; }
 
+  /* ── Public marketing landing (bare front door) ──
+     #landing is hidden by default; auth.js adds .landing-active to #screen-signin only
+     when NO salon is known (bare link), which reveals it and top-aligns the tall page
+     so it scrolls naturally instead of vertically-centering + clipping. A salon link
+     (?salon=) never gets the class → PIN pad + card render exactly as before. */
+  #landing { display: none; }
+  #screen-signin.landing-active { justify-content: flex-start; }
+  #screen-signin.landing-active #landing { display: block; }
+  .landing-tile { cursor: pointer; text-align: left; width: 100%; transition: transform .12s ease; }
+  .landing-tile:hover { transform: translateY(-2px); }
+  .landing-tile:focus-visible { outline: 2px solid var(--primary, #1a5252); outline-offset: 2px; }
+
   /* Status badges — C9/D13 filled palette (recolored v4.79): Waiting amber · In Service green · Done blue · Paid slate */
   .badge-waiting { background: #f5c870; color: #3a2800; }
   .badge-inservice { background: #2a7a4f; color: #ffffff; }

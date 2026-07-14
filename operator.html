@@ -73,6 +73,9 @@
     <div id="requests">Loading…</div>
     <div id="approve-result"></div>
 
+    <h2 style="margin-top:24px">Pending demo requests</h2>
+    <div id="demo-requests">Loading…</div>
+
     <div class="card">
       <h2>Salons</h2>
       <div id="salons">Loading…</div>
@@ -108,6 +111,7 @@ async function connect() {
   $('app').style.display = 'block';
   renderSalons(res.body.salons || []);
   refreshRequests();
+  refreshDemoRequests();
 }
 
 async function refreshRequests() {
@@ -144,6 +148,38 @@ document.getElementById('requests').addEventListener('click', async (e) => {
     if (!confirm('Reject this request?')) return;
     const r = await api('/operator/requests/decide', { method: 'POST', body: JSON.stringify({ id, action: 'reject' }) });
     if (r.ok) refreshRequests(); else alert(r.body.error || 'Reject failed');
+  }
+});
+
+// Demo leads — no account provisioning; just mark contacted or dismiss.
+async function refreshDemoRequests() {
+  const r = await api('/operator/demo-requests');
+  if (r.ok) renderDemoRequests(r.body.requests || []);
+}
+function renderDemoRequests(reqs) {
+  const pend = (reqs || []).filter(x => x.status === 'pending');
+  if (!pend.length) { document.getElementById('demo-requests').innerHTML = '<p class="muted">No pending demo requests.</p>'; return; }
+  document.getElementById('demo-requests').innerHTML = pend.map(x => `
+    <div class="card" style="margin-bottom:10px">
+      <div><strong>${esc(x.name)}</strong> · ${esc(x.email)}${x.phone ? ' · ' + esc(x.phone) : ''}</div>
+      ${x.lookingFor ? `<div class="muted" style="margin-top:4px">${esc(x.lookingFor)}</div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-primary" data-demo-contacted="${esc(x.id)}">Mark contacted</button>
+        <button data-demo-dismiss="${esc(x.id)}">Dismiss</button>
+      </div>
+    </div>`).join('');
+}
+document.getElementById('demo-requests').addEventListener('click', async (e) => {
+  const c = e.target.closest('[data-demo-contacted]'), d = e.target.closest('[data-demo-dismiss]');
+  if (c) {
+    const id = c.getAttribute('data-demo-contacted'); c.disabled = true;
+    const r = await api('/operator/demo-requests/decide', { method: 'POST', body: JSON.stringify({ id, status: 'contacted' }) });
+    if (r.ok) refreshDemoRequests(); else { c.disabled = false; alert(r.body?.error || 'Failed'); }
+  } else if (d) {
+    const id = d.getAttribute('data-demo-dismiss');
+    if (!confirm('Dismiss this demo request?')) return;
+    const r = await api('/operator/demo-requests/decide', { method: 'POST', body: JSON.stringify({ id, status: 'dismissed' }) });
+    if (r.ok) refreshDemoRequests(); else alert(r.body?.error || 'Failed');
   }
 });
 

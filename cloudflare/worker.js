@@ -1,4 +1,5 @@
 import { slugify, validateSignupRequest } from './signup-util.js';
+import { validateDemoRequest } from './demo-util.js';
 // ── Cloudflare Worker — musedashboard ─────────────────────────────────────────
 //
 // Routes
@@ -253,6 +254,7 @@ async function appAuthOk(request, url, env, salonId) {
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
   if (path === '/report' && request.method.toUpperCase() === 'POST') return true;         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
   if (path === '/signup/request' && request.method.toUpperCase() === 'POST') return true;  // public: pre-salon, no session yet
+  if (path === '/demo/request' && request.method.toUpperCase() === 'POST') return true;  // public: demo lead form, pre-salon, no session yet
   if (path === '/auth/find-login' && request.method.toUpperCase() === 'POST') return true;  // public: cross-salon lookup, pre-salon
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
@@ -330,7 +332,7 @@ export default {
     // and are non-sensitive public branding). PUT/DELETE still require the slug.
     const _isPhotoGet = method === 'GET' && path.startsWith('/photos/');
     const _isFindLogin = path === '/auth/find-login' && method === 'POST';
-    if (!salonId && !_isPhotoGet && !_isFindLogin && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request') {
+    if (!salonId && !_isPhotoGet && !_isFindLogin && path !== '/terminal/webhook' && path !== '/gcal/callback' && path !== '/signup/request' && path !== '/demo/request') {
       return json({ error: 'missing salon' }, 400);
     }
 
@@ -464,6 +466,16 @@ export default {
     // carried through for the DO's per-IP rate limit.
     if (path === '/signup/request' && method === 'POST') {
       const r = await registryStub(env).fetch(await cleanRegistryRequest(request, '/signup/request'));
+      const body = await r.text();
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
+    // ── Demo lead request (public, pre-salon) ───────────────────────────────────
+    // Same clean-forward pattern as /signup/request: rebuild to IP-only, no salon
+    // header, into the reserved registry DO. A demo request is a lead (no account),
+    // stored as demo:<id> for the operator to follow up on personally.
+    if (path === '/demo/request' && method === 'POST') {
+      const r = await registryStub(env).fetch(await cleanRegistryRequest(request, '/demo/request'));
       const body = await r.text();
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
@@ -1067,6 +1079,19 @@ export async function handleOperator(request, env, url, method, path) {
     const r = await registryStub(env).fetch(new Request('https://do/registry/signups'));
     return json(await r.json().catch(() => ({ requests: [] })));
   }
+  // Demo leads: list + mark contacted/dismissed (no account provisioning — just a lead).
+  if (path === '/operator/demo-requests' && method === 'GET') {
+    const r = await registryStub(env).fetch(new Request('https://do/registry/demo-requests'));
+    return json(await r.json().catch(() => ({ requests: [] })));
+  }
+  if (path === '/operator/demo-requests/decide' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await registryStub(env).fetch(new Request('https://do/demo/decide', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: b.id, status: b.status }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
   if (path === '/operator/requests/decide' && method === 'POST') {
     let b = {}; try { b = await request.json(); } catch {}
     const g = await registryStub(env).fetch(new Request('https://do/registry/signup-get?id=' + encodeURIComponent(b.id || '')));
@@ -1226,6 +1251,22 @@ export class TurnDeskDO {
       const rec = await this.state.storage.get('signup:' + (url.searchParams.get('id') || ''));
       return new Response(JSON.stringify({ entry: rec || null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
+    // Demo leads — list for the operator (newest pending first). No credential to strip.
+    if (url.pathname === '/registry/demo-requests' && request.method === 'GET') {
+      const all = await this.state.storage.list({ prefix: 'demo:' });
+      const arr = []; for (const [, x] of all) arr.push(x);
+      arr.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.createdAt - a.createdAt);
+      return new Response(JSON.stringify({ requests: arr.slice(0, 200) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/demo/decide' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const rec = await this.state.storage.get('demo:' + (b.id || ''));
+      if (!rec) return new Response('{"error":"not found"}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+      rec.status = b.status === 'contacted' ? 'contacted' : 'dismissed';
+      rec.decidedAt = Date.now();
+      await this.state.storage.put('demo:' + rec.id, rec);
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     if (url.pathname === '/signup/decide' && request.method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
       const rec = await this.state.storage.get('signup:' + (b.id || ''));
@@ -1258,6 +1299,31 @@ export class TurnDeskDO {
       if (!rec.slugs.includes(slug)) rec.slugs.push(slug);
       await this.state.storage.put(key, rec);
       return this._authJson({ ok: true });
+    }
+    // Demo lead intake — mirrors /signup/request's rate-limit + queue-cap shape, but
+    // with its OWN rl prefix (dreqrl:) so demo spam can't throttle real signups or vice
+    // versa. No password/slug/ownerRecord — it's a lead, not an account.
+    if (url.pathname === '/demo/request' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const v = validateDemoRequest(b);
+      if (!v.ok) return new Response(JSON.stringify({ error: v.error }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const ip = request.headers.get('CF-Connecting-IP') || 'local';
+      const rlKey = 'dreqrl:' + ip, now = Date.now();
+      const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
+      if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
+      if (rl.n >= 5) return new Response(JSON.stringify({ error: 'Too many requests — please try again later.' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+      let pending = 0;
+      const existing = await this.state.storage.list({ prefix: 'demo:' });
+      for (const [, x] of existing) if (x && x.status === 'pending') pending++;
+      if (pending >= 200) return new Response(JSON.stringify({ error: 'The request queue is full — please try again later.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+      rl.n++; await this.state.storage.put(rlKey, rl);
+      const val = v.value;
+      const id = crypto.randomUUID();
+      await this.state.storage.put('demo:' + id, {
+        id, status: 'pending', name: val.name, email: val.email, phone: val.phone,
+        lookingFor: val.lookingFor, createdAt: now, decidedAt: 0, ip,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (url.pathname === '/signup/request' && request.method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
