@@ -16,7 +16,29 @@ currently at `site.css?v=7` + `site.js?v=3` (bump N on ALL 4 pages when you touc
 - ✅ `contact.html` + `assets/contact.js` (ES module, tested in `test/site-contact.test.js`).
 - ✅ `assets/site.js` (scroll-reveal + active-tab + mobile menu w/ aria-expanded) · `site.css`
   (motion + `.appshot` browser-frame + `.appshot__body` rendering + `.illus` illustration).
-- ✅ `assets/turndesk-appicon.svg`, `turndesk-mark.svg` (logo).
+- ✅ `assets/turndesk-appicon.svg`, `turndesk-mark.svg` (OLD ring+dot logo — superseded 2026-07-15
+  below, kept in place for history/rollback but no longer referenced by any page).
+
+### ⭐ New T+D logomark (2026-07-15) — replaces the ring+dot mark everywhere on the site
+Owner supplied their own logo (a merged T+D monogram with a 2×2 "dashboard" grid in the D's
+counter, black/blue/teal on white) and asked for an EXACT recolor — same file, same structure,
+brand colors only, no redrawing. Built via a real pixel-level remap (Node + `jimp`, alpha-blend-
+against-white solved per pixel so anti-aliased edges recolor cleanly, not a hand-traced SVG):
+blue→primary `#1a5252`, the lighter teal→primary-container `#8fd4d3`, black→on-surface `#0b1f1f`.
+One grid square (top-right) is gilded to secondary-container `#f5c870` as a deliberate callback —
+same gold the OLD icon used for "whose turn is next."
+- `assets/turndesk-mark-color.png` — icon-only, tight crop, transparent background, light-on-white
+  palette. Used in the header (`h-8 w-auto`) and footer (`h-7 w-auto`) `<img>` on all 4 pages,
+  replacing the inline ring+dot `<svg>` (no more `bg-primary` badge tile — the new mark carries
+  its own colors and doesn't want a teal square behind it).
+- `assets/turndesk-appicon-{32,192,512}.png` — the same mark with ink swapped to white and the
+  two teals separated (primary→mint, mint→cream `#eafffb`) for contrast, composited on a plain
+  primary-teal tile. Wired as `<link rel="icon" type="image/png">` (32px) and
+  `<link rel="apple-touch-icon">` (192px) on all 4 pages.
+- Master source files (full lockup incl. wordmark, both light + gold variants, 1254×1254) live in
+  the owner's Downloads (`TurnDesk-logo-brandcolor.png` / `-gold.png`), not the repo — re-derive
+  from those if the app-icon/PWA-icon work ("eventually add this to the app") needs different crops
+  or sizes later.
 
 ### ⭐ Visuals are RENDERINGS, not screenshots (owner decision — anti-copy)
 Owner did NOT want raw app screenshots (competitors could copy the exact UI). Every product
