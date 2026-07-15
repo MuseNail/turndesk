@@ -21,7 +21,7 @@ tailwind.config = { theme: { extend: {
 <!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
      JS can drive them. No JS → content is fully visible (progressive enhancement). -->
 <script>document.documentElement.classList.add('has-js')</script>
-<link rel="stylesheet" href="assets/site.css?v=5">
+<link rel="stylesheet" href="assets/site.css?v=6">
 <style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
 </head>
 <body class="bg-surface text-on-surface font-body">
@@ -96,16 +96,11 @@ tailwind.config = { theme: { extend: {
         <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> choose your own fairness rule — points-based, whole-turn, or traditional. Today the rule is fixed; picking it is what’s coming.</p>
       </div>
     </div>
-    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">swap_vert</span><span class="text-[13px] font-headline font-bold">Turns · Today</span></div>
-        <div class="p-4 space-y-1">
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#2a7a4f1f;border-color:#2a7a4f;color:#2a7a4f">A</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Amy</span><span class="text-sm font-headline font-bold text-primary">6.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#e9f4ee;color:#1b5e3b"><span style="width:6px;height:6px;border-radius:50%;background:#2a7a4f;display:inline-block"></span>Working now</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">B</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Bao</span><span class="text-sm font-headline font-bold text-primary">5.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next up</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">C</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Chi</span><span class="text-sm font-headline font-bold text-primary">4.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252"><span style="width:6px;height:6px;border-radius:50%;background:#1a5252;display:inline-block"></span>Available</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#b0b6ba1f;border-color:#b0b6ba;color:#b0b6ba">D</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Dao</span><span class="text-sm font-headline font-bold text-primary">4.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#eceef0;color:#7a858a"><span style="width:6px;height:6px;border-radius:50%;background:#b0b6ba;display:inline-block"></span>Off</span></div></div></div>
-        </div>
-      </div>
+    <div class="reveal w-full md:justify-self-end">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/turngrid.png" alt="TurnDesk turn grid — technicians and today’s tickets" style="object-position:top center" loading="lazy"></div>
+      </figure>
     </div>
   </div>
 </section>
@@ -126,21 +121,11 @@ tailwind.config = { theme: { extend: {
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>The front desk sees every arrival live</span></li>
       </ul>
     </div>
-    <div class="reveal max-w-sm w-full mx-auto md:justify-self-start">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">how_to_reg</span><span class="text-[13px] font-headline font-bold">Welcome — check in</span></div>
-        <div class="p-4 space-y-3">
-          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1">Your name</div><div class="rounded-lg px-3 py-2 text-[13px] font-semibold" style="background:#fff;border:1px solid #e4eae9">Tina</div></div>
-          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1">Phone</div><div class="rounded-lg px-3 py-2 text-[13px]" style="background:#fff;border:1px solid #e4eae9">(909) 555-0187</div></div>
-          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1.5">Service</div>
-            <div class="flex flex-wrap gap-1.5">
-              <span class="text-[11px] px-2.5 py-1 rounded-full font-semibold" style="background:#1a5252;color:#fff">Gel Manicure</span>
-              <span class="text-[11px] px-2.5 py-1 rounded-full" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252">Pedicure</span>
-              <span class="text-[11px] px-2.5 py-1 rounded-full" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252">Full Set</span>
-            </div></div>
-          <div class="rounded-lg py-2.5 text-center text-[12px] font-headline font-semibold" style="background:#1a5252;color:#fff">Check in</div>
-        </div>
-      </div>
+    <div class="reveal w-full md:justify-self-start">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/checkin.png" alt="TurnDesk walk-in check-in kiosk" style="object-position:top center" loading="lazy"></div>
+      </figure>
     </div>
   </div>
 </section>
@@ -161,23 +146,11 @@ tailwind.config = { theme: { extend: {
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Who’s open and who’s busy, at a glance</span></li>
       </ul>
     </div>
-    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">chair</span><span class="text-[13px] font-headline font-bold">Floor Plan</span></div>
-        <div class="p-4">
-          <div class="grid grid-cols-4 gap-2 mb-2">
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Sarah</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Mani 2</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Amy</span></div>
-            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Mani 3</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #d4860a;background:#ffe9c4"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#d4860a;opacity:.7">Mani 4</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Mia</span></div>
-          </div>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Bao</span></div>
-            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Pedi 2</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Wax</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Evy</span></div>
-          </div>
-        </div>
-      </div>
+    <div class="reveal w-full md:justify-self-end">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/floorplan.png" alt="TurnDesk floor plan — stations and staff" style="object-position:top left" loading="lazy"></div>
+      </figure>
     </div>
   </div>
 </section>
@@ -201,25 +174,11 @@ tailwind.config = { theme: { extend: {
         <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> your calendar here too. Today the phone app covers reports and payroll; the on-the-go calendar view is coming.</p>
       </div>
     </div>
-    <div class="reveal max-w-sm w-full mx-auto md:justify-self-start">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">bar_chart</span><span class="text-[13px] font-headline font-bold">Daily Report</span></div>
-        <div class="p-4">
-          <div class="grid grid-cols-3 gap-2.5">
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:rgba(26,82,82,0.07)"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Sales</div><div class="font-headline font-bold text-lg text-primary mt-0.5">$1,240</div></div>
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tips</div><div class="font-headline font-bold text-lg mt-0.5">$186</div></div>
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tickets</div><div class="font-headline font-bold text-lg mt-0.5">28</div></div>
-          </div>
-          <table class="w-full mt-4 text-xs">
-            <thead><tr class="text-on-surface-variant"><th class="text-left font-semibold pb-1.5">Tech</th><th class="text-right font-semibold pb-1.5">Turns</th><th class="text-right font-semibold pb-1.5">Billed</th></tr></thead>
-            <tbody>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Amy</td><td class="py-1.5 text-right text-on-surface-variant">6.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$410</td></tr>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Bao</td><td class="py-1.5 text-right text-on-surface-variant">5.0</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$355</td></tr>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Chi</td><td class="py-1.5 text-right text-on-surface-variant">4.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$300</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div class="reveal w-full md:justify-self-start">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/reports.png" alt="TurnDesk reports and payroll" style="object-position:top center" loading="lazy"></div>
+      </figure>
     </div>
   </div>
 </section>
@@ -243,77 +202,138 @@ tailwind.config = { theme: { extend: {
         <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">During the beta:</span> new salons start with cash/manual checkout; card-processor hookup is arranged individually as we roll it out.</p>
       </div>
     </div>
-    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">credit_card</span><span class="text-[13px] font-headline font-bold">Effective rate</span></div>
-        <div class="p-4">
-          <div class="flex items-end gap-3">
-            <div><p class="text-[30px] leading-none font-headline font-extrabold text-primary">~1.8%</p>
-              <p class="text-[10px] text-on-surface-variant mt-1.5">card processing · no added per-txn fee</p></div>
-            <div class="flex-1 pl-3" style="border-left:1px solid #e4eae9">
-              <p class="text-[17px] leading-none font-headline font-semibold line-through text-on-surface-variant">2.6% + 15¢</p>
-              <p class="text-[10px] text-on-surface-variant mt-1.5">typical processor</p></div>
-          </div>
-        </div>
-      </div>
+    <div class="reveal w-full md:justify-self-end">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/payments.png" alt="TurnDesk checkout and payment" style="object-position:center" loading="lazy"></div>
+      </figure>
     </div>
   </div>
 </section>
 
 <!-- ═══ Text Updates ═══ -->
 <section id="texting" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
-  <div class="reveal max-w-3xl">
-    <span class="inline-flex items-center gap-2 mb-3">
-      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">sms</span></span>
-      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Text Updates</span>
-    </span>
-    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Customers stay in the loop.</h2>
-    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Texting is part of the front desk itself — not a bolted-on marketing upsell, not metered, not a separate tier. The built-in sending is live today; putting it everywhere it belongs is what’s next.</p>
-    <ul class="space-y-2.5 text-base text-on-surface-variant">
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Built in — not metered, not a separate tier</span></li>
-    </ul>
-    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
-      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> texting a customer straight from their profile, plus automatic status and appointment texts — the sending works today; these are what’s coming next.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal md:order-last">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">sms</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Text Updates</span>
+      </span>
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Customers stay in the loop.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Texting is part of the front desk itself — not a bolted-on marketing upsell, not metered, not a separate tier. The built-in sending is live today; putting it everywhere it belongs is what’s next.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Built in — not metered, not a separate tier</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> texting a customer straight from their profile, plus automatic status and appointment texts — the sending works today; these are what’s coming next.</p>
+      </div>
+    </div>
+    <div class="reveal w-full md:justify-self-start">
+      <div class="illus hover-lift">
+        <svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A text update arriving on a customer’s phone">
+          <g opacity=".95"><circle cx="74" cy="80" r="28" fill="#f5c870"/><path d="M55 100 l0 16 l16 -11 z" fill="#f5c870"/><path d="M63 74 h22 M63 84 h15" stroke="#3a2800" stroke-width="3.4" stroke-linecap="round"/></g>
+          <g>
+            <rect x="178" y="24" width="166" height="252" rx="28" fill="#ffffff" stroke="#0f3d3d" stroke-width="2.5"/>
+            <path d="M178 52 a28 28 0 0 1 28 -28 h110 a28 28 0 0 1 28 28 v16 h-166 z" fill="#1a5252"/>
+            <circle cx="261" cy="40" r="3" fill="#8fd4d3"/>
+            <text x="261" y="61" text-anchor="middle" font-family="Manrope,sans-serif" font-size="12.5" font-weight="800" fill="#ffffff">Lush Nails &amp; Spa</text>
+            <rect x="194" y="84" width="128" height="30" rx="13" fill="#eef2f1"/><text x="204" y="103" font-family="Inter,sans-serif" font-size="11" fill="#0b1f1f">Hi Mia — you’re next!</text>
+            <rect x="194" y="122" width="112" height="30" rx="13" fill="#eef2f1"/><text x="204" y="141" font-family="Inter,sans-serif" font-size="11" fill="#0b1f1f">Lily is ready for you.</text>
+            <rect x="228" y="164" width="96" height="30" rx="13" fill="#1a5252"/><text x="276" y="183" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="600" fill="#ffffff">On my way!</text>
+            <rect x="194" y="238" width="94" height="22" rx="11" fill="#f0f3f3" stroke="#d3dedb"/><text x="203" y="253" font-family="Inter,sans-serif" font-size="10" fill="#7a858a">Message…</text>
+            <circle cx="305" cy="249" r="12" fill="#1a5252"/><path d="M300 249 h9 M304 245 l5 4 l-5 4" stroke="#ffffff" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+        </svg>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- ═══ Smart Booking ═══ -->
 <section id="booking" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
-  <div class="reveal max-w-3xl">
-    <span class="inline-flex items-center gap-2 mb-3">
-      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">event_available</span></span>
-      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Smart Booking</span>
-    </span>
-    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Booking that protects your day.</h2>
-    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of a calendar anyone can pile onto, booking that’s aware of how your day actually runs — nudging appointments toward quiet stretches and holding the line on your busiest ones.</p>
-    <ul class="space-y-2.5 text-base text-on-surface-variant">
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>24/7 booking from a customer’s phone</span></li>
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Steers bookings toward your slow hours</span></li>
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guards against overbooking your busiest times</span></li>
-    </ul>
-    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
-      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> this whole feature is in active development — not live yet. We’re building it properly rather than rushing it onto the page.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">event_available</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Smart Booking</span>
+      </span>
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Booking that protects your day.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of a calendar anyone can pile onto, booking that’s aware of how your day actually runs — nudging appointments toward quiet stretches and holding the line on your busiest ones.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>24/7 booking from a customer’s phone</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Steers bookings toward your slow hours</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guards against overbooking your busiest times</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> this whole feature is in active development — not live yet. We’re building it properly rather than rushing it onto the page.</p>
+      </div>
+    </div>
+    <div class="reveal w-full md:justify-self-end">
+      <div class="illus hover-lift">
+        <svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Online booking with time slots, one selected">
+          <g>
+            <rect x="52" y="46" width="228" height="208" rx="18" fill="#ffffff" stroke="#0f3d3d" stroke-width="2.5"/>
+            <path d="M52 64 a18 18 0 0 1 18 -18 h192 a18 18 0 0 1 18 18 v18 h-228 z" fill="#1a5252"/>
+            <text x="166" y="70" text-anchor="middle" font-family="Manrope,sans-serif" font-size="13" font-weight="800" fill="#ffffff">July</text>
+            <g font-family="Inter,sans-serif" font-size="9" fill="#7a858a" text-anchor="middle"><text x="82" y="102">S</text><text x="116" y="102">M</text><text x="150" y="102">T</text><text x="184" y="102">W</text><text x="218" y="102">T</text><text x="252" y="102">F</text></g>
+            <g>
+              <!-- day cells: 4 rows x 6 cols -->
+              <g fill="#eef2f1"><rect x="70" y="112" width="24" height="24" rx="6"/><rect x="104" y="112" width="24" height="24" rx="6"/><rect x="138" y="112" width="24" height="24" rx="6"/><rect x="172" y="112" width="24" height="24" rx="6"/><rect x="206" y="112" width="24" height="24" rx="6"/><rect x="240" y="112" width="24" height="24" rx="6"/>
+                <rect x="70" y="142" width="24" height="24" rx="6"/><rect x="104" y="142" width="24" height="24" rx="6"/><rect x="138" y="142" width="24" height="24" rx="6"/><rect x="206" y="142" width="24" height="24" rx="6"/><rect x="240" y="142" width="24" height="24" rx="6"/>
+                <rect x="70" y="172" width="24" height="24" rx="6"/><rect x="104" y="172" width="24" height="24" rx="6"/><rect x="138" y="172" width="24" height="24" rx="6"/><rect x="172" y="172" width="24" height="24" rx="6"/><rect x="206" y="172" width="24" height="24" rx="6"/><rect x="240" y="172" width="24" height="24" rx="6"/>
+                <rect x="70" y="202" width="24" height="24" rx="6"/><rect x="104" y="202" width="24" height="24" rx="6"/><rect x="138" y="202" width="24" height="24" rx="6"/><rect x="172" y="202" width="24" height="24" rx="6"/></g>
+              <rect x="172" y="142" width="24" height="24" rx="6" fill="#f5c870"/><text x="184" y="159" text-anchor="middle" font-family="Manrope,sans-serif" font-size="11" font-weight="800" fill="#3a2800">16</text>
+            </g>
+          </g>
+          <g>
+            <rect x="300" y="70" width="132" height="30" rx="15" fill="#eef2f1"/><text x="316" y="89" font-family="Inter,sans-serif" font-size="11" fill="#7a858a">9:00 AM</text><circle cx="416" cy="85" r="4" fill="#b9c8c2"/>
+            <rect x="300" y="110" width="132" height="34" rx="15" fill="#1a5252"/><text x="316" y="131" font-family="Inter,sans-serif" font-size="11.5" font-weight="700" fill="#ffffff">11:30 AM</text><path d="M406 127 l5 5 l9 -10" stroke="#8fd4d3" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="300" y="154" width="132" height="30" rx="15" fill="#eef2f1"/><text x="316" y="173" font-family="Inter,sans-serif" font-size="11" fill="#7a858a">2:00 PM</text><circle cx="416" cy="169" r="4" fill="#b9c8c2"/>
+            <text x="300" y="212" font-family="Inter,sans-serif" font-size="10" fill="#4a5258">Quiet morning — great time to book.</text>
+          </g>
+        </svg>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- ═══ AI Insights ═══ -->
 <section id="ai" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
-  <div class="reveal max-w-3xl">
-    <span class="inline-flex items-center gap-2 mb-3">
-      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">insights</span></span>
-      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">AI Insights</span>
-    </span>
-    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Answers, not just spreadsheets.</h2>
-    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of copying figures into a separate chatbot, ask about your own reports right where they live — “which day was slowest last week?” — and get a plain-English read. It’s live on the dashboard today.</p>
-    <ul class="space-y-2.5 text-base text-on-surface-variant">
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ask in plain English, about your real numbers</span></li>
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Live on the dashboard today</span></li>
-      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Your data stays handled securely on our server</span></li>
-    </ul>
-    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
-      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> the same Ask button in the on-the-go phone app — the dashboard version is live today.</p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal md:order-last">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">insights</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">AI Insights</span>
+      </span>
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Answers, not just spreadsheets.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of copying figures into a separate chatbot, ask about your own reports right where they live — “which day was slowest last week?” — and get a plain-English read. It’s live on the dashboard today.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ask in plain English, about your real numbers</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Live on the dashboard today</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Your data stays handled securely on our server</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> the same Ask button in the on-the-go phone app — the dashboard version is live today.</p>
+      </div>
+    </div>
+    <div class="reveal w-full md:justify-self-start">
+      <div class="illus hover-lift">
+        <svg viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ask a question about your numbers and get an answer with a chart">
+          <rect x="150" y="34" width="220" height="34" rx="17" fill="#1a5252"/><text x="260" y="56" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="600" fill="#ffffff">Which day was slowest last week?</text>
+          <path d="M338 66 l10 12 l-2 -14 z" fill="#1a5252"/>
+          <g>
+            <rect x="70" y="92" width="340" height="170" rx="18" fill="#ffffff" stroke="#0f3d3d" stroke-width="2.5"/>
+            <g transform="translate(90,116)"><path d="M8 0 l2.4 6.2 L16.6 8 l-6.2 2.4 L8 16 l-2.4 -5.6 L-0.6 8 l6 -1.8 z" fill="#f5c870"/></g>
+            <path d="M120 122 l1.6 4 l4 1.4 l-4 1.4 l-1.6 3.8 l-1.6 -3.8 l-4 -1.4 l4 -1.4 z" fill="#8fd4d3"/>
+            <text x="92" y="150" font-family="Inter,sans-serif" font-size="12.5" font-weight="700" fill="#0b1f1f">Tuesday was your slowest day —</text>
+            <text x="92" y="169" font-family="Inter,sans-serif" font-size="12.5" fill="#4a5258">about 18% below your weekly average.</text>
+            <g transform="translate(92,196)">
+              <rect x="0" y="26" width="26" height="30" rx="3" fill="#8fd4d3"/><rect x="42" y="14" width="26" height="42" rx="3" fill="#8fd4d3"/><rect x="84" y="40" width="26" height="16" rx="3" fill="#f5c870"/><rect x="126" y="20" width="26" height="36" rx="3" fill="#8fd4d3"/><rect x="168" y="8" width="26" height="48" rx="3" fill="#8fd4d3"/><rect x="210" y="2" width="26" height="54" rx="3" fill="#1a5252"/><rect x="252" y="10" width="26" height="46" rx="3" fill="#1a5252"/>
+              <g font-family="Inter,sans-serif" font-size="8.5" fill="#7a858a" text-anchor="middle"><text x="13" y="68">M</text><text x="55" y="68">T</text><text x="97" y="68">W</text><text x="139" y="68">T</text><text x="181" y="68">F</text><text x="223" y="68">S</text><text x="265" y="68">S</text></g>
+            </g>
+          </g>
+        </svg>
+      </div>
     </div>
   </div>
 </section>

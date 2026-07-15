@@ -44,12 +44,8 @@ const SERVICES = [
   { id: 'svc-gpedi', label: 'Gel Pedicure',     abbr: 'GPED', baseCost: 50 },
   { id: 'svc-dip',   label: 'Dip Powder',       abbr: 'DIP',  baseCost: 45 },
   { id: 'svc-acrf',  label: 'Acrylic Full Set', abbr: 'ACRF', baseCost: 55 },
-  { id: 'svc-acrl',  label: 'Acrylic Fill',     abbr: 'FILL', baseCost: 40 },
   { id: 'svc-gelx',  label: 'Gel-X Extensions', abbr: 'GELX', baseCost: 65 },
-  { id: 'svc-combo', label: 'Mani + Pedi Combo',abbr: 'COMBO',baseCost: 55 },
   { id: 'svc-pol',   label: 'Polish Change',    abbr: 'POL',  baseCost: 15 },
-  { id: 'svc-art',   label: 'Nail Art',         abbr: 'ART',  baseCost: 10 },
-  { id: 'svc-kid',   label: 'Kids Manicure',    abbr: 'KID',  baseCost: 18 },
 ];
 const ITEMS = [
   { id: 'item-oil',   label: 'Cuticle Oil',  abbr: 'OIL',  price: 12 },
@@ -58,7 +54,7 @@ const ITEMS = [
 ];
 const FEES = [];   // none for the demo
 
-const TECH_NAMES = ['Lily', 'Mai', 'Tina', 'Kevin', 'Sophia', 'Anna', 'Jenny', 'David'];
+const TECH_NAMES = ['Lily', 'Mai', 'Tina', 'Kevin', 'Sophia', 'Anna'];
 const STAFF = TECH_NAMES.map((name, i) => ({
   id: `staff-${i + 1}`, name, legalName: '', commission: pick([50, 55, 60]),
   services: SERVICES.map(s => s.id), pin: String(1001 + i), checkType: 'variable', checkValue: null,

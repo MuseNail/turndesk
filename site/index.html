@@ -21,7 +21,7 @@ tailwind.config = { theme: { extend: {
 <!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
      JS can drive them. No JS → content is fully visible (progressive enhancement). -->
 <script>document.documentElement.classList.add('has-js')</script>
-<link rel="stylesheet" href="assets/site.css?v=5">
+<link rel="stylesheet" href="assets/site.css?v=6">
 <style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
 </head>
 <body class="bg-surface text-on-surface font-body">
@@ -102,57 +102,26 @@ tailwind.config = { theme: { extend: {
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
     <div class="reveal">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">swap_vert</span><span class="text-[13px] font-headline font-bold">Turns · Today</span></div>
-        <div class="p-4 space-y-1">
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#2a7a4f1f;border-color:#2a7a4f;color:#2a7a4f">A</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Amy</span><span class="text-sm font-headline font-bold text-primary">6.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#e9f4ee;color:#1b5e3b"><span style="width:6px;height:6px;border-radius:50%;background:#2a7a4f;display:inline-block"></span>Working now</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">B</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Bao</span><span class="text-sm font-headline font-bold text-primary">5.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next up</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">C</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Chi</span><span class="text-sm font-headline font-bold text-primary">4.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252"><span style="width:6px;height:6px;border-radius:50%;background:#1a5252;display:inline-block"></span>Available</span></div></div></div>
-          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#b0b6ba1f;border-color:#b0b6ba;color:#b0b6ba">D</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Dao</span><span class="text-sm font-headline font-bold text-primary">4.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#eceef0;color:#7a858a"><span style="width:6px;height:6px;border-radius:50%;background:#b0b6ba;display:inline-block"></span>Off</span></div></div></div>
-        </div>
-      </div>
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/turngrid.png" alt="TurnDesk turn grid — technicians and today’s tickets" style="object-position:top center" loading="lazy"></div>
+      </figure>
       <p class="text-center text-sm text-on-surface-variant mt-3">The turn grid — whose turn, at a glance.</p>
     </div>
 
     <div class="reveal" style="transition-delay:.1s">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">chair</span><span class="text-[13px] font-headline font-bold">Floor Plan</span></div>
-        <div class="p-4">
-          <div class="grid grid-cols-4 gap-2 mb-2">
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Sarah</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Mani 2</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Amy</span></div>
-            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Mani 3</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #d4860a;background:#ffe9c4"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#d4860a;opacity:.7">Mani 4</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Mia</span></div>
-          </div>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Bao</span></div>
-            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Pedi 2</span></div>
-            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Wax</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Evy</span></div>
-          </div>
-        </div>
-      </div>
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/floorplan.png" alt="TurnDesk floor plan — stations and staff" style="object-position:top left" loading="lazy"></div>
+      </figure>
       <p class="text-center text-sm text-on-surface-variant mt-3">Your floor plan — open and busy stations.</p>
     </div>
 
     <div class="reveal" style="transition-delay:.2s">
-      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
-        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">bar_chart</span><span class="text-[13px] font-headline font-bold">Daily Report</span></div>
-        <div class="p-4">
-          <div class="grid grid-cols-3 gap-2.5">
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:rgba(26,82,82,0.07)"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Sales</div><div class="font-headline font-bold text-lg text-primary mt-0.5">$1,240</div></div>
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tips</div><div class="font-headline font-bold text-lg mt-0.5">$186</div></div>
-            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tickets</div><div class="font-headline font-bold text-lg mt-0.5">28</div></div>
-          </div>
-          <table class="w-full mt-4 text-xs">
-            <thead><tr class="text-on-surface-variant"><th class="text-left font-semibold pb-1.5">Tech</th><th class="text-right font-semibold pb-1.5">Turns</th><th class="text-right font-semibold pb-1.5">Billed</th></tr></thead>
-            <tbody>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Amy</td><td class="py-1.5 text-right text-on-surface-variant">6.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$410</td></tr>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Bao</td><td class="py-1.5 text-right text-on-surface-variant">5.0</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$355</td></tr>
-              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Chi</td><td class="py-1.5 text-right text-on-surface-variant">4.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$300</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__frame"><img src="assets/screens/reports.png" alt="TurnDesk daily report — sales, tips, and payroll" style="object-position:top center" loading="lazy"></div>
+      </figure>
       <p class="text-center text-sm text-on-surface-variant mt-3">Daily report — sales, tips, and payroll.</p>
     </div>
 
