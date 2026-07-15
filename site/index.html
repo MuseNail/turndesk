@@ -21,14 +21,14 @@ tailwind.config = { theme: { extend: {
 <!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
      JS can drive them. No JS → content is fully visible (progressive enhancement). -->
 <script>document.documentElement.classList.add('has-js')</script>
-<link rel="stylesheet" href="assets/site.css?v=4">
+<link rel="stylesheet" href="assets/site.css?v=5">
 <style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
 </head>
 <body class="bg-surface text-on-surface font-body">
 
 <!-- ═══ Header ═══ -->
 <header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
-  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 h-16 flex items-center justify-between">
     <a href="index.html" class="flex items-center gap-2">
       <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
         <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
@@ -43,7 +43,7 @@ tailwind.config = { theme: { extend: {
     </nav>
     <div class="hidden md:flex items-center gap-3">
       <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
-      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta</a>
     </div>
     <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu"><span class="material-symbols-outlined">menu</span></button>
   </div>
@@ -60,14 +60,14 @@ tailwind.config = { theme: { extend: {
 </header>
 
 <!-- ═══ Hero ═══ -->
-<section class="max-w-6xl mx-auto px-5 pt-16 pb-10">
+<section class="max-w-[1400px] mx-auto px-5 pt-16 pb-10">
   <div class="flex flex-wrap gap-10 items-center justify-between">
     <div class="flex-1 min-w-[300px] max-w-2xl">
       <span class="reveal inline-block bg-secondary-container text-on-secondary-container text-[11px] font-headline font-bold tracking-wide uppercase px-3 py-1.5 rounded-full mb-4">Free beta — now onboarding nail salons</span>
       <h1 class="reveal text-4xl md:text-5xl font-headline font-extrabold leading-[1.12] mb-3" style="transition-delay:.06s">Everything your salon needs, in one system.</h1>
       <p class="reveal text-lg font-body font-semibold text-primary mb-6" style="transition-delay:.12s">Everything connected. Everything in one place.</p>
       <div class="reveal flex flex-wrap gap-3 items-center" style="transition-delay:.18s">
-        <a href="https://musenail.github.io/turndesk/signup.html" class="inline-flex items-center gap-1.5 bg-primary text-on-primary text-sm font-headline font-semibold px-6 py-3.5 rounded-xl hover:opacity-90 transition-opacity">Start free beta <span class="material-symbols-outlined" style="font-size:17px">arrow_forward</span></a>
+        <a href="https://musenail.github.io/turndesk/signup.html" class="inline-flex items-center gap-1.5 bg-primary text-on-primary text-sm font-headline font-semibold px-6 py-3.5 rounded-xl hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta <span class="material-symbols-outlined" style="font-size:17px">arrow_forward</span></a>
         <a href="https://musenail.github.io/turndesk/" class="border-[1.5px] border-primary text-primary text-sm font-headline font-semibold px-6 py-3.5 rounded-xl hover:bg-primary/[0.06] transition-colors">Sign in</a>
         <a href="contact.html" class="text-sm font-body text-on-surface-variant underline hover:text-primary">or request a live demo</a>
       </div>
@@ -95,9 +95,9 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ See it in action (large samples) ═══ -->
-<section class="max-w-6xl mx-auto px-5 py-14">
+<section class="max-w-[1400px] mx-auto px-5 py-14">
   <p class="reveal text-center text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">See it in action</p>
-  <h2 class="reveal text-center text-2xl md:text-3xl font-headline font-extrabold mb-2">The screens your front desk lives in.</h2>
+  <h2 class="reveal text-center text-3xl md:text-4xl font-headline font-extrabold mb-2">The screens your front desk lives in.</h2>
   <p class="reveal text-center text-sm text-on-surface-variant mb-10 max-w-xl mx-auto">A real look at the product — the turn grid, your floor, and the day's numbers.</p>
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -160,9 +160,9 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Feature grid ═══ -->
-<section class="max-w-6xl mx-auto px-5 py-14 border-t border-surface-high">
+<section class="max-w-[1400px] mx-auto px-5 py-14 border-t border-surface-high">
   <p class="reveal text-center text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Every problem your front desk actually has</p>
-  <h2 class="reveal text-center text-2xl md:text-3xl font-headline font-extrabold mb-10">Built for how a busy nail salon really runs.</h2>
+  <h2 class="reveal text-center text-3xl md:text-4xl font-headline font-extrabold mb-10">Built for how a busy nail salon really runs.</h2>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     <a href="features.html#turns" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">swap_vert</span></span><span class="font-headline font-extrabold">Turn Grid</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">“Whose turn is it?” turns into a daily argument.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">An ordered, visible rotation the whole team can check for themselves.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
     <a href="features.html#checkin" class="reveal hover-lift flex flex-col bg-surface-lowest rounded-xl p-5 border border-surface-high" style="transition-delay:.05s"><span class="flex items-center gap-2 mb-2.5"><span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">how_to_reg</span></span><span class="font-headline font-extrabold">Check-In Kiosk</span></span><span class="text-xs text-on-surface-variant mb-1.5 leading-snug">Walk-ins arrive with no appointment and no clean way to get in line.</span><span class="font-headline font-semibold text-[13px] mb-3 leading-snug">Self check-in at the door — no clipboard, no calling names.</span><span class="mt-auto text-[11px] font-semibold text-primary">Learn more →</span></a>
@@ -177,12 +177,12 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ CTA ═══ -->
-<section class="max-w-4xl mx-auto px-5 py-14">
+<section class="max-w-5xl mx-auto px-5 py-14">
   <div class="reveal rounded-3xl bg-primary-dim px-8 py-12 text-center">
-    <h2 class="text-2xl md:text-3xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
+    <h2 class="text-3xl md:text-4xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
     <p class="text-primary-container mb-7 max-w-md mx-auto">Free during beta. No credit card, no pressure — set it up, or have us walk you through it live.</p>
     <div class="flex flex-wrap gap-3 justify-center">
-      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta</a>
       <a href="contact.html" class="border-[1.5px] border-primary-container text-primary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:bg-white/5 transition-colors">Request a live demo</a>
     </div>
   </div>
@@ -190,7 +190,7 @@ tailwind.config = { theme: { extend: {
 
 <!-- ═══ Footer ═══ -->
 <footer class="border-t border-surface-high">
-  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
       <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>

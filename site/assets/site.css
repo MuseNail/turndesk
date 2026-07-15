@@ -7,13 +7,16 @@ html { scroll-behavior: smooth; }
    if JS is off/broken — the animation is a pure enhancement. site.js adds `.in` as each
    element enters view (plain scroll listener), with a safety timeout so nothing stays hidden. */
 /* Slide-up entrance — transform only, never opacity. Content is ALWAYS visible; if the
-   transition is ever interrupted the element just sits 18px lower, never blank. (Some
-   browsers/compositors leave an opacity transition stuck at 0 — we avoid that risk.) */
-.has-js .reveal { transform: translateY(18px); transition: transform .55s cubic-bezier(.16,.68,.43,.99); transition-delay: 0s !important; }
+   transition is ever interrupted the element just sits slightly lower/smaller, never blank.
+   (Some browsers/compositors leave an opacity transition stuck at 0 — we avoid that risk.)
+   translateY + a subtle scale reads as a gentle "settle into place" on real browsers. */
+.has-js .reveal { transform: translateY(26px) scale(.985); transition: transform .6s cubic-bezier(.16,.84,.44,1); transition-delay: 0s !important; }
 .has-js .reveal.in { transform: none; }
 
-.hover-lift { transition: transform .18s cubic-bezier(.16,.68,.43,.99), box-shadow .2s ease; }
-.hover-lift:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,61,61,.12); }
+/* Hover lift — cards, previews, buttons, pills. The inline `hover:-translate-y-0.5` utilities
+   on buttons/pills pair with Tailwind's own transition; this class is for the larger cards. */
+.hover-lift { transition: transform .2s cubic-bezier(.16,.84,.44,1), box-shadow .25s ease; }
+.hover-lift:hover { transform: translateY(-5px); box-shadow: 0 16px 36px rgba(15,61,61,.15); }
 
 .nav-link { position: relative; transition: color .15s ease; }
 .nav-link.active { color: #1a5252; }

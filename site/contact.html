@@ -21,14 +21,14 @@ tailwind.config = { theme: { extend: {
 <!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
      JS can drive them. No JS → content is fully visible (progressive enhancement). -->
 <script>document.documentElement.classList.add('has-js')</script>
-<link rel="stylesheet" href="assets/site.css?v=4">
+<link rel="stylesheet" href="assets/site.css?v=5">
 <style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
 </head>
 <body class="bg-surface text-on-surface font-body">
 
 <!-- ═══ Header ═══ -->
 <header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
-  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 h-16 flex items-center justify-between">
     <a href="index.html" class="flex items-center gap-2">
       <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
         <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
@@ -43,7 +43,7 @@ tailwind.config = { theme: { extend: {
     </nav>
     <div class="hidden md:flex items-center gap-3">
       <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
-      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta</a>
     </div>
     <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu"><span class="material-symbols-outlined">menu</span></button>
   </div>
@@ -60,13 +60,13 @@ tailwind.config = { theme: { extend: {
 </header>
 
 <!-- ═══ Contact ═══ -->
-<section class="max-w-6xl mx-auto px-5 pt-14 pb-16">
+<section class="max-w-[1400px] mx-auto px-5 pt-14 pb-16">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
 
     <div>
       <p class="reveal text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Contact</p>
-      <h1 class="reveal text-3xl md:text-4xl font-headline font-extrabold leading-tight mb-3">Let’s talk about your salon.</h1>
-      <p class="reveal text-sm text-on-surface-variant leading-relaxed mb-6 max-w-md">Tell us a bit about your shop and what you’d like to see. We’ll reach out to schedule a live video demo and answer anything — no pressure, no card, no obligation.</p>
+      <h1 class="reveal text-4xl md:text-5xl font-headline font-extrabold leading-tight mb-3">Let’s talk about your salon.</h1>
+      <p class="reveal text-base text-on-surface-variant leading-relaxed mb-6 max-w-md">Tell us a bit about your shop and what you’d like to see. We’ll reach out to schedule a live video demo and answer anything — no pressure, no card, no obligation.</p>
       <ul class="reveal space-y-3 text-sm text-on-surface-variant max-w-md">
         <li class="flex gap-2.5 items-start"><span class="material-symbols-outlined text-primary" style="font-size:19px">videocam</span><span><span class="font-semibold text-on-surface">A real walkthrough.</span> We drive the actual product on a video call, on your kind of workflow — walk-ins, rotation, payroll.</span></li>
         <li class="flex gap-2.5 items-start"><span class="material-symbols-outlined text-primary" style="font-size:19px">forum</span><span><span class="font-semibold text-on-surface">Ask anything.</span> Questions, doubts, “can it do X?” — this is the place.</span></li>
@@ -86,7 +86,7 @@ tailwind.config = { theme: { extend: {
           <input id="c-phone" name="phone" type="tel" autocomplete="tel" maxlength="40" class="w-full mt-1 mb-3 px-4 h-12 rounded-xl bg-white border border-surface-high text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="(909) 555-1212">
           <label for="c-looking" class="block text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">What are you looking for?</label>
           <textarea id="c-looking" name="lookingFor" rows="4" maxlength="500" class="w-full mt-1 mb-4 px-4 py-3 rounded-xl bg-white border border-surface-high text-sm text-on-surface outline-none focus:ring-2 focus:ring-primary" placeholder="What you’d like to see — walk-in rotation, reports, payroll, how many techs, when you’d like to start…"></textarea>
-          <button id="contact-submit" type="submit" class="w-full h-12 rounded-xl bg-primary text-on-primary text-base font-headline font-semibold hover:opacity-90 transition-opacity">Request my demo</button>
+          <button id="contact-submit" type="submit" class="w-full h-12 rounded-xl bg-primary text-on-primary text-base font-headline font-semibold hover:opacity-90 hover:-translate-y-0.5 transition">Request my demo</button>
           <p id="contact-error" class="text-xs text-center font-body hidden mt-3" style="color:#8b1c1a" aria-live="polite"></p>
           <noscript><p class="text-xs text-on-surface-variant text-center mt-3">This form needs JavaScript. Please enable it, or request access from the <a href="https://musenail.github.io/turndesk/signup.html" class="underline">sign-up page</a>.</p></noscript>
         </form>
@@ -104,7 +104,7 @@ tailwind.config = { theme: { extend: {
 
 <!-- ═══ Footer ═══ -->
 <footer class="border-t border-surface-high">
-  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
       <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>

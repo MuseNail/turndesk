@@ -21,14 +21,14 @@ tailwind.config = { theme: { extend: {
 <!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
      JS can drive them. No JS → content is fully visible (progressive enhancement). -->
 <script>document.documentElement.classList.add('has-js')</script>
-<link rel="stylesheet" href="assets/site.css?v=4">
+<link rel="stylesheet" href="assets/site.css?v=5">
 <style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
 </head>
 <body class="bg-surface text-on-surface font-body">
 
 <!-- ═══ Header ═══ -->
 <header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
-  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 h-16 flex items-center justify-between">
     <a href="index.html" class="flex items-center gap-2">
       <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
         <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
@@ -43,7 +43,7 @@ tailwind.config = { theme: { extend: {
     </nav>
     <div class="hidden md:flex items-center gap-3">
       <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
-      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta</a>
     </div>
     <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu"><span class="material-symbols-outlined">menu</span></button>
   </div>
@@ -60,33 +60,33 @@ tailwind.config = { theme: { extend: {
 </header>
 
 <!-- ═══ Intro + jump pills ═══ -->
-<section class="max-w-6xl mx-auto px-5 pt-14 pb-10">
+<section class="max-w-[1400px] mx-auto px-5 pt-14 pb-10">
   <p class="reveal text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Features</p>
-  <h1 class="reveal text-3xl md:text-4xl font-headline font-extrabold leading-tight mb-3 max-w-2xl">Everything your front desk juggles, handled in one place.</h1>
-  <p class="reveal text-sm text-on-surface-variant max-w-xl mb-6">The honest tour — what each piece does, what it looks like, and what’s still on the way.</p>
+  <h1 class="reveal text-4xl md:text-5xl font-headline font-extrabold leading-tight mb-3 max-w-2xl">Everything your front desk juggles, handled in one place.</h1>
+  <p class="reveal text-base md:text-lg text-on-surface-variant max-w-xl mb-6">The honest tour — what each piece does, what it looks like, and what’s still on the way.</p>
   <nav class="reveal flex flex-wrap gap-2" aria-label="Jump to a feature">
-    <a href="#turns" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Turn Grid</a>
-    <a href="#checkin" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Check-In Kiosk</a>
-    <a href="#floorplan" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Floor Plan</a>
-    <a href="#reports" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Reports &amp; Payroll</a>
-    <a href="#payments" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Payments</a>
-    <a href="#texting" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Text Updates</a>
-    <a href="#booking" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Smart Booking</a>
-    <a href="#ai" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">AI Insights</a>
+    <a href="#turns" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Turn Grid</a>
+    <a href="#checkin" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Check-In Kiosk</a>
+    <a href="#floorplan" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Floor Plan</a>
+    <a href="#reports" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Reports &amp; Payroll</a>
+    <a href="#payments" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Payments</a>
+    <a href="#texting" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Text Updates</a>
+    <a href="#booking" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Smart Booking</a>
+    <a href="#ai" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">AI Insights</a>
   </nav>
 </section>
 
 <!-- ═══ Turn Grid ═══ -->
-<section id="turns" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="turns" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
     <div class="reveal">
       <span class="inline-flex items-center gap-2 mb-3">
         <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">swap_vert</span></span>
         <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Turn Grid</span>
       </span>
-      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">A rotation the whole shop can see and trust.</h2>
-      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Every walk-in joins one ordered rotation instead of a first-come free-for-all. Step a tech away and the skip is tracked automatically — so the board is always the honest answer to “who’s next?”</p>
-      <ul class="space-y-2 text-sm text-on-surface-variant">
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">A rotation the whole shop can see and trust.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Every walk-in joins one ordered rotation instead of a first-come free-for-all. Step a tech away and the skip is tracked automatically — so the board is always the honest answer to “who’s next?”</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ordered turn list, synced to every device in real time</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Manual skip-a-turn, counted like a completed turn</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Full-turn and half-turn credit — not just a head count</span></li>
@@ -111,16 +111,16 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Check-In Kiosk ═══ -->
-<section id="checkin" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="checkin" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
     <div class="reveal md:order-last">
       <span class="inline-flex items-center gap-2 mb-3">
         <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">how_to_reg</span></span>
         <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Check-In Kiosk</span>
       </span>
-      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">No clipboard. No shouting names.</h2>
-      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">A guest with no appointment enters their own name, phone, and service the moment they walk in — and drops straight into the same rotation as everyone else.</p>
-      <ul class="space-y-2 text-sm text-on-surface-variant">
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">No clipboard. No shouting names.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">A guest with no appointment enters their own name, phone, and service the moment they walk in — and drops straight into the same rotation as everyone else.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guests check themselves in — staff don’t have to start it</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Joins the real turn rotation instantly</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>The front desk sees every arrival live</span></li>
@@ -146,16 +146,16 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Floor Plan ═══ -->
-<section id="floorplan" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="floorplan" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
     <div class="reveal">
       <span class="inline-flex items-center gap-2 mb-3">
         <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">chair</span></span>
         <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Floor Plan</span>
       </span>
-      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">See your floor, not a list.</h2>
-      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Your real stations, laid out and colored the way your salon is actually arranged — dragged and dropped, not typed into a spreadsheet.</p>
-      <ul class="space-y-2 text-sm text-on-surface-variant">
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">See your floor, not a list.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Your real stations, laid out and colored the way your salon is actually arranged — dragged and dropped, not typed into a spreadsheet.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Drag-and-drop layout that mirrors your real floor</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Custom colors and sizing per station type</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Who’s open and who’s busy, at a glance</span></li>
@@ -183,16 +183,16 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Reports & Payroll ═══ -->
-<section id="reports" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="reports" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
     <div class="reveal md:order-last">
       <span class="inline-flex items-center gap-2 mb-3">
         <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">bar_chart</span></span>
         <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Reports &amp; Payroll</span>
       </span>
-      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">The numbers, wherever you are.</h2>
-      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Every ticket flows straight into your reports and your team’s pay — no spreadsheet bolted on afterward. And a separate, install-to-your-phone app shows the same numbers on the go, read-only and PIN-protected.</p>
-      <ul class="space-y-2 text-sm text-on-surface-variant">
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">The numbers, wherever you are.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">Every ticket flows straight into your reports and your team’s pay — no spreadsheet bolted on afterward. And a separate, install-to-your-phone app shows the same numbers on the go, read-only and PIN-protected.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Daily sales and tips, calculated automatically</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Technician payroll tied to real tickets</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A dedicated phone app for owners and managers</span></li>
@@ -225,16 +225,16 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Payments ═══ -->
-<section id="payments" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="payments" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
     <div class="reveal">
       <span class="inline-flex items-center gap-2 mb-3">
         <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">credit_card</span></span>
         <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Payments</span>
       </span>
-      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Your processor. A better rate.</h2>
-      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">No forced processor and no lock-in — TurnDesk works with your card processing instead of taking a cut of it. Card processing as low as ~1.8% effective, well under the usual 2.6% + 15¢. Gift cards sell and redeem at the same checkout.</p>
-      <ul class="space-y-2 text-sm text-on-surface-variant">
+      <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Your processor. A better rate.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">No forced processor and no lock-in — TurnDesk works with your card processing instead of taking a cut of it. Card processing as low as ~1.8% effective, well under the usual 2.6% + 15¢. Gift cards sell and redeem at the same checkout.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Card processing as low as ~1.8% effective</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>TurnDesk adds no per-transaction cut of its own</span></li>
         <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Gift cards built into checkout</span></li>
@@ -261,15 +261,15 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Text Updates ═══ -->
-<section id="texting" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="texting" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="reveal max-w-3xl">
     <span class="inline-flex items-center gap-2 mb-3">
       <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">sms</span></span>
       <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Text Updates</span>
     </span>
-    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Customers stay in the loop.</h2>
-    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Texting is part of the front desk itself — not a bolted-on marketing upsell, not metered, not a separate tier. The built-in sending is live today; putting it everywhere it belongs is what’s next.</p>
-    <ul class="space-y-2 text-sm text-on-surface-variant">
+    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Customers stay in the loop.</h2>
+    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Texting is part of the front desk itself — not a bolted-on marketing upsell, not metered, not a separate tier. The built-in sending is live today; putting it everywhere it belongs is what’s next.</p>
+    <ul class="space-y-2.5 text-base text-on-surface-variant">
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Built in — not metered, not a separate tier</span></li>
     </ul>
     <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
@@ -279,15 +279,15 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ Smart Booking ═══ -->
-<section id="booking" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="booking" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="reveal max-w-3xl">
     <span class="inline-flex items-center gap-2 mb-3">
       <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">event_available</span></span>
       <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Smart Booking</span>
     </span>
-    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Booking that protects your day.</h2>
-    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Instead of a calendar anyone can pile onto, booking that’s aware of how your day actually runs — nudging appointments toward quiet stretches and holding the line on your busiest ones.</p>
-    <ul class="space-y-2 text-sm text-on-surface-variant">
+    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Booking that protects your day.</h2>
+    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of a calendar anyone can pile onto, booking that’s aware of how your day actually runs — nudging appointments toward quiet stretches and holding the line on your busiest ones.</p>
+    <ul class="space-y-2.5 text-base text-on-surface-variant">
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>24/7 booking from a customer’s phone</span></li>
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Steers bookings toward your slow hours</span></li>
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guards against overbooking your busiest times</span></li>
@@ -299,15 +299,15 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ AI Insights ═══ -->
-<section id="ai" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+<section id="ai" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
   <div class="reveal max-w-3xl">
     <span class="inline-flex items-center gap-2 mb-3">
       <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">insights</span></span>
       <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">AI Insights</span>
     </span>
-    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Answers, not just spreadsheets.</h2>
-    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Instead of copying figures into a separate chatbot, ask about your own reports right where they live — “which day was slowest last week?” — and get a plain-English read. It’s live on the dashboard today.</p>
-    <ul class="space-y-2 text-sm text-on-surface-variant">
+    <h2 class="text-3xl md:text-4xl font-headline font-extrabold mb-3">Answers, not just spreadsheets.</h2>
+    <p class="text-base text-on-surface-variant leading-relaxed mb-4">Instead of copying figures into a separate chatbot, ask about your own reports right where they live — “which day was slowest last week?” — and get a plain-English read. It’s live on the dashboard today.</p>
+    <ul class="space-y-2.5 text-base text-on-surface-variant">
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ask in plain English, about your real numbers</span></li>
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Live on the dashboard today</span></li>
       <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Your data stays handled securely on our server</span></li>
@@ -319,12 +319,12 @@ tailwind.config = { theme: { extend: {
 </section>
 
 <!-- ═══ CTA ═══ -->
-<section class="max-w-4xl mx-auto px-5 py-14">
+<section class="max-w-5xl mx-auto px-5 py-14">
   <div class="reveal rounded-3xl bg-primary-dim px-8 py-12 text-center">
-    <h2 class="text-2xl md:text-3xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
+    <h2 class="text-3xl md:text-4xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
     <p class="text-primary-container mb-7 max-w-md mx-auto">Free during beta. No credit card, no pressure — set it up, or have us walk you through it live.</p>
     <div class="flex flex-wrap gap-3 justify-center">
-      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 hover:-translate-y-0.5 transition">Start free beta</a>
       <a href="contact.html" class="border-[1.5px] border-primary-container text-primary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:bg-white/5 transition-colors">Request a live demo</a>
     </div>
   </div>
@@ -332,7 +332,7 @@ tailwind.config = { theme: { extend: {
 
 <!-- ═══ Footer ═══ -->
 <footer class="border-t border-surface-high">
-  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+  <div class="max-w-[1400px] mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
       <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
