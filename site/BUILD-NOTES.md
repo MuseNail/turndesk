@@ -4,30 +4,49 @@
 worker, no app-version coupling — editing these files never bumps the app or prompts salon
 devices to update. Destined for **turndesk.net**; previewed at `musenail.github.io/turndesk/site/`.
 
-## Status (2026-07-14)
-- ✅ `site/index.html` — Home page (built + live for preview).
-- ✅ `site/assets/site.js` (scroll-reveal + active-tab + mobile menu w/ aria-expanded) ·
-  `site.css` (motion).
-- ✅ `site/assets/turndesk-appicon.svg`, `turndesk-mark.svg` (logo).
+## Status — SITE COMPLETE + LIVE (2026-07-14)
+All 4 pages built, styled, and pushed to `main` (GitHub Pages serves them). Asset cache-bust
+currently at `site.css?v=7` + `site.js?v=3` (bump N on ALL 4 pages when you touch those files).
+- ✅ `site/index.html` — Home: hero, stat strip, "See it in action" (3 rendered windows), 8
+  feature cards → `features.html#...`, CTA, footer.
 - ✅ `features.html` — 8 anchored deep-dives (`#turns #checkin #floorplan #reports #payments
-  #texting #booking #ai`, matching Home's card links); ported the 3 showcase windows + the
-  payments-rate card (from the app's landing.js REC_PAYMENTS) + a new Check-In Kiosk window;
-  every "Launching soon" honesty line kept (texting body softened, AI line refreshed to the
-  accurate shipped state — the app's landing.js still needs the same copy fixes, tracked
-  separately).
-- ✅ `pricing.html` — honest: $0 beta card ("everything TurnDesk does today — no feature
-  tiers"), approval-gated start stated plainly, launch promise ("beta salons hear it first,
-  advance notice"), card-processing block (fees go to the processor, no TurnDesk cut, beta =
-  cash/manual-first; NO rate number here per owner), 5-question FAQ.
-- ✅ `contact.html` + `assets/contact.js` (ES module, unit-tested in `test/site-contact.test.js`)
-  — labeled/aria-live form → `POST /demo/request` (prod Worker). ⚠️ SECURITY invariant: the
-  `?api=` test override is an EXACT-match allow-list (staging + localhost:8787 ONLY) and is
-  NEVER persisted — this page shares the github.io origin with the live app, so writing
-  localStorage here (esp. `td_api_origin`) would silently repoint the real app. Form is
-  `method="post"` so a no-JS submit 405s instead of leaking PII into the URL.
-- ⚠️ **Owner copy rule (2026-07-14): never name the card processor** on the site — say
-  "card processing as low as ~1.8% effective". (index.html's payments card was reworded;
-  the app's landing.js still names it — separate app-scoped follow-up.)
+  #texting #booking #ai`).
+- ✅ `pricing.html` — honest $0 beta card, approval-gated start, launch promise, card-processing
+  block (NO rate number per owner), 5-Q FAQ.
+- ✅ `contact.html` + `assets/contact.js` (ES module, tested in `test/site-contact.test.js`).
+- ✅ `assets/site.js` (scroll-reveal + active-tab + mobile menu w/ aria-expanded) · `site.css`
+  (motion + `.appshot` browser-frame + `.appshot__body` rendering + `.illus` illustration).
+- ✅ `assets/turndesk-appicon.svg`, `turndesk-mark.svg` (logo).
+
+### ⭐ Visuals are RENDERINGS, not screenshots (owner decision — anti-copy)
+Owner did NOT want raw app screenshots (competitors could copy the exact UI). Every product
+visual is a **restyled HTML/SVG recreation** inside a `.appshot` browser-window frame — TurnDesk-
+flavored but deliberately NOT a pixel copy (different names, "Chair N" vs station codes, tighter
+rows). Built from owner-sent reference screenshots. The old `assets/screens/*.png` slots + the
+`assets/screens/` folder were REMOVED — no PNGs are needed. features.html visuals:
+- **Turn Board** — busy midday grid (6 techs × service tokens, done/in-service/half colors, +Nb bonus badges)
+- **Check-In** — walk-in form (phone/name/service chips/Check In)
+- **Floor Plan** — Mani/Pedi stations + simplified guest cards (name only) + tech-avatar row
+- **Reports & Payroll** — metrics strip + compact Staff Breakdown (commission per tech) + Top Services
+- **Payments** — checkout modal (line items / tip% / tender / Charge)
+- **Text Updates** SVG — appointment reminder · **Smart Booking** SVG — multi-staff day calendar · **AI Insights** SVG — ask-your-data
+- The 3 Home "See it in action" windows are compact renderings of Turns / Floor / Report.
+- All reflect the app's new color language: **red = Working now, green = Available** (see the app hotfix below).
+
+### Cosmetic + honesty notes (shipped)
+- Container widened `max-w-6xl`(1152)→`max-w-[1400px]`; prose type bumped (hero 48px, body 16px);
+  richer transform-only motion + hover-lift.
+- ⚠️ **Owner copy rule: never name the card processor** — say "card processing as low as ~1.8%".
+  (Site done; the APP's landing.js STILL names it → separate app-scoped follow-up, chip task_b5930744.)
+- Honesty: texting/booking/AI-phone flagged "launching soon"; pricing has no rate number.
+
+### ⭐ Related app hotfix (NOT the site — the salon app)
+Turns "Available" vs "Working now" both read green → fixed to match the floor plan: In Service =
+red (#fa746f), Available = green (#2a7a4f), in `js/app/features/turns.js`. SHIPPED **TurnDesk
+td-v0.47** (main) + **Muse v5.43** (main, standalone color-only hotfix via worktree — Phase 3
+work stays on `dev`; next Muse dev→main release must bump PAST v5.43). Demo salon was cleaned of
+6 stale ~230h ghost entries + given a fresh 19-entry busy midday board (all today-dated).
+
 - ⬜ **turndesk.net DNS** — owner's GoDaddy; no `gh`/Cloudflare CLI in the agent env, so prep
   files + hand the owner exact records. AT THAT STEP also (deliberately deferred until then):
   - a 404 page + robots.txt + sitemap (pointless at the github.io subpath);
