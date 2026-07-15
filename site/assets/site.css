@@ -1,7 +1,10 @@
 /* TurnDesk marketing site — motion + small shared bits. Standalone (no app coupling).
    Note: literal cubic-bezier (not a CSS var) inside transition shorthands — a var() there
    is rejected by some browsers and silently kills the animation. */
-html { scroll-behavior: smooth; }
+/* Global text up-scale: bump the root font-size so every rem-based size (all the prose
+   headings/body/nav/buttons + the arbitrary-rem headings) grows ×1.15 uniformly, keeping the
+   hierarchy intact. The appshot mock internals are sized in px on purpose, so they stay put. */
+html { font-size: 115%; scroll-behavior: smooth; }
 
 /* Scroll-reveal. Gated on `.has-js` (set in the page <head>) so content is fully visible
    if JS is off/broken — the animation is a pure enhancement. site.js adds `.in` as each
