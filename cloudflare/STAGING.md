@@ -67,18 +67,19 @@ curl -X POST "$S/operator/salons/smoke/status" -H "Authorization: Bearer $OP" -H
 The client hardcodes the prod origin in **three** files (`js/app/config.js`, `js/app/sync.js`,
 `js/app/apptoken.js` — HTTP proxies, the `/ws` WebSocket, and `/auth/login` respectively), so
 deploying the staging worker alone does **not** redirect any client. To smoke-test in a browser,
-temporarily repoint all three to the staging URL, run a local static server, test, then revert:
+use the shipped `?api=` override — no file edits needed:
 
-```bash
-# temp-edit ORIGIN/PROD_ORIGIN in config.js, sync.js, apptoken.js → the staging URL
-git checkout -- js/app/config.js js/app/sync.js js/app/apptoken.js   # revert before committing
-```
-
-> **Optional improvement (not yet built):** add one guarded `apiOrigin()` helper (allow-listed to
-> `^https://turndesk-staging\.[a-z0-9-]+\.workers\.dev$` + localhost, default prod, off unless a
-> `?api=` param is set) and use it in all three files — it's inert in prod and removes the temp-edit
-> dance. Deferred because it's a security-sensitive change to the live client (a loose allow-list would
-> let a hostile `?api=` link repoint a real salon). Ask before adding.
+> **The `apiOrigin()` helper IS built** (`js/app/apiorigin.js`, used by config.js / sync.js /
+> apptoken.js, tested in `test/apiorigin.test.js`): a `?api=<origin>` URL param is honored ONLY
+> for an EXACT-match allow-list (the staging worker origin or `http://localhost:8787` — exact
+> string, no wildcard, so a look-alike worker on an attacker's account is rejected) and persists
+> in localStorage `td_api_origin` until cleared. Open the app as
+> `...?salon=<slug>&api=https://turndesk-staging.musenailandspa.workers.dev` to point that
+> browser at staging; to go back to production, remove the `td_api_origin` localStorage key
+> (a prod `?api=` is NOT in the allow-list and won't clear it).
+>
+> The marketing site's contact form (`site/assets/contact.js`) has its own copy of the same
+> exact-match override, deliberately NON-persistent (see `site/BUILD-NOTES.md`).
 
 ---
 

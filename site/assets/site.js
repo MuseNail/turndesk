@@ -39,7 +39,7 @@
   // ── Mobile menu ────────────────────────────────────────────────────────────
   const btn = document.getElementById('menu-btn'), menu = document.getElementById('mobile-menu');
   if (btn && menu) {
-    btn.addEventListener('click', () => menu.classList.toggle('hidden'));
-    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => menu.classList.add('hidden')));
+    btn.addEventListener('click', () => btn.setAttribute('aria-expanded', String(!menu.classList.toggle('hidden'))));
+    menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); }));
   }
 })();

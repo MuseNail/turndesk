@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Features — TurnDesk</title>
+<meta name="description" content="A deep dive into TurnDesk’s front-desk features — fair-turn rotation, walk-in check-in kiosk, floor plan, reports and payroll, payments, texting, booking, and AI insights.">
+<meta name="robots" content="index">
+<meta property="og:title" content="Features — TurnDesk">
+<meta property="og:description" content="Fair-turn rotation, walk-in check-in, floor plan, reports and payroll — every TurnDesk feature, explained honestly.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="assets/turndesk-appicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { primary:'#1a5252','primary-dim':'#0f3d3d','primary-container':'#8fd4d3','on-primary':'#ffffff','on-primary-container':'#0a2e2e','secondary-container':'#f5c870','on-secondary-container':'#3a2800',surface:'#e8ecee','surface-lowest':'#f5f7f8','surface-high':'#c2cacd','on-surface':'#0b1f1f','on-surface-variant':'#4a5258' },
+  fontFamily: { headline:['Manrope','sans-serif'], body:['Inter','sans-serif'] },
+} } }
+</script>
+<!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
+     JS can drive them. No JS → content is fully visible (progressive enhancement). -->
+<script>document.documentElement.classList.add('has-js')</script>
+<link rel="stylesheet" href="assets/site.css?v=4">
+<style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
+</head>
+<body class="bg-surface text-on-surface font-body">
+
+<!-- ═══ Header ═══ -->
+<header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
+  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-2">
+      <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
+      </span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-7 text-sm font-body font-semibold text-on-surface-variant">
+      <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+      <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+      <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+      <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    </nav>
+    <div class="hidden md:flex items-center gap-3">
+      <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+    </div>
+    <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu"><span class="material-symbols-outlined">menu</span></button>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden border-t border-surface-high px-5 py-4 flex flex-col gap-3 text-sm font-body font-semibold">
+    <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+    <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+    <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+    <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    <div class="flex gap-3 pt-2">
+      <a href="https://musenail.github.io/turndesk/" class="flex-1 text-center border border-primary text-primary rounded-lg px-4 py-2.5">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="flex-1 text-center bg-primary text-on-primary rounded-lg px-4 py-2.5">Start free beta</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ Intro + jump pills ═══ -->
+<section class="max-w-6xl mx-auto px-5 pt-14 pb-10">
+  <p class="reveal text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Features</p>
+  <h1 class="reveal text-3xl md:text-4xl font-headline font-extrabold leading-tight mb-3 max-w-2xl">Everything your front desk juggles, handled in one place.</h1>
+  <p class="reveal text-sm text-on-surface-variant max-w-xl mb-6">The honest tour — what each piece does, what it looks like, and what’s still on the way.</p>
+  <nav class="reveal flex flex-wrap gap-2" aria-label="Jump to a feature">
+    <a href="#turns" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Turn Grid</a>
+    <a href="#checkin" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Check-In Kiosk</a>
+    <a href="#floorplan" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Floor Plan</a>
+    <a href="#reports" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Reports &amp; Payroll</a>
+    <a href="#payments" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Payments</a>
+    <a href="#texting" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Text Updates</a>
+    <a href="#booking" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">Smart Booking</a>
+    <a href="#ai" class="text-xs font-body font-semibold px-3 py-1.5 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary transition-colors">AI Insights</a>
+  </nav>
+</section>
+
+<!-- ═══ Turn Grid ═══ -->
+<section id="turns" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">swap_vert</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Turn Grid</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">A rotation the whole shop can see and trust.</h2>
+      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Every walk-in joins one ordered rotation instead of a first-come free-for-all. Step a tech away and the skip is tracked automatically — so the board is always the honest answer to “who’s next?”</p>
+      <ul class="space-y-2 text-sm text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ordered turn list, synced to every device in real time</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Manual skip-a-turn, counted like a completed turn</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Full-turn and half-turn credit — not just a head count</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Suggestions already favor techs who can do the service</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> choose your own fairness rule — points-based, whole-turn, or traditional. Today the rule is fixed; picking it is what’s coming.</p>
+      </div>
+    </div>
+    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">swap_vert</span><span class="text-[13px] font-headline font-bold">Turns · Today</span></div>
+        <div class="p-4 space-y-1">
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#2a7a4f1f;border-color:#2a7a4f;color:#2a7a4f">A</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Amy</span><span class="text-sm font-headline font-bold text-primary">6.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#e9f4ee;color:#1b5e3b"><span style="width:6px;height:6px;border-radius:50%;background:#2a7a4f;display:inline-block"></span>Working now</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">B</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Bao</span><span class="text-sm font-headline font-bold text-primary">5.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next up</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#1a52521f;border-color:#1a5252;color:#1a5252">C</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Chi</span><span class="text-sm font-headline font-bold text-primary">4.5t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252"><span style="width:6px;height:6px;border-radius:50%;background:#1a5252;display:inline-block"></span>Available</span></div></div></div>
+          <div class="flex items-center gap-3 py-1"><div class="w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-headline font-bold" style="background:#b0b6ba1f;border-color:#b0b6ba;color:#b0b6ba">D</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-sm">Dao</span><span class="text-sm font-headline font-bold text-primary">4.0t</span></div><div class="mt-1"><span class="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-flex items-center gap-1" style="background:#eceef0;color:#7a858a"><span style="width:6px;height:6px;border-radius:50%;background:#b0b6ba;display:inline-block"></span>Off</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Check-In Kiosk ═══ -->
+<section id="checkin" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal md:order-last">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">how_to_reg</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Check-In Kiosk</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">No clipboard. No shouting names.</h2>
+      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">A guest with no appointment enters their own name, phone, and service the moment they walk in — and drops straight into the same rotation as everyone else.</p>
+      <ul class="space-y-2 text-sm text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guests check themselves in — staff don’t have to start it</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Joins the real turn rotation instantly</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>The front desk sees every arrival live</span></li>
+      </ul>
+    </div>
+    <div class="reveal max-w-sm w-full mx-auto md:justify-self-start">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">how_to_reg</span><span class="text-[13px] font-headline font-bold">Welcome — check in</span></div>
+        <div class="p-4 space-y-3">
+          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1">Your name</div><div class="rounded-lg px-3 py-2 text-[13px] font-semibold" style="background:#fff;border:1px solid #e4eae9">Tina</div></div>
+          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1">Phone</div><div class="rounded-lg px-3 py-2 text-[13px]" style="background:#fff;border:1px solid #e4eae9">(909) 555-0187</div></div>
+          <div><div class="text-[9px] uppercase tracking-wide text-on-surface-variant mb-1.5">Service</div>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="text-[11px] px-2.5 py-1 rounded-full font-semibold" style="background:#1a5252;color:#fff">Gel Manicure</span>
+              <span class="text-[11px] px-2.5 py-1 rounded-full" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252">Pedicure</span>
+              <span class="text-[11px] px-2.5 py-1 rounded-full" style="background:#fff;border:1px solid #b9c8c2;color:#1a5252">Full Set</span>
+            </div></div>
+          <div class="rounded-lg py-2.5 text-center text-[12px] font-headline font-semibold" style="background:#1a5252;color:#fff">Check in</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Floor Plan ═══ -->
+<section id="floorplan" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">chair</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Floor Plan</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">See your floor, not a list.</h2>
+      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Your real stations, laid out and colored the way your salon is actually arranged — dragged and dropped, not typed into a spreadsheet.</p>
+      <ul class="space-y-2 text-sm text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Drag-and-drop layout that mirrors your real floor</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Custom colors and sizing per station type</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Who’s open and who’s busy, at a glance</span></li>
+      </ul>
+    </div>
+    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">chair</span><span class="text-[13px] font-headline font-bold">Floor Plan</span></div>
+        <div class="p-4">
+          <div class="grid grid-cols-4 gap-2 mb-2">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Sarah</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Mani 2</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Amy</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Mani 3</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #d4860a;background:#ffe9c4"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#d4860a;opacity:.7">Mani 4</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Mia</span></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 1</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Bao</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:56px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[10px] font-headline font-extrabold" style="color:#93a09c">Pedi 2</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:56px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:3px;left:5px;font-size:8px;font-weight:700;color:#1a5c7a;opacity:.7">Wax</span><span class="text-[11px] font-semibold" style="color:#1f2937;margin-top:7px">Evy</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Reports & Payroll ═══ -->
+<section id="reports" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal md:order-last">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">bar_chart</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Reports &amp; Payroll</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">The numbers, wherever you are.</h2>
+      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Every ticket flows straight into your reports and your team’s pay — no spreadsheet bolted on afterward. And a separate, install-to-your-phone app shows the same numbers on the go, read-only and PIN-protected.</p>
+      <ul class="space-y-2 text-sm text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Daily sales and tips, calculated automatically</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Technician payroll tied to real tickets</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A dedicated phone app for owners and managers</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> your calendar here too. Today the phone app covers reports and payroll; the on-the-go calendar view is coming.</p>
+      </div>
+    </div>
+    <div class="reveal max-w-sm w-full mx-auto md:justify-self-start">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">bar_chart</span><span class="text-[13px] font-headline font-bold">Daily Report</span></div>
+        <div class="p-4">
+          <div class="grid grid-cols-3 gap-2.5">
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:rgba(26,82,82,0.07)"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Sales</div><div class="font-headline font-bold text-lg text-primary mt-0.5">$1,240</div></div>
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tips</div><div class="font-headline font-bold text-lg mt-0.5">$186</div></div>
+            <div class="rounded-lg px-2 py-2.5 text-center" style="background:#fff;border:1px solid #e4eae9"><div class="text-[9px] uppercase tracking-wide text-on-surface-variant">Tickets</div><div class="font-headline font-bold text-lg mt-0.5">28</div></div>
+          </div>
+          <table class="w-full mt-4 text-xs">
+            <thead><tr class="text-on-surface-variant"><th class="text-left font-semibold pb-1.5">Tech</th><th class="text-right font-semibold pb-1.5">Turns</th><th class="text-right font-semibold pb-1.5">Billed</th></tr></thead>
+            <tbody>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Amy</td><td class="py-1.5 text-right text-on-surface-variant">6.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$410</td></tr>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Bao</td><td class="py-1.5 text-right text-on-surface-variant">5.0</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$355</td></tr>
+              <tr style="border-top:1px solid #e4eae9"><td class="py-1.5">Chi</td><td class="py-1.5 text-right text-on-surface-variant">4.5</td><td class="py-1.5 text-right font-headline font-semibold text-primary">$300</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Payments ═══ -->
+<section id="payments" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">credit_card</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Payments</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Your processor. A better rate.</h2>
+      <p class="text-sm text-on-surface-variant leading-relaxed mb-4">No forced processor and no lock-in — TurnDesk works with your card processing instead of taking a cut of it. Card processing as low as ~1.8% effective, well under the usual 2.6% + 15¢. Gift cards sell and redeem at the same checkout.</p>
+      <ul class="space-y-2 text-sm text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Card processing as low as ~1.8% effective</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>TurnDesk adds no per-transaction cut of its own</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Gift cards built into checkout</span></li>
+      </ul>
+      <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+        <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">During the beta:</span> new salons start with cash/manual checkout; card-processor hookup is arranged individually as we roll it out.</p>
+      </div>
+    </div>
+    <div class="reveal max-w-sm w-full mx-auto md:justify-self-end">
+      <div class="rounded-2xl overflow-hidden w-full border border-surface-high shadow-sm hover-lift" style="background:#f5f7f8">
+        <div class="flex items-center gap-2 px-4 py-3" style="background:#fff;border-bottom:1px solid #e4eae9"><span class="material-symbols-outlined text-primary" style="font-size:18px">credit_card</span><span class="text-[13px] font-headline font-bold">Effective rate</span></div>
+        <div class="p-4">
+          <div class="flex items-end gap-3">
+            <div><p class="text-[30px] leading-none font-headline font-extrabold text-primary">~1.8%</p>
+              <p class="text-[10px] text-on-surface-variant mt-1.5">card processing · no added per-txn fee</p></div>
+            <div class="flex-1 pl-3" style="border-left:1px solid #e4eae9">
+              <p class="text-[17px] leading-none font-headline font-semibold line-through text-on-surface-variant">2.6% + 15¢</p>
+              <p class="text-[10px] text-on-surface-variant mt-1.5">typical processor</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Text Updates ═══ -->
+<section id="texting" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="reveal max-w-3xl">
+    <span class="inline-flex items-center gap-2 mb-3">
+      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">sms</span></span>
+      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Text Updates</span>
+    </span>
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Customers stay in the loop.</h2>
+    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Texting is part of the front desk itself — not a bolted-on marketing upsell, not metered, not a separate tier. The built-in sending is live today; putting it everywhere it belongs is what’s next.</p>
+    <ul class="space-y-2 text-sm text-on-surface-variant">
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Built in — not metered, not a separate tier</span></li>
+    </ul>
+    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> texting a customer straight from their profile, plus automatic status and appointment texts — the sending works today; these are what’s coming next.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Smart Booking ═══ -->
+<section id="booking" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="reveal max-w-3xl">
+    <span class="inline-flex items-center gap-2 mb-3">
+      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">event_available</span></span>
+      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Smart Booking</span>
+    </span>
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Booking that protects your day.</h2>
+    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Instead of a calendar anyone can pile onto, booking that’s aware of how your day actually runs — nudging appointments toward quiet stretches and holding the line on your busiest ones.</p>
+    <ul class="space-y-2 text-sm text-on-surface-variant">
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>24/7 booking from a customer’s phone</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Steers bookings toward your slow hours</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Guards against overbooking your busiest times</span></li>
+    </ul>
+    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> this whole feature is in active development — not live yet. We’re building it properly rather than rushing it onto the page.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ AI Insights ═══ -->
+<section id="ai" class="scroll-mt-24 max-w-6xl mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="reveal max-w-3xl">
+    <span class="inline-flex items-center gap-2 mb-3">
+      <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">insights</span></span>
+      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">AI Insights</span>
+    </span>
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold mb-3">Answers, not just spreadsheets.</h2>
+    <p class="text-sm text-on-surface-variant leading-relaxed mb-4">Instead of copying figures into a separate chatbot, ask about your own reports right where they live — “which day was slowest last week?” — and get a plain-English read. It’s live on the dashboard today.</p>
+    <ul class="space-y-2 text-sm text-on-surface-variant">
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Ask in plain English, about your real numbers</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Live on the dashboard today</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Your data stays handled securely on our server</span></li>
+    </ul>
+    <div class="mt-5 rounded-xl bg-secondary-container/50 px-4 py-3">
+      <p class="text-xs text-on-secondary-container leading-snug"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px">schedule</span> <span class="font-semibold">Launching soon:</span> the same Ask button in the on-the-go phone app — the dashboard version is live today.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="max-w-4xl mx-auto px-5 py-14">
+  <div class="reveal rounded-3xl bg-primary-dim px-8 py-12 text-center">
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
+    <p class="text-primary-container mb-7 max-w-md mx-auto">Free during beta. No credit card, no pressure — set it up, or have us walk you through it live.</p>
+    <div class="flex flex-wrap gap-3 justify-center">
+      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="contact.html" class="border-[1.5px] border-primary-container text-primary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:bg-white/5 transition-colors">Request a live demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Footer ═══ -->
+<footer class="border-t border-surface-high">
+  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </div>
+    <nav class="flex flex-wrap gap-5 text-sm font-body text-on-surface-variant">
+      <a href="index.html" class="hover:text-primary">Home</a>
+      <a href="features.html" class="hover:text-primary">Features</a>
+      <a href="pricing.html" class="hover:text-primary">Pricing</a>
+      <a href="contact.html" class="hover:text-primary">Contact</a>
+      <a href="https://musenail.github.io/turndesk/" class="hover:text-primary">Sign in</a>
+    </nav>
+    <p class="text-xs text-on-surface-variant w-full md:w-auto">© 2026 TurnDesk · Free beta</p>
+  </div>
+</footer>
+
+<script src="assets/site.js?v=3"></script>
+</body>
+</html>

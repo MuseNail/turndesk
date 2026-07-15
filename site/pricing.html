@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — TurnDesk</title>
+<meta name="description" content="TurnDesk is free during the beta — everything it does today, no credit card, no contract. Pricing will be announced at launch, and beta salons hear it first.">
+<meta name="robots" content="index">
+<meta property="og:title" content="Pricing — TurnDesk">
+<meta property="og:description" content="Free during the beta — everything TurnDesk does today, no credit card. Pricing announced at launch; beta salons hear it first.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="assets/turndesk-appicon.svg">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Material+Symbols+Outlined&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { primary:'#1a5252','primary-dim':'#0f3d3d','primary-container':'#8fd4d3','on-primary':'#ffffff','on-primary-container':'#0a2e2e','secondary-container':'#f5c870','on-secondary-container':'#3a2800',surface:'#e8ecee','surface-lowest':'#f5f7f8','surface-high':'#c2cacd','on-surface':'#0b1f1f','on-surface-variant':'#4a5258' },
+  fontFamily: { headline:['Manrope','sans-serif'], body:['Inter','sans-serif'] },
+} } }
+</script>
+<!-- Mark JS as available BEFORE first paint, so the reveal-animation styles apply only when
+     JS can drive them. No JS → content is fully visible (progressive enhancement). -->
+<script>document.documentElement.classList.add('has-js')</script>
+<link rel="stylesheet" href="assets/site.css?v=4">
+<style>.material-symbols-outlined{font-variation-settings:'opsz' 24}</style>
+</head>
+<body class="bg-surface text-on-surface font-body">
+
+<!-- ═══ Header ═══ -->
+<header class="sticky top-0 z-40 border-b border-surface-high" style="background:rgba(232,236,238,.88);backdrop-filter:blur(8px)">
+  <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-2">
+      <span class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/><circle cx="32" cy="12" r="6" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.4" fill="#eafffb"/></svg>
+      </span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-7 text-sm font-body font-semibold text-on-surface-variant">
+      <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+      <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+      <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+      <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    </nav>
+    <div class="hidden md:flex items-center gap-3">
+      <a href="https://musenail.github.io/turndesk/" class="text-sm font-body font-semibold text-on-surface-variant hover:text-primary">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="text-sm font-headline font-semibold text-on-primary bg-primary rounded-lg px-4 py-2 hover:opacity-90 transition-opacity">Start free beta</a>
+    </div>
+    <button id="menu-btn" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-surface-high" aria-label="Menu" aria-expanded="false" aria-controls="mobile-menu"><span class="material-symbols-outlined">menu</span></button>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden border-t border-surface-high px-5 py-4 flex flex-col gap-3 text-sm font-body font-semibold">
+    <a data-nav="index.html" href="index.html" class="nav-link hover:text-primary">Home</a>
+    <a data-nav="features.html" href="features.html" class="nav-link hover:text-primary">Features</a>
+    <a data-nav="pricing.html" href="pricing.html" class="nav-link hover:text-primary">Pricing</a>
+    <a data-nav="contact.html" href="contact.html" class="nav-link hover:text-primary">Contact</a>
+    <div class="flex gap-3 pt-2">
+      <a href="https://musenail.github.io/turndesk/" class="flex-1 text-center border border-primary text-primary rounded-lg px-4 py-2.5">Sign in</a>
+      <a href="https://musenail.github.io/turndesk/signup.html" class="flex-1 text-center bg-primary text-on-primary rounded-lg px-4 py-2.5">Start free beta</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ Intro ═══ -->
+<section class="max-w-6xl mx-auto px-5 pt-14 pb-4 text-center">
+  <p class="reveal text-xs font-headline font-bold tracking-wide uppercase text-primary mb-1">Pricing</p>
+  <h1 class="reveal text-3xl md:text-4xl font-headline font-extrabold leading-tight mb-3">Free during the beta. Honestly free.</h1>
+  <p class="reveal text-sm text-on-surface-variant max-w-xl mx-auto">No invented tiers, no asterisks. We’re building TurnDesk with real salons, and the beta is how we do it.</p>
+</section>
+
+<!-- ═══ Free beta card ═══ -->
+<section class="max-w-6xl mx-auto px-5 py-10">
+  <div class="reveal max-w-lg mx-auto rounded-3xl bg-surface-lowest border border-surface-high shadow-sm p-8">
+    <div class="flex items-baseline justify-between mb-1">
+      <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Free beta</span>
+      <span class="bg-secondary-container text-on-secondary-container text-[11px] font-headline font-bold tracking-wide uppercase px-3 py-1 rounded-full">Now onboarding</span>
+    </div>
+    <p class="text-5xl font-headline font-extrabold text-on-surface">$0<span class="text-base font-bold text-on-surface-variant"> during the beta</span></p>
+    <ul class="space-y-2.5 text-sm text-on-surface-variant mt-6 mb-7">
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Everything TurnDesk does today — no feature tiers</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>No credit card, no contract</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>Runs on the tablets, phones, and computers you already have</span></li>
+      <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>We help you set up — or walk you through it live first</span></li>
+    </ul>
+    <a href="https://musenail.github.io/turndesk/signup.html" class="block w-full text-center bg-primary text-on-primary text-sm font-headline font-semibold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Request access</a>
+    <p class="text-[11px] text-on-surface-variant text-center mt-3">We review each request and send your salon’s sign-in link — no self-serve instant start yet.</p>
+  </div>
+</section>
+
+<!-- ═══ How starting works ═══ -->
+<section class="max-w-6xl mx-auto px-5 py-10 border-t border-surface-high">
+  <h2 class="reveal text-center text-2xl font-headline font-extrabold mb-8">How starting works</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+    <div class="reveal bg-surface-lowest rounded-xl p-5 border border-surface-high">
+      <span class="w-8 h-8 rounded-full bg-primary text-on-primary font-headline font-bold text-sm flex items-center justify-center mb-3">1</span>
+      <p class="font-headline font-bold text-sm mb-1">Request access</p>
+      <p class="text-xs text-on-surface-variant leading-relaxed">Tell us about your salon in the sign-up form — or <a href="contact.html" class="underline hover:text-primary">ask for a live demo</a> first.</p>
+    </div>
+    <div class="reveal bg-surface-lowest rounded-xl p-5 border border-surface-high">
+      <span class="w-8 h-8 rounded-full bg-primary text-on-primary font-headline font-bold text-sm flex items-center justify-center mb-3">2</span>
+      <p class="font-headline font-bold text-sm mb-1">We review and set you up</p>
+      <p class="text-xs text-on-surface-variant leading-relaxed">We look at each request personally, then send your salon’s own sign-in link.</p>
+    </div>
+    <div class="reveal bg-surface-lowest rounded-xl p-5 border border-surface-high">
+      <span class="w-8 h-8 rounded-full bg-primary text-on-primary font-headline font-bold text-sm flex items-center justify-center mb-3">3</span>
+      <p class="font-headline font-bold text-sm mb-1">Run your front desk on it</p>
+      <p class="text-xs text-on-surface-variant leading-relaxed">Your team signs in with PINs on the devices you already own. We help with setup.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Honesty blocks ═══ -->
+<section class="max-w-6xl mx-auto px-5 py-10 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
+    <div class="reveal bg-surface-lowest rounded-xl p-6 border border-surface-high">
+      <span class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary" style="font-size:20px">campaign</span><span class="font-headline font-extrabold">What happens at launch</span></span>
+      <p class="text-sm text-on-surface-variant leading-relaxed">Pricing will be announced at launch — beta salons hear it first, with advance notice before anything changes. No surprise charges: there’s no card on file to charge.</p>
+    </div>
+    <div class="reveal bg-surface-lowest rounded-xl p-6 border border-surface-high">
+      <span class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary" style="font-size:20px">credit_card</span><span class="font-headline font-extrabold">About card processing</span></span>
+      <p class="text-sm text-on-surface-variant leading-relaxed">Card processing is separate from TurnDesk: those fees go to your card processor, and TurnDesk adds no per-transaction cut of its own. During the beta, new salons start with cash/manual checkout; card-processor hookup is arranged individually as we roll it out.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FAQ ═══ -->
+<section class="max-w-3xl mx-auto px-5 py-10 border-t border-surface-high">
+  <h2 class="reveal text-center text-2xl font-headline font-extrabold mb-8">Fair questions</h2>
+  <div class="space-y-3">
+    <details class="reveal bg-surface-lowest rounded-xl border border-surface-high px-5 py-4">
+      <summary class="font-headline font-bold text-sm cursor-pointer">Is it really free?</summary>
+      <p class="text-sm text-on-surface-variant leading-relaxed mt-2">Yes. During the beta there’s nothing to pay and no card on file — your feedback is what we’re asking for. We’re building TurnDesk alongside real salons, and that’s worth more to us right now than a subscription.</p>
+    </details>
+    <details class="reveal bg-surface-lowest rounded-xl border border-surface-high px-5 py-4">
+      <summary class="font-headline font-bold text-sm cursor-pointer">How do I start, and how long does it take?</summary>
+      <p class="text-sm text-on-surface-variant leading-relaxed mt-2">You request access with the sign-up form, we review it personally, and we send your salon’s own sign-in link. It’s not an instant self-serve start — a real person sets your salon up and helps you get going.</p>
+    </details>
+    <details class="reveal bg-surface-lowest rounded-xl border border-surface-high px-5 py-4">
+      <summary class="font-headline font-bold text-sm cursor-pointer">What happens when the beta ends?</summary>
+      <p class="text-sm text-on-surface-variant leading-relaxed mt-2">We announce pricing before anything changes — beta salons hear it first, with advance notice. Nothing gets charged automatically because there’s no payment method on file to charge.</p>
+    </details>
+    <details class="reveal bg-surface-lowest rounded-xl border border-surface-high px-5 py-4">
+      <summary class="font-headline font-bold text-sm cursor-pointer">Do I need special hardware?</summary>
+      <p class="text-sm text-on-surface-variant leading-relaxed mt-2">No. TurnDesk runs in the browser on what you already have — a tablet or computer at the front desk, and your technicians' own phones. There’s no proprietary hardware to buy.</p>
+    </details>
+    <details class="reveal bg-surface-lowest rounded-xl border border-surface-high px-5 py-4">
+      <summary class="font-headline font-bold text-sm cursor-pointer">What about card processing fees?</summary>
+      <p class="text-sm text-on-surface-variant leading-relaxed mt-2">Those are between you and your card processor — TurnDesk doesn’t add a per-transaction cut of its own. During the beta, new salons start with cash/manual checkout while card-processor hookup is arranged individually.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="max-w-4xl mx-auto px-5 py-14">
+  <div class="reveal rounded-3xl bg-primary-dim px-8 py-12 text-center">
+    <h2 class="text-2xl md:text-3xl font-headline font-extrabold text-on-primary mb-2">Start your salon on TurnDesk.</h2>
+    <p class="text-primary-container mb-7 max-w-md mx-auto">Free during beta. No credit card, no pressure — set it up, or have us walk you through it live.</p>
+    <div class="flex flex-wrap gap-3 justify-center">
+      <a href="https://musenail.github.io/turndesk/signup.html" class="bg-secondary-container text-on-secondary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:opacity-90 transition-opacity">Start free beta</a>
+      <a href="contact.html" class="border-[1.5px] border-primary-container text-primary-container text-sm font-headline font-bold rounded-xl px-6 py-3.5 hover:bg-white/5 transition-colors">Request a live demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Footer ═══ -->
+<footer class="border-t border-surface-high">
+  <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-6 items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="w-7 h-7 rounded-lg bg-primary flex items-center justify-center"><svg width="17" height="17" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3.5"/><circle cx="32" cy="12" r="6.5" fill="#f5c870"/><circle cx="49.3" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.6" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.6" fill="#8fd4d3"/><circle cx="32" cy="32" r="5.6" fill="#eafffb"/></svg></span>
+      <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
+    </div>
+    <nav class="flex flex-wrap gap-5 text-sm font-body text-on-surface-variant">
+      <a href="index.html" class="hover:text-primary">Home</a>
+      <a href="features.html" class="hover:text-primary">Features</a>
+      <a href="pricing.html" class="hover:text-primary">Pricing</a>
+      <a href="contact.html" class="hover:text-primary">Contact</a>
+      <a href="https://musenail.github.io/turndesk/" class="hover:text-primary">Sign in</a>
+    </nav>
+    <p class="text-xs text-on-surface-variant w-full md:w-auto">© 2026 TurnDesk · Free beta</p>
+  </div>
+</footer>
+
+<script src="assets/site.js?v=3"></script>
+</body>
+</html>
