@@ -412,18 +412,17 @@ export function renderTurnsTechGrid() {
     if (allAssign.some(a => getAssignmentStatus(a.entry, a.assignment) === 'inservice')) activeCount++;
     const sc = getTechStatusColor(staffId);
     const isNextUp = staffId === nextUpId;
-    // Availability chip for the rotation column. GREEN is reserved for IN-SERVICE only (so it
-    // never collides with an in-service turn slot): an available tech reads as a teal OUTLINE
-    // chip, a busy tech as a green "Working now" chip, and the AVAILABLE tech due for the next
-    // walk-in gets a single filled teal "Next up" chip — replacing the plain Available pill, no
-    // separate badge. getTechStatusColor itself is left unchanged so the floor plan / history
-    // keep their existing colors + labels.
+    // Availability chip for the rotation column — matched to the FLOOR PLAN's color language so
+    // the two views agree: IN-SERVICE ("Working now") = red (busy), AVAILABLE = green (free). It
+    // used to be green-for-working + teal-for-available, which read as "both green." The available
+    // tech due for the next walk-in still gets the filled teal "Next up" chip. getTechStatusColor
+    // already uses this red/green on the floor; this brings the Turns chip in line.
     const _dot = c => `<span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block"></span>`;
     const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', lead: _dot('#b0b6ba'), label: 'Off' }
                  : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', lead: _dot('#e0a83a'), label: 'On break' }
-                 : sc.label === 'In Service' ? { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', lead: _dot('#2a7a4f'), label: 'Working now' }
+                 : sc.label === 'In Service' ? { ring: '#fa746f', chip: 'background:#fdecea;color:#c0362f', lead: _dot('#fa746f'), label: 'Working now' }
                  : isNextUp                  ? { ring: '#1a5252', chip: 'background:#1a5252;color:#fff', lead: `<span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>`, label: 'Next up' }
-                 :                             { ring: '#1a5252', chip: 'background:#fff;border:1px solid #b9c8c2;color:#1a5252', lead: _dot('#1a5252'), label: 'Available' };
+                 :                             { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', lead: _dot('#2a7a4f'), label: 'Available' };
     const photo = st.photo
       ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${avPres.ring}">`
       : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${avPres.ring}20;border-color:${avPres.ring};color:${avPres.ring}">${st.name.charAt(0).toUpperCase()}</div>`;
