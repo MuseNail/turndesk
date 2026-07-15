@@ -143,7 +143,28 @@ tailwind.config = { theme: { extend: {
     <div class="reveal w-full md:justify-self-start">
       <figure class="appshot hover-lift">
         <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
-        <div class="appshot__frame"><img src="assets/screens/checkin.png" alt="TurnDesk walk-in check-in kiosk" style="object-position:top center" loading="lazy"></div>
+        <div class="appshot__body">
+          <div class="flex items-center gap-2 mb-3 px-0.5"><span class="material-symbols-outlined text-primary" style="font-size:18px">how_to_reg</span><span class="text-[13px] font-headline font-extrabold text-on-surface">Walk-In Check-In</span><span class="ml-auto text-[10px] font-body font-semibold text-on-surface-variant">Guest 1</span></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-2">
+              <div><div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1">Phone</div><div class="rounded-lg px-3 py-2 text-[12px] font-semibold text-on-surface" style="background:#fff;border:1px solid #e4eae9">(909) 555-0148</div></div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1">First</div><div class="rounded-lg px-3 py-2 text-[12px] font-semibold text-on-surface" style="background:#fff;border:1px solid #e4eae9">Jane</div></div>
+                <div><div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1">Last</div><div class="rounded-lg px-3 py-2 text-[12px] font-semibold text-on-surface" style="background:#fff;border:1px solid #e4eae9">Smith</div></div>
+              </div>
+            </div>
+            <div>
+              <div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1.5">Select services</div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <div class="rounded-lg px-2 py-2 text-center leading-tight" style="background:#1a5252;color:#fff"><div class="text-[10px] font-headline font-bold">GEL</div><div class="text-[7.5px] opacity-90">Gel Manicure</div></div>
+                <div class="rounded-lg px-2 py-2 text-center leading-tight" style="background:#eef2f1;color:#4a5258"><div class="text-[10px] font-headline font-bold">PEDI</div><div class="text-[7.5px]">Pedicure</div></div>
+                <div class="rounded-lg px-2 py-2 text-center leading-tight" style="background:#eef2f1;color:#4a5258"><div class="text-[10px] font-headline font-bold">DIP</div><div class="text-[7.5px]">Dip Powder</div></div>
+                <div class="rounded-lg px-2 py-2 text-center leading-tight" style="background:#eef2f1;color:#4a5258"><div class="text-[10px] font-headline font-bold">ACRF</div><div class="text-[7.5px]">Full Set</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-xl mt-3 py-2.5 text-center text-[12px] font-headline font-bold flex items-center justify-center gap-1" style="background:#1a5252;color:#fff">Check In <span class="material-symbols-outlined" style="font-size:14px">arrow_forward</span></div>
+        </div>
       </figure>
     </div>
   </div>
@@ -168,7 +189,28 @@ tailwind.config = { theme: { extend: {
     <div class="reveal w-full md:justify-self-end">
       <figure class="appshot hover-lift">
         <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
-        <div class="appshot__frame"><img src="assets/screens/floorplan.png" alt="TurnDesk floor plan — stations and staff" style="object-position:top left" loading="lazy"></div>
+        <div class="appshot__body">
+          <div class="flex items-center gap-2 mb-3 px-0.5"><span class="material-symbols-outlined text-primary" style="font-size:18px">chair</span><span class="text-[13px] font-headline font-extrabold text-on-surface">Floor Plan</span></div>
+          <div class="grid grid-cols-4 gap-1.5 mb-1.5">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:44px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:2px;left:5px;font-size:7px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 1</span><span class="text-[10px] font-semibold" style="color:#1f2937;margin-top:5px">Jane</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:44px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[9px] font-headline font-extrabold" style="color:#93a09c">Mani 2</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:44px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:2px;left:5px;font-size:7px;font-weight:700;color:#2a7a4f;opacity:.7">Mani 3</span><span class="text-[10px] font-semibold" style="color:#1f2937;margin-top:5px">Ashley</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:44px;border:2px solid #1a5c7a;background:#d3e4ef"><span class="absolute" style="top:2px;left:5px;font-size:7px;font-weight:700;color:#1a5c7a;opacity:.7">Mani 4</span><span class="text-[10px] font-semibold" style="color:#1f2937;margin-top:5px">Nina</span></div>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5 mb-3">
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:44px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:2px;left:5px;font-size:7px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 1</span><span class="text-[10px] font-semibold" style="color:#1f2937;margin-top:5px">Megan</span></div>
+            <div class="rounded-lg relative flex flex-col justify-center px-1.5" style="height:44px;border:2px solid #2a7a4f;background:#d8ecdf"><span class="absolute" style="top:2px;left:5px;font-size:7px;font-weight:700;color:#2a7a4f;opacity:.7">Pedi 2</span><span class="text-[10px] font-semibold" style="color:#1f2937;margin-top:5px">Brianna</span></div>
+            <div class="rounded-lg flex items-center justify-center" style="height:44px;border:2px solid #cdd8d5;background:#eef2f1"><span class="text-[9px] font-headline font-extrabold" style="color:#93a09c">Pedi 3</span></div>
+          </div>
+          <div class="flex items-center justify-center gap-2 pt-2" style="border-top:1px solid #e4eae9">
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #fa746f;background:#fa746f1a;color:#fa746f">L</div>
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #fa746f;background:#fa746f1a;color:#fa746f">M</div>
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #2a7a4f;background:#2a7a4f1a;color:#2a7a4f">T</div>
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #fa746f;background:#fa746f1a;color:#fa746f">K</div>
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #2a7a4f;background:#2a7a4f1a;color:#2a7a4f">S</div>
+            <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-headline font-bold" style="border:2px solid #fa746f;background:#fa746f1a;color:#fa746f">A</div>
+          </div>
+        </div>
       </figure>
     </div>
   </div>
@@ -196,7 +238,25 @@ tailwind.config = { theme: { extend: {
     <div class="reveal w-full md:justify-self-start">
       <figure class="appshot hover-lift">
         <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
-        <div class="appshot__frame"><img src="assets/screens/reports.png" alt="TurnDesk reports and payroll" style="object-position:top center" loading="lazy"></div>
+        <div class="appshot__body">
+          <div class="flex items-center justify-between mb-2.5 px-0.5"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary" style="font-size:18px">bar_chart</span><span class="text-[13px] font-headline font-extrabold text-on-surface">Today · Reports</span></div><span class="text-[10px] font-body font-semibold text-on-surface-variant">Tue, Jul 14</span></div>
+          <div class="grid grid-cols-3 gap-2 mb-2">
+            <div class="rounded-lg px-2.5 py-2" style="background:rgba(26,82,82,0.07)"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Collected</div><div class="flex items-baseline gap-1"><span class="text-[15px] font-headline font-bold text-primary leading-tight">$1,540</span><span class="text-[7.5px] font-bold" style="color:#1b8a4b">▲123%</span></div></div>
+            <div class="rounded-lg px-2.5 py-2" style="background:#fff;border:1px solid #e4eae9"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Guests</div><div class="flex items-baseline gap-1"><span class="text-[15px] font-headline font-bold text-on-surface leading-tight">33</span><span class="text-[7.5px] font-bold" style="color:#1b8a4b">▲175%</span></div></div>
+            <div class="rounded-lg px-2.5 py-2" style="background:#fff;border:1px solid #e4eae9"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Tips</div><div class="text-[15px] font-headline font-bold text-on-surface leading-tight">$115</div></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mb-3">
+            <div class="rounded-lg px-2.5 py-1.5" style="background:#fff;border:1px solid #e4eae9"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Card</div><div class="text-[12px] font-headline font-bold text-on-surface">$748</div></div>
+            <div class="rounded-lg px-2.5 py-1.5" style="background:#fff;border:1px solid #e4eae9"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Cash</div><div class="text-[12px] font-headline font-bold text-on-surface">$346</div></div>
+            <div class="rounded-lg px-2.5 py-1.5" style="background:#fff;border:1px solid #e4eae9"><div class="text-[8px] font-body uppercase tracking-wide text-on-surface-variant">Avg ticket</div><div class="text-[12px] font-headline font-bold text-on-surface">$43</div></div>
+          </div>
+          <div class="rounded-lg p-2.5" style="background:#fff;border:1px solid #e4eae9">
+            <div class="text-[9px] font-body font-semibold text-on-surface-variant mb-1.5">Revenue by hour · busiest 6 PM</div>
+            <svg viewBox="0 0 320 70" class="w-full" style="height:56px" aria-hidden="true">
+              <g fill="#1a5252"><rect x="6" y="30" width="18" height="40" rx="2"/><rect x="32" y="52" width="18" height="18" rx="2"/><rect x="58" y="38" width="18" height="32" rx="2"/><rect x="84" y="58" width="18" height="12" rx="2"/><rect x="110" y="22" width="18" height="48" rx="2"/><rect x="136" y="56" width="18" height="14" rx="2"/><rect x="162" y="40" width="18" height="30" rx="2"/><rect x="188" y="48" width="18" height="22" rx="2"/><rect x="214" y="10" width="18" height="60" rx="2" fill="#0f3d3d"/><rect x="240" y="42" width="18" height="28" rx="2"/><rect x="266" y="44" width="18" height="26" rx="2"/><rect x="292" y="34" width="18" height="36" rx="2"/></g>
+            </svg>
+          </div>
+        </div>
       </figure>
     </div>
   </div>
@@ -224,7 +284,28 @@ tailwind.config = { theme: { extend: {
     <div class="reveal w-full md:justify-self-end">
       <figure class="appshot hover-lift">
         <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
-        <div class="appshot__frame"><img src="assets/screens/payments.png" alt="TurnDesk checkout and payment" style="object-position:center" loading="lazy"></div>
+        <div class="appshot__body">
+          <div class="flex items-center gap-2 mb-3 px-0.5"><span class="material-symbols-outlined text-primary" style="font-size:18px">credit_card</span><span class="text-[13px] font-headline font-extrabold text-on-surface">Checkout</span><span class="ml-auto text-[10px] font-body font-semibold text-on-surface-variant">Jessica Tran</span></div>
+          <div class="rounded-xl p-3 mb-3" style="background:#fff;border:1px solid #e4eae9">
+            <div class="flex items-center justify-between text-[11px] mb-1.5"><span class="text-on-surface">Gel Manicure</span><span class="font-headline font-semibold text-on-surface">$38.00</span></div>
+            <div class="flex items-center justify-between text-[11px] mb-1.5"><span class="text-on-surface-variant">Tip · 20%</span><span class="font-headline font-semibold text-on-surface-variant">$7.60</span></div>
+            <div class="flex items-center justify-between pt-1.5 mt-0.5" style="border-top:1px solid #e4eae9"><span class="text-[12px] font-headline font-bold text-on-surface">Total</span><span class="text-[15px] font-headline font-extrabold text-primary">$45.60</span></div>
+          </div>
+          <div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1.5">Tip</div>
+          <div class="grid grid-cols-4 gap-1.5 mb-3">
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#eef2f1;color:#4a5258">18%</div>
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#1a5252;color:#fff">20%</div>
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#eef2f1;color:#4a5258">25%</div>
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#eef2f1;color:#4a5258">Custom</div>
+          </div>
+          <div class="text-[8.5px] font-body font-semibold uppercase tracking-wide text-on-surface-variant mb-1.5">Payment</div>
+          <div class="grid grid-cols-3 gap-1.5 mb-3">
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold inline-flex items-center justify-center gap-1" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:13px">credit_card</span>Card</div>
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#eef2f1;color:#4a5258">Cash</div>
+            <div class="rounded-lg py-1.5 text-center text-[11px] font-headline font-bold" style="background:#eef2f1;color:#4a5258">Gift</div>
+          </div>
+          <div class="rounded-xl py-2.5 text-center text-[12px] font-headline font-bold" style="background:#1a5252;color:#fff">Charge $45.60</div>
+        </div>
       </figure>
     </div>
   </div>
