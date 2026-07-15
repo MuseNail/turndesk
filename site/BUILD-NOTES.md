@@ -24,14 +24,17 @@ visual is a **restyled HTML/SVG recreation** inside a `.appshot` browser-window 
 flavored but deliberately NOT a pixel copy (different names, "Chair N" vs station codes, tighter
 rows). Built from owner-sent reference screenshots. The old `assets/screens/*.png` slots + the
 `assets/screens/` folder were REMOVED — no PNGs are needed. features.html visuals:
-- **Turn Board** — busy midday grid (6 techs × service tokens, done/in-service/half colors, +Nb bonus badges)
-- **Check-In** — walk-in form (phone/name/service chips/Check In)
-- **Floor Plan** — Mani/Pedi stations + simplified guest cards (name only) + tech-avatar row
+- **Turn Board** — 5 techs, each row a set of per-turn mini-cards showing **customer name + turn number + service + price** (done = soft-green, in-service = teal "now", half = cream 3½; +Nb bonus badge in the tech column). Enriched 2026-07-15 from the old service-token grid so it shows the detail that sets TurnDesk apart.
+- **Check-In** — walk-in form (phone/name/service chips/Check In). ⬜ owner wants BOTH check-in screens shown (kiosk welcome + form) — pending the reference images.
+- **Floor Plan** — **FULL-WIDTH** rendering (its own section is full-bleed, not the 2-col split) that mirrors the real app screen: a "Not seated — drag onto a station (3)" chip bar, **P1–P12 pedi pill columns** (left P1–P6 / right P7–P12, top two occupied w/ service·tech·price + timer), a **M1–M15 mani grid** (M1/M5/M7 occupied w/ service·tech·price + timer + corner code), and a **tech turn bar** (turn-count badges + red "In Service" / green "Available" + "↑ Next"). Rebuilt 2026-07-15 from the owner's screen clip. Mani grid uses `repeat(5,minmax(0,1fr))` for even columns; wrapper `min-width:860px` inside `overflow-x:auto` so it scrolls on phones.
 - **Reports & Payroll** — metrics strip + compact Staff Breakdown (commission per tech) + Top Services
 - **Payments** — checkout modal (line items / tip% / tender / Charge)
 - **Text Updates** SVG — appointment reminder · **Smart Booking** SVG — multi-staff day calendar · **AI Insights** SVG — ask-your-data
 - The 3 Home "See it in action" windows are compact renderings of Turns / Floor / Report.
 - All reflect the app's new color language: **red = Working now, green = Available** (see the app hotfix below).
+
+### Type scale (unified 2026-07-15)
+Page/hero **H1** stay largest — home hero `text-4xl md:text-5xl` (48), features intro H1 `text-[2rem] md:text-[2.6rem]` (~42) `leading-[1.1] tracking-tight`. **Section H2s** (both pages) are the clear second level: `text-2xl md:text-3xl font-headline font-extrabold tracking-tight` (~30). Before this, section H2s were `md:text-4xl` (36) and — wrapping to 3 lines in the narrow half-columns — read as big as (or bigger than) the page title, which looked "off." Keep new H2s ≤ H1 when adding sections.
 
 ### Cosmetic + honesty notes (shipped)
 - Container widened `max-w-6xl`(1152)→`max-w-[1400px]`; prose type bumped (hero 48px, body 16px);
