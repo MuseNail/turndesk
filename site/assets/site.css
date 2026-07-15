@@ -26,6 +26,9 @@ html { scroll-behavior: smooth; }
 .appshot__dot { width: 10px; height: 10px; border-radius: 50%; background: #cfd8d7; flex: none; }
 .appshot__frame { aspect-ratio: 16 / 10; overflow: hidden; background: #eef2f1; }
 .appshot__frame img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+/* Rendered (not photographed) product view inside the window frame — a stylized recreation
+   of the real screen, deliberately not a pixel copy of the app UI. */
+.appshot__body { padding: 16px; background: #f4f7f7; }
 
 /* Designed illustration (features not yet shipped — Text/Booking/AI). Distinct from the
    framed real screenshots so it never reads as a fake product screenshot. */
