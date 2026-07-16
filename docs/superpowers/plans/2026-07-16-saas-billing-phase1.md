@@ -163,3 +163,35 @@ Contents: (a) two flag checkboxes with live save + a red "enforcement" warning l
 - Spec coverage: §2 flags/overrides→Tasks 3,5; §3 tiers→Task 3 seed; §4 storage/routes/operator→Tasks 2,5,6,7; §5 gating→explicitly Phase 2 (none built); §6 flows A/B/C→Tasks 5,6,8; §7 data model→Task 2 (+`lastFailureReason`, `achAuthorization`, `helcimCustomerCode` additions carried from §8); §8 NACHA→Task 6 `ach-authorize`; §8 concurrency→Task 4 fetch-before-RMW rule; §8 restore-resync→covered by reconcile-on-view (any restore is corrected on next view — note in addendum); webhook items→superseded per addendum.
 - Placeholders: none — every handler named with request/response shapes; seed numbers explicit.
 - Type consistency: `priceCents` everywhere internal; dollars only inside `helcimSubscribe`; `status` enum identical across Tasks 2/4/5/6.
+
+---
+
+## ⚠️ Before flipping `selfserveBillingEnabled` (or `enforcementEnabled`) — must-close gate
+
+Phase 1 shipped with both flags OFF. Two rounds of code review (3-lens + senior) confirmed
+nothing charges anyone while the flags are off. These items are UNREACHABLE in that state but
+MUST be closed before turning self-serve billing on:
+
+1. **Pricing-page rewrite** (`site/pricing.html`) — the live copy still promises "no card on
+   file to charge"; that becomes false the instant a real charge can happen. Rewrite it (and
+   send the beta salons advance notice: in-app push + email) BEFORE the flip.
+2. **Verify the HelcimPay verify-mode response shape against a real sandbox capture** — the
+   `verify-complete` hash reconstruction and the card-vs-ACH detection (`data.bankToken` etc.)
+   are best-effort against an unconfirmed shape. Capture one real card AND one real ACH verify
+   response, confirm exactly which field is signed and its bank-vs-card marker, and lock a
+   fixture test. (worker.js `handleBilling` verify-complete; billing.js message handler.)
+3. **Atomic per-account subscribe claim** — a true CONCURRENT double-subscribe (two requests
+   racing before either writes `helcimSubscriptionId`) can still mint two live Helcim
+   subscriptions. Callers guard the sequential case and `billingDoSubscribe` undoes a
+   cancel-during-subscribe, but the concurrent double needs a compare-and-set claim in the DO
+   (a `/bdo/subscribe-claim` that refuses if one is set) taken BEFORE `helcimSubscribe`, like
+   the `mut:`/idempotency-key pattern. Add a concurrency regression test alongside.
+4. **Confirm Helcim's non-prorated next-cycle plan-change API** and wire the live amount change
+   (Phase 2) — today an already-subscribed paid→paid switch only records intent (`pending`).
+
+## Deferred to Phase 2 (by design — not built)
+
+Enforcement gate + tier feature/capacity gating (spec §5), trial/grace reminders, degraded-then-
+hard lock UX, the E1/E2 shared-Helcim-account per-tenant isolation fix (separate workstream), and
+a salon-facing self-serve cancel/revoke control (today cancel is operator-only; the ACH text was
+corrected to say "contact TurnDesk", not cite a control that doesn't exist yet).
