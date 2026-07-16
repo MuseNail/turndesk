@@ -1319,6 +1319,128 @@ export async function handleOperator(request, env, url, method, path) {
       return json(await r.json().catch(() => ({ ok: r.ok })), r.status);
     }
   }
+
+  // ── SaaS billing (Phase 1 — operator controls; nothing here enforces anything) ──
+  const getAccount = async slug => (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(slug))).account || null;
+  const putAccount = async account => bdoPost(env, '/bdo/account-put', { account });
+  const hist = (account, event, note) => ({ ...account, history: [...(account.history || []), { event, at: Date.now(), amountCents: null, invoiceId: null, failureReason: null, note: note || '', helcimPaymentId: null }] });
+
+  if (path === '/operator/billing/overview' && method === 'GET') {
+    const plans = await billingPlansEnsureSeed(env);
+    const flags = await billingFlags(env);
+    const accounts = (await bdoGet(env, '/bdo/accounts-get')).accounts || [];
+    const lr = await registryStub(env).fetch(new Request('https://do/registry/list'));
+    const salons = (await lr.json().catch(() => ({ salons: [] }))).salons || [];
+    const names = Object.fromEntries(salons.map(s => [s.slug, s.name]));
+    return json({ flags: { enforcementEnabled: flags.enforcementEnabled === true, selfserveBillingEnabled: flags.selfserveBillingEnabled === true }, plans, accounts: accounts.map(a => ({ ...a, salonName: names[a.accountId] || a.accountId })) });
+  }
+  if (path === '/operator/billing/flags' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await bdoPost(env, '/bdo/flags-put', { enforcementEnabled: b.enforcementEnabled, selfserveBillingEnabled: b.selfserveBillingEnabled });
+    return json(r);
+  }
+  // Create a plan (unknown planId) or edit one (price/capacity/features edits append a
+  // NEW version — savePlanEdit — so pinned subscribers never silently reprice).
+  if (path === '/operator/billing/plans' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const planId = String(b.planId || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{2,32}$/.test(planId)) return json({ error: 'planId must be 2–32 chars, lowercase/digits/hyphens' }, 400);
+    const plans = await billingPlansEnsureSeed(env);
+    let plan = plans.find(p => p.planId === planId);
+    if (!plan) {
+      plan = { planId, name: String(b.name || planId), visible: b.visible !== false, versions: [{ version: 1,
+        priceCents: b.priceCents ?? null, capacity: b.capacity || { maxStaffAccounts: null, maxCalendars: null },
+        features: b.features || {}, createdAt: Date.now() }] };
+    } else {
+      plan = savePlanEdit(plan, b);
+    }
+    await bdoPost(env, '/bdo/plan-put', { plan });
+    return json({ ok: true, plan });
+  }
+  if (path === '/operator/billing/assign' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const v = validateSlug(b.slug);
+    if (!v.ok) return json({ error: v.error }, 400);
+    const plans = await billingPlansEnsureSeed(env);
+    const plan = plans.find(p => p.planId === b.planId);
+    if (!plan) return json({ error: 'no such plan' }, 404);
+    const entry = await registryGet(env, v.slug);
+    if (!entry) return json({ error: 'no such salon' }, 404);
+    let account = await getAccount(v.slug);
+    if (!account) account = { accountId: v.slug, salonSlugs: [v.slug], status: 'trialing', trialEndsAt: null, compUntil: null, currentPeriodEnd: null, paymentMethodType: null, helcimCustomerId: null, helcimCustomerCode: null, helcimSubscriptionId: null, pastDueSince: null, lastFailureReason: null, achAuthorization: null, history: [] };
+    account.planId = plan.planId;
+    account.planVersion = currentVersion(plan).version;
+    account = hist(account, 'assign', plan.planId + ' v' + account.planVersion);
+    await putAccount(account);
+    entry.billingAccountId = account.accountId;
+    await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
+    return json({ ok: true, account });
+  }
+  if (path === '/operator/billing/trial' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const days = Number(b.days);
+    if (days !== 14 && days !== 30) return json({ error: 'trial is 14 or 30 days' }, 400);
+    let account = await getAccount(String(b.slug || ''));
+    if (!account) return json({ error: 'no billing account — assign a plan first' }, 404);
+    account.status = 'trialing';
+    account.trialEndsAt = Date.now() + days * 86400000;
+    account = hist(account, 'trial', days + 'd');
+    await putAccount(account);
+    return json({ ok: true, account });
+  }
+  if (path === '/operator/billing/comp' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const months = Number(b.months);
+    if (!(months >= 1 && months <= 3)) return json({ error: 'comp is 1–3 months' }, 400);
+    let account = await getAccount(String(b.slug || ''));
+    if (!account) return json({ error: 'no billing account — assign a plan first' }, 404);
+    account.status = 'comped';
+    account.compUntil = Date.now() + Math.round(months * 30.44 * 86400000);
+    account = hist(account, 'comp', months + 'mo');
+    await putAccount(account);
+    return json({ ok: true, account });
+  }
+  if (path === '/operator/billing/cancel' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    let account = await getAccount(String(b.slug || ''));
+    if (!account) return json({ error: 'no billing account' }, 404);
+    if (account.helcimSubscriptionId) await helcimCancelSubscription(env, account.helcimSubscriptionId);
+    account.status = 'canceled';
+    account = hist(account, 'cancel', '');
+    await putAccount(account);
+    return json({ ok: true, account });
+  }
+  // The deliberate operator test path (spec §6 flow A): a REAL Helcim subscription for one
+  // salon, by the owner's explicit action — the salon-facing path stays flag-gated.
+  if (path === '/operator/billing/subscribe' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    let account = await getAccount(String(b.slug || ''));
+    if (!account) return json({ error: 'no billing account — assign a plan first' }, 404);
+    if (!account.paymentMethodType) return json({ error: 'no payment method on file — capture card/bank first' }, 409);
+    const plans = await billingPlansEnsureSeed(env);
+    const plan = plans.find(p => p.planId === account.planId);
+    const ver = plan && plan.versions.find(x => x.version === account.planVersion);
+    if (!ver || !(ver.priceCents > 0)) return json({ error: 'assigned plan version has no billable price' }, 409);
+    try {
+      account = await helcimEnsureBillingCustomer(env, account, (await registryGet(env, account.accountId))?.name);
+      const { subscriptionId } = await helcimSubscribe(env, account, ver.priceCents);
+      account.helcimSubscriptionId = subscriptionId;
+      account.status = 'active';
+      account = hist(account, 'subscribe', '$' + (ver.priceCents / 100).toFixed(2) + '/mo');
+      await putAccount(account);
+      return json({ ok: true, account });
+    } catch (e) {
+      console.error('[billing subscribe]', account.accountId, (e && e.message) || String(e));
+      return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
+    }
+  }
+  if (path === '/operator/billing/sync' && method === 'GET') {
+    const account = await getAccount(url.searchParams.get('slug') || '');
+    if (!account) return json({ error: 'no billing account' }, 404);
+    const merged = await syncAccountFromHelcim(env, account);
+    return json({ ok: true, account: merged });
+  }
+
   return json({ error: 'not found' }, 404);
 }
 
