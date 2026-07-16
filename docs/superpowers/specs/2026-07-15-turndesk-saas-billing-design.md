@@ -157,3 +157,15 @@ Each salon's registry entry (`salon:<slug>`) gets a `billingAccountId` pointer t
 - State/sales tax obligations on the SaaS fee across states — flag for the owner at scale, immaterial at 1-2 beta salons today.
 - Wire Phase 1's plan-assignment into the existing self-serve-signup/provisioning flow (`/provision/seed`) once self-serve billing signup is actually built, rather than assuming a "new salon signs up" event that doesn't exist yet in that flow's current form.
 - **Pricing-page rewrite (`site/pricing.html`) is a hard prerequisite for turning on `selfserve_billing_enabled`**, not just `enforcement_enabled` (§2) — the live copy's "no card on file to charge" promise is broken the moment a real charge can happen, regardless of whether anyone is ever locked out for non-payment. The site's own `BUILD-NOTES.md` already earmarks this rewrite for launch; treat both flags as gated on it, not just the enforcement one.
+
+## 10. Implementation addendum (2026-07-16) — research answers that supersede §4/§9 where they conflict
+
+- **No billing webhooks in Phase 1 — poll-first is the only option, not a preference.** Helcim emits only `cardTransaction {id,type}` and `terminalCancel` webhook events — there are no subscription/recurring event types and no `customerCode` in the cardTransaction payload. Additionally, the shared Helcim account's single account-level webhook URL points at **Muse's Worker**, so TurnDesk's Worker would never receive these events without touching Muse (out of scope). §4's `/billing/webhook` route and `whevt:` dedup are therefore **dropped**; subscription truth is Helcim's `GET subscription → payments[]` sub-array (`approved|declined|failed|waiting`), reconciled on operator view / salon Billing view / manual sync. Idempotency is structural: history entries merge keyed by Helcim payment id.
+- **HelcimPay.js verify mode confirmed for both card and ACH** (`setAsDefaultPaymentMethod:1`, bankToken) — one capture flow, as §2 hoped.
+- **Proration is opt-in per Helcim plan; we never enable it** — §2's "no proration" holds by construction.
+- **Helcim has built-in configurable auto-retry** for failed recurring payments (cards 3/5/7 or 7/14/21 days; ACH 7 or 14; custom) — Phase 2's grace design leans on it rather than building a dunning engine.
+- **One umbrella Helcim payment plan** ("TurnDesk SaaS", monthly) with per-subscription `recurringAmount` — our plan docs stay the source of truth for features/price; Helcim just moves money. Fallback (if per-subscription amounts don't override in practice): lazily create one Helcim plan per (planId, version).
+- **Pre-billing account convention:** `status:'trialing'` with `trialEndsAt:null` = "account set up, no trial clock, nothing billing" — the default for operator-assigned plans before any trial/comp/subscription; harmless while nothing enforces.
+- **Restore-safety (§8) in practice:** because billing state reconciles from Helcim on every view, a stale restored snapshot self-corrects on the next operator/salon Billing view — no restore-specific handler needed in Phase 1.
+
+Implementation plan: `docs/superpowers/plans/2026-07-16-saas-billing-phase1.md`.
