@@ -667,6 +667,16 @@ export default {
       return json({ error: 'Not found' }, 404);
     }
 
+    // ── SaaS billing (Phase 1) ───────────────────────────────────────────────────
+    // /bdo/* are the registry DO's INTERNAL billing-storage routes — never public.
+    // (A client addressing its own salon DO there would only write keys the Worker
+    // never reads from a salon instance, but 404 them outright anyway.)
+    if (path.startsWith('/bdo/')) return json({ error: 'not found' }, 404);
+    // Salon-facing billing (Settings → Billing). Self-gated stricter than appAuthOk:
+    // owner/admin session required unconditionally; appadmin denied. Nothing here
+    // enforces access — flags default off and only the operator can flip them.
+    if (path.startsWith('/billing/')) return handleBilling(request, env, url, method, path, salonId);
+
     // ── Helcim (Payment Hardware API — Smart Terminal) ───────────────────────────
     // The api-token stays server-side (HELCIM_API_TOKEN secret), same as the Square proxy.
     // /helcim/ping       GET  → list paired terminals (confirm token + device code)
@@ -1441,6 +1451,149 @@ export async function handleOperator(request, env, url, method, path) {
     return json({ ok: true, account: merged });
   }
 
+  return json({ error: 'not found' }, 404);
+}
+
+// ── SaaS billing: salon-facing routes ──────────────────────────────────────────
+// Stricter than appAuthOk: these touch payment data, so a valid owner-or-admin
+// session is required UNCONDITIONALLY (even where general AUTH_ENFORCED is off),
+// and the platform operator's own master login (kind 'appadmin') is denied —
+// consistent with auth.js's existing "never the master app-admin" exclusions.
+async function billingAdminUser(request, url, env, salonId) {
+  const h = request.headers.get('Authorization') || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+  if (!token || !salonId) return null;
+  try {
+    const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+    const r = await stub.fetch(new Request('https://do/auth/check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+    }));
+    const b = await r.json().catch(() => ({}));
+    const u = b.ok === true ? b.user : null;
+    if (!u || u.kind === 'appadmin') return null;
+    if (u.kind !== 'owner' && u.role !== 'admin') return null;
+    return u;
+  } catch { return null; }
+}
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// The recurring-debit authorization text shown at ACH enrollment. Versioned so the
+// exact accepted wording is provable later (NACHA record-keeping) — bump the id when
+// the wording changes, never edit an existing version's meaning.
+export const ACH_AUTH_TEXT = {
+  version: 'ach-auth-v1',
+  text: 'I authorize TurnDesk to debit my bank account each month for the subscription amount of my selected plan, until I cancel this authorization. I can revoke it any time from Settings → Billing or by contacting TurnDesk. Debits occur on my billing date; if one is returned, it may be retried per my bank’s rules.',
+};
+const emptyAccount = slug => ({ accountId: slug, salonSlugs: [slug], planId: null, planVersion: null, status: 'trialing', trialEndsAt: null, compUntil: null, currentPeriodEnd: null, paymentMethodType: null, helcimCustomerId: null, helcimCustomerCode: null, helcimSubscriptionId: null, pastDueSince: null, lastFailureReason: null, achAuthorization: null, history: [] });
+
+export async function handleBilling(request, env, url, method, path, salonId) {
+  const user = await billingAdminUser(request, url, env, salonId);
+  if (!user) return json({ error: 'unauthorized' }, 401);
+  const getAccount = async () => (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(salonId))).account || null;
+  const putAccount = async account => bdoPost(env, '/bdo/account-put', { account });
+  const histEvent = (account, event, note) => ({ ...account, history: [...(account.history || []), { event, at: Date.now(), amountCents: null, invoiceId: null, failureReason: null, note: note || '', helcimPaymentId: null }] });
+
+  // GET /billing/status → this salon's account + visible plans (flattened to their
+  // current version) + the selfserve flag. ?sync=1 reconciles from Helcim first.
+  if (path === '/billing/status' && method === 'GET') {
+    const flags = await billingFlags(env);
+    const plans = await billingPlansEnsureSeed(env);
+    let account = await getAccount();
+    if (account && url.searchParams.get('sync') === '1') account = await syncAccountFromHelcim(env, account);
+    const publicPlans = visiblePlans(plans).map(p => { const v = currentVersion(p); return { planId: p.planId, name: p.name, priceCents: v.priceCents, capacity: v.capacity, features: v.features, version: v.version }; });
+    return json({ flags: { selfserveBillingEnabled: flags.selfserveBillingEnabled === true }, account, plans: publicPlans, achAuthText: ACH_AUTH_TEXT });
+  }
+  // POST /billing/ach-authorize { textVersion } → record the NACHA authorization
+  // acceptance (timestamp + wording version + who) BEFORE any bank capture.
+  if (path === '/billing/ach-authorize' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    let account = (await getAccount()) || emptyAccount(salonId);
+    account.achAuthorization = { acceptedAt: Date.now(), textVersion: String(b.textVersion || ACH_AUTH_TEXT.version), byUser: user.name || user.id };
+    account = histEvent(account, 'ach-authorize', account.achAuthorization.textVersion);
+    await putAccount(account);
+    return json({ ok: true, account });
+  }
+  // POST /billing/portal-token { ach? } → HelcimPay.js verify session for capturing a
+  // card or bank account. The secretToken never reaches the client — it's held in the
+  // registry DO (single-use) for verify-complete's hash check.
+  if (path === '/billing/portal-token' && method === 'POST') {
+    const flags = await billingFlags(env);
+    if (flags.selfserveBillingEnabled !== true) return json({ error: 'self-serve billing is not enabled' }, 403);
+    let b = {}; try { b = await request.json(); } catch {}
+    let account = (await getAccount()) || emptyAccount(salonId);
+    if (b.ach && !account.achAuthorization) return json({ error: 'ACH requires the recurring-debit authorization first', achAuthText: ACH_AUTH_TEXT }, 428);
+    try {
+      account = await helcimEnsureBillingCustomer(env, account, salonId);
+      await putAccount(account);
+      const r = await fetch(HELCIM_BASE + '/helcim-pay/initialize', { method: 'POST', headers: helcimHeaders(env), body: JSON.stringify({
+        paymentType: 'verify', amount: 0, currency: 'USD', customerCode: account.helcimCustomerCode }) });
+      const jj = await r.json().catch(() => ({}));
+      if (!r.ok || !jj.checkoutToken) return json({ error: 'HelcimPay initialize failed (' + r.status + ')' }, 502);
+      await bdoPost(env, '/bdo/pay-put', { token: jj.checkoutToken, record: { secretToken: jj.secretToken, slug: salonId, ts: Date.now() } });
+      return json({ checkoutToken: jj.checkoutToken });
+    } catch (e) {
+      console.error('[billing portal-token]', salonId, (e && e.message) || String(e));
+      return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
+    }
+  }
+  // POST /billing/verify-complete { checkoutToken, rawDataResponse, hash } → validate
+  // Helcim's response hash (SHA-256 of raw+secretToken, per their validate scheme;
+  // single-use token) and store the captured payment method on the account.
+  if (path === '/billing/verify-complete' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const rec = (await bdoPost(env, '/bdo/pay-take', { token: String(b.checkoutToken || '') })).record;
+    if (!rec || rec.slug !== salonId) return json({ error: 'unknown or expired checkout token' }, 400);
+    const raw = String(b.rawDataResponse || '');
+    const expect = await sha256Hex(raw + rec.secretToken);
+    if (!b.hash || String(b.hash).toLowerCase() !== expect) return json({ error: 'response hash mismatch' }, 400);
+    let parsed = {}; try { parsed = JSON.parse(raw); } catch {}
+    const data = parsed.data || parsed;
+    let account = (await getAccount()) || emptyAccount(salonId);
+    account.paymentMethodType = data.bankToken ? 'ach' : 'card';
+    if (data.customerCode) account.helcimCustomerCode = data.customerCode;
+    account = histEvent(account, 'payment-method', account.paymentMethodType);
+    await putAccount(account);
+    return json({ ok: true, account });
+  }
+  // POST /billing/subscribe { planId } → first subscribe creates the REAL Helcim
+  // subscription at the plan's current version; on an already-subscribed account a
+  // plan change only re-pins + records intent (the live Helcim subscription is
+  // untouched in Phase 1 — next-cycle amount changes are Phase 2).
+  if (path === '/billing/subscribe' && method === 'POST') {
+    const flags = await billingFlags(env);
+    if (flags.selfserveBillingEnabled !== true) return json({ error: 'self-serve billing is not enabled' }, 403);
+    let b = {}; try { b = await request.json(); } catch {}
+    const plans = await billingPlansEnsureSeed(env);
+    const plan = visiblePlans(plans).find(p => p.planId === String(b.planId || ''));
+    if (!plan) return json({ error: 'no such plan' }, 404);
+    const ver = currentVersion(plan);
+    let account = await getAccount();
+    if (!account || !account.paymentMethodType) return json({ error: 'add a payment method first' }, 409);
+    if (account.helcimSubscriptionId) {
+      account.planId = plan.planId;
+      account.planVersion = ver.version;
+      account = histEvent(account, 'plan-change', plan.planId + ' v' + ver.version + ' (next cycle)');
+      await putAccount(account);
+      return json({ ok: true, account });
+    }
+    if (!(ver.priceCents > 0)) return json({ error: 'that plan has no billable price' }, 409);
+    try {
+      account = await helcimEnsureBillingCustomer(env, account, salonId);
+      const { subscriptionId } = await helcimSubscribe(env, account, ver.priceCents);
+      account.planId = plan.planId;
+      account.planVersion = ver.version;
+      account.helcimSubscriptionId = subscriptionId;
+      account.status = 'active';
+      account = histEvent(account, 'subscribe', '$' + (ver.priceCents / 100).toFixed(2) + '/mo');
+      await putAccount(account);
+      return json({ ok: true, account });
+    } catch (e) {
+      console.error('[billing subscribe]', salonId, (e && e.message) || String(e));
+      return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
+    }
+  }
   return json({ error: 'not found' }, 404);
 }
 
