@@ -965,6 +965,70 @@ async function registryGet(env, slug) {
   } catch { return null; }
 }
 
+// ── SaaS billing (Phase 1 — infrastructure only, nothing enforced) ─────────────
+// Billing state lives in the registry DO (bflags / bplan:<planId> / billing:<accountId>),
+// reached only via registryStub — same pattern as salon:<slug>. Money is integer CENTS
+// everywhere internal; dollars only at the Helcim API edge. Design + research record:
+// docs/superpowers/specs/2026-07-15-turndesk-saas-billing-design.md (§10 addendum).
+async function bdoGet(env, path) {
+  const r = await registryStub(env).fetch(new Request('https://do' + path));
+  return r.json().catch(() => ({}));
+}
+async function bdoPost(env, path, body) {
+  const r = await registryStub(env).fetch(new Request('https://do' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  return r.json().catch(() => ({}));
+}
+export async function billingFlags(env) {
+  return (await bdoGet(env, '/bdo/flags-get')).flags || { enforcementEnabled: false, selfserveBillingEnabled: false };
+}
+// The finalized tier matrix (spec §3). Seeded once, then operator-editable — these
+// literals are the BOOTSTRAP values, not the runtime source of truth.
+export const SEED_PLANS = [
+  { planId: 'free', name: 'Free', visible: true, versions: [{ version: 1, priceCents: 0,
+    capacity: { maxStaffAccounts: 5, maxCalendars: 0 },
+    features: { turnBoardFull: false, checkin: false, reports: false, merchantProcessing: false, receiptPrinting: false, cashdrawer: false, floorplan: false, giftcards: false, timeclock: false, chat: false, apptReminders: false, quicksale: false, backofficeSync: false, sms: { included: false, monthlyLimit: 0 } }, createdAt: 0 }] },
+  { planId: 'starter', name: 'Starter', visible: true, versions: [{ version: 1, priceCents: 3400,
+    capacity: { maxStaffAccounts: 5, maxCalendars: 5 },
+    features: { turnBoardFull: true, checkin: true, reports: true, merchantProcessing: true, receiptPrinting: true, cashdrawer: true, floorplan: false, giftcards: false, timeclock: false, chat: false, apptReminders: false, quicksale: false, backofficeSync: false, sms: { included: true, monthlyLimit: 100 } }, createdAt: 0 }] },
+  { planId: 'pro', name: 'Pro', visible: true, versions: [{ version: 1, priceCents: 7900,
+    capacity: { maxStaffAccounts: null, maxCalendars: null },
+    features: { turnBoardFull: true, checkin: true, reports: true, merchantProcessing: true, receiptPrinting: true, cashdrawer: true, floorplan: true, giftcards: true, timeclock: true, chat: true, apptReminders: true, quicksale: true, backofficeSync: true, sms: { included: true, monthlyLimit: null } }, createdAt: 0 }] },
+  // Multi exists as a real plan but is NOT publicly listed (spec §3.1) — price is per-deal.
+  { planId: 'multi', name: 'Multi', visible: false, versions: [{ version: 1, priceCents: null,
+    capacity: { maxStaffAccounts: null, maxCalendars: null },
+    features: { turnBoardFull: true, checkin: true, reports: true, merchantProcessing: true, receiptPrinting: true, cashdrawer: true, floorplan: true, giftcards: true, timeclock: true, chat: true, apptReminders: true, quicksale: true, backofficeSync: true, sms: { included: true, monthlyLimit: null } }, createdAt: 0 }] },
+];
+export const currentVersion = plan => plan.versions[plan.versions.length - 1];
+export const visiblePlans = plans => plans.filter(p => p && p.visible);
+// Editing price/capacity/features appends a NEW version (subscribers stay pinned to the
+// version they signed up under — an operator edit never silently reprices anyone).
+// name/visible are plan-level cosmetics and change in place.
+export function savePlanEdit(plan, edit) {
+  const p = { ...plan, versions: [...plan.versions] };
+  if (edit.name !== undefined) p.name = String(edit.name);
+  if (edit.visible !== undefined) p.visible = !!edit.visible;
+  const cur = currentVersion(p);
+  const wants = k => edit[k] !== undefined && JSON.stringify(edit[k]) !== JSON.stringify(cur[k]);
+  if (wants('priceCents') || wants('capacity') || wants('features')) {
+    p.versions.push({
+      version: cur.version + 1,
+      priceCents: edit.priceCents !== undefined ? edit.priceCents : cur.priceCents,
+      capacity: edit.capacity !== undefined ? edit.capacity : cur.capacity,
+      features: edit.features !== undefined ? edit.features : cur.features,
+      createdAt: Date.now(),
+    });
+  }
+  return p;
+}
+export async function billingPlansEnsureSeed(env) {
+  let plans = (await bdoGet(env, '/bdo/plans-get')).plans || [];
+  if (plans.length === 0) {
+    for (const plan of SEED_PLANS) await bdoPost(env, '/bdo/plan-put', { plan: { ...plan, versions: [{ ...plan.versions[0], createdAt: Date.now() }] } });
+    plans = (await bdoGet(env, '/bdo/plans-get')).plans || [];
+  }
+  return plans;
+}
+
 // Operator routes: gated by the OPERATOR_TOKEN secret (Bearer or ?op=). All are
 // cross-salon. Returns a Response.
 // Add/refresh the registry owneremail→slug index so the salon-agnostic
@@ -1299,6 +1363,61 @@ export class TurnDeskDO {
       if (!rec.slugs.includes(slug)) rec.slugs.push(slug);
       await this.state.storage.put(key, rec);
       return this._authJson({ ok: true });
+    }
+    // ── SaaS billing storage (registry instance only — reached solely via registryStub;
+    // the Worker 404s /bdo/* on its public surface, and a client addressing its OWN salon
+    // DO here writes only harmless keys the Worker never reads from a salon instance) ──
+    if (url.pathname === '/bdo/flags-get') {
+      const f = (await this.state.storage.get('bflags')) || {};
+      return this._authJson({ flags: { enforcementEnabled: f.enforcementEnabled === true, selfserveBillingEnabled: f.selfserveBillingEnabled === true, ...(f.helcimPlanId ? { helcimPlanId: f.helcimPlanId } : {}) } });
+    }
+    if (url.pathname === '/bdo/flags-put' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const f = (await this.state.storage.get('bflags')) || { enforcementEnabled: false, selfserveBillingEnabled: false };
+      if (typeof b.enforcementEnabled === 'boolean') f.enforcementEnabled = b.enforcementEnabled;
+      if (typeof b.selfserveBillingEnabled === 'boolean') f.selfserveBillingEnabled = b.selfserveBillingEnabled;
+      if (typeof b.helcimPlanId === 'number' || typeof b.helcimPlanId === 'string') f.helcimPlanId = b.helcimPlanId;
+      await this.state.storage.put('bflags', f);
+      return this._authJson({ ok: true, flags: { enforcementEnabled: f.enforcementEnabled === true, selfserveBillingEnabled: f.selfserveBillingEnabled === true } });
+    }
+    if (url.pathname === '/bdo/plans-get') {
+      const map = await this.state.storage.list({ prefix: 'bplan:' });
+      return this._authJson({ plans: [...map.values()] });
+    }
+    if (url.pathname === '/bdo/plan-put' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (!b.plan || !b.plan.planId) return this._authJson({ error: 'bad plan' }, 400);
+      await this.state.storage.put('bplan:' + b.plan.planId, b.plan);
+      return this._authJson({ ok: true });
+    }
+    if (url.pathname === '/bdo/accounts-get') {
+      const map = await this.state.storage.list({ prefix: 'billing:' });
+      return this._authJson({ accounts: [...map.values()] });
+    }
+    if (url.pathname === '/bdo/account-get') {
+      const id = url.searchParams.get('id') || '';
+      return this._authJson({ account: (await this.state.storage.get('billing:' + id)) || null });
+    }
+    if (url.pathname === '/bdo/account-put' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (!b.account || !b.account.accountId) return this._authJson({ error: 'bad account' }, 400);
+      await this.state.storage.put('billing:' + b.account.accountId, b.account);
+      return this._authJson({ ok: true });
+    }
+    // HelcimPay verify sessions: pay-put stores {secretToken, slug, ts} keyed by checkoutToken;
+    // pay-take is take-AND-delete so a checkout token can only ever validate once.
+    if (url.pathname === '/bdo/pay-put' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (!b.token || !b.record) return this._authJson({ error: 'bad request' }, 400);
+      await this.state.storage.put('bpay:' + b.token, b.record);
+      return this._authJson({ ok: true });
+    }
+    if (url.pathname === '/bdo/pay-take' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const key = 'bpay:' + (b.token || '');
+      const rec = (await this.state.storage.get(key)) || null;
+      if (rec) await this.state.storage.delete(key);
+      return this._authJson({ record: rec });
     }
     // Demo lead intake — mirrors /signup/request's rate-limit + queue-cap shape, but
     // with its OWN rl prefix (dreqrl:) so demo spam can't throttle real signups or vice
