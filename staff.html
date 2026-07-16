@@ -9,6 +9,9 @@
 <meta http-equiv="Expires" content="0">
 <title>Staff</title>
 
+<!-- Tab/favicon: the T+D mark (same icon as the PWA install icon below). -->
+<link rel="icon" type="image/png" href="/turndesk/icons/icon-192.png">
+
 <!-- PWA (separate installable app, shares the same origin + Durable Object) -->
 <link rel="manifest" href="/turndesk/manifest-staff.json">
 <meta name="theme-color" content="#1a5252">
@@ -60,6 +63,16 @@ tailwind.config = {
   <!-- ── PIN login ───────────────────────────────── -->
   <div id="staff-login" class="hidden fixed inset-0 flex items-center justify-center p-6">
     <div class="bg-surface-container-lowest rounded-2xl shadow-2xl p-8 w-full max-w-xs text-center fade-up">
+      <!-- Salon-logo + TurnDesk badge overlay — only shown once staff.js confirms this salon
+           has a logo uploaded (cfg().logo); stays hidden otherwise so a logo-less salon keeps
+           the plain "Staff" heading below exactly as before. -->
+      <div id="staff-login-avatar" class="hidden relative mx-auto mb-3" style="width:48px;height:48px">
+        <img id="staff-logo-login" src="" alt="" class="w-full h-full rounded-xl object-cover border border-surface-container-high"
+          onerror="this.closest('#staff-login-avatar').style.display='none'">
+        <div class="absolute -bottom-0.5 -right-0.5 w-[17px] h-[17px] rounded-md bg-primary flex items-center justify-center border-2 border-surface-container-lowest">
+          <img src="assets/logo/turndesk-mark-ondark.png" alt="" style="height:8px;width:auto">
+        </div>
+      </div>
       <div id="staff-brand-login" class="text-2xl font-headline font-extrabold text-primary mb-1">Staff</div>
       <div class="text-sm font-body text-on-surface-variant mb-6">Enter your PIN to see your customers</div>
       <input id="staff-pin-entry" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"
@@ -73,15 +86,28 @@ tailwind.config = {
 
   <!-- ── My customers ────────────────────────────── -->
   <div id="staff-main" class="hidden">
-    <header class="sticky top-0 z-10 bg-primary text-on-primary px-4 py-3 flex items-center justify-between shadow-md">
-      <div class="flex items-center gap-2 min-w-0">
-        <span id="staff-conn" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e8730a"></span>
-        <div class="min-w-0">
-          <div id="staff-brand-header" class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">Staff</div>
-          <div id="staff-tech-name" class="font-headline font-bold text-lg leading-tight truncate"></div>
-        </div>
+    <!-- Grid (not flex) so the center block is TRUE-centered on the header regardless of how
+         wide the logo group vs "Log out" button are — flex centering in the leftover space
+         would drift toward whichever side is narrower (it did, in review: ~35-40px off with
+         no salon logo). 1fr/auto/1fr reserves equal outer columns so the middle one lands
+         dead-center every time. -->
+    <header class="sticky top-0 z-10 bg-primary text-on-primary px-4 py-3 grid items-center gap-2 shadow-md" style="grid-template-columns:1fr auto 1fr">
+      <!-- Logo group: TurnDesk mark first, salon logo second (once staff.js confirms one
+           exists) — a thin divider between them only shows when the salon logo does. -->
+      <div class="flex items-center gap-2 justify-self-start">
+        <img src="assets/logo/turndesk-mark-ondark.png" alt="TurnDesk" style="height:20px;width:auto">
+        <div id="staff-header-divider" class="hidden w-px self-stretch bg-white/25"></div>
+        <img id="staff-logo-header" src="" alt="" class="hidden rounded object-contain" style="height:26px;width:auto;max-width:64px"
+          onerror="this.style.display='none'; document.getElementById('staff-header-divider').classList.add('hidden')">
       </div>
-      <button onclick="staffSwitch()" class="flex items-center gap-1 text-sm font-body font-semibold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+      <div class="text-center min-w-0">
+        <div class="flex items-center justify-center gap-1.5">
+          <span id="staff-conn" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#e8730a"></span>
+          <div id="staff-brand-header" class="text-[11px] font-body uppercase tracking-widest opacity-80 leading-none">Staff</div>
+        </div>
+        <div id="staff-tech-name" class="font-headline font-bold text-lg leading-tight truncate"></div>
+      </div>
+      <button onclick="staffSwitch()" class="flex items-center gap-1 text-sm font-body font-semibold px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors justify-self-end">
         <span class="material-symbols-outlined" style="font-size:18px">logout</span> Log out
       </button>
     </header>

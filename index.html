@@ -17,8 +17,8 @@
 <meta property="og:title" content="TurnDesk — everything your salon needs, in one system">
 <meta property="og:description" content="Walk-in check-in, fair-turn rotation, reports and payroll — one system, built for nail salons. Free beta.">
 <meta property="og:type" content="website">
-<!-- Tab/favicon: the TurnDesk rotation mark (SVG scales crisp at any tab size). -->
-<link rel="icon" type="image/svg+xml" href="/turndesk/assets/logo/turndesk-appicon.svg">
+<!-- Tab/favicon: the T+D mark (same icon as the PWA install icon below). -->
+<link rel="icon" type="image/png" href="/turndesk/icons/icon-192.png">
 
 <!-- PWA -->
 <link rel="manifest" href="/turndesk/manifest.json">
@@ -164,14 +164,7 @@ tailwind.config = {
 
     <nav class="w-full max-w-6xl mx-auto flex items-center justify-between mb-8">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
-            <circle cx="32" cy="32" r="20" fill="none" stroke="#3f6f6d" stroke-width="3"/>
-            <circle cx="32" cy="12" r="6" fill="#f5c870"/>
-            <circle cx="49.3" cy="22" r="4.4" fill="#8fd4d3"/><circle cx="49.3" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="32" cy="52" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="42" r="4.4" fill="#8fd4d3"/><circle cx="14.7" cy="22" r="4.4" fill="#8fd4d3"/>
-            <circle cx="32" cy="32" r="5.4" fill="#eafffb"/>
-          </svg>
-        </div>
+        <img src="assets/logo/turndesk-mark-color.png" alt="" class="h-8 w-auto">
         <span class="font-headline font-extrabold text-on-surface">TurnDesk</span>
       </div>
       <div class="flex items-center gap-3">
@@ -402,6 +395,16 @@ tailwind.config = {
      SCREEN 4: DASHBOARD
 ═══════════════════════════════════════════════ -->
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
+      <!-- Quiet TurnDesk credit — this screen is otherwise the salon's own branded dashboard
+           (their logo in the header above), so this stays caption-sized and out of the way.
+           Fixed + a child of this screen only, so it's hidden whenever #screen-desk isn't
+           the active screen (parent's display:none per the .screen/.screen.active rule).
+           text-on-surface-variant at 10px already passes WCAG AA against this bg on its own —
+           don't ALSO dim it with opacity (that dropped an earlier version below AA). -->
+      <div class="fixed bottom-3 left-3 z-10 flex items-center gap-1 pointer-events-none select-none">
+        <img src="assets/logo/turndesk-mark-color.png" alt="" class="h-3 w-auto opacity-70">
+        <span class="text-[10px] font-body font-medium text-on-surface-variant">Powered by TurnDesk</span>
+      </div>
       <div id="welcome-banner" class="hidden bg-primary-container text-on-primary-container rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3">
         <div class="text-sm font-body">Welcome to TurnDesk — add your services, staff, prices, and logo in <span class="font-semibold">Settings</span> (top bar).</div>
         <button onclick="dismissWelcome()" aria-label="Dismiss" class="opacity-80 hover:opacity-100"><span class="material-symbols-outlined">close</span></button>

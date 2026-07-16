@@ -132,6 +132,29 @@ function render() {
   const bl = document.getElementById('staff-brand-login'); if (bl) bl.textContent = bizName || 'Staff';
   const bh = document.getElementById('staff-brand-header'); if (bh) bh.textContent = bizName || 'Staff';
   if (bizName) document.title = bizName + ' Staff';
+
+  // Salon logo (login-screen badge + header) — hidden entirely until a salon actually
+  // uploads one, so a logo-less salon sees exactly the same plain "Staff" text as before.
+  const logoUrl = cfg().logo || '';
+  const loginAvatar = document.getElementById('staff-login-avatar');
+  const loginLogo = document.getElementById('staff-logo-login');
+  const headerLogo = document.getElementById('staff-logo-header');
+  const headerDivider = document.getElementById('staff-header-divider');
+  // Clear any inline display:none a PRIOR render's onerror fallback left behind (a broken
+  // logo URL hides these via inline style, not the 'hidden' class) so the class toggle below
+  // is the single source of truth again — otherwise a salon that fixes a bad logo URL would
+  // stay stuck hidden on an already-open tab until it's reloaded.
+  if (loginAvatar) loginAvatar.style.display = '';
+  if (headerLogo) headerLogo.style.display = '';
+  if (loginAvatar && loginLogo) {
+    loginAvatar.classList.toggle('hidden', !logoUrl);
+    if (logoUrl) { loginLogo.src = logoUrl; loginLogo.alt = bizName || 'Salon logo'; }
+  }
+  if (headerLogo && headerDivider) {
+    headerLogo.classList.toggle('hidden', !logoUrl);
+    headerDivider.classList.toggle('hidden', !logoUrl);
+    if (logoUrl) { headerLogo.src = logoUrl; headerLogo.alt = bizName || 'Salon logo'; }
+  }
   const fd = meFd();
   if (fd) { renderFdView(fd); maybeNotifPrompt(); return; }
   const meStaff = me();
