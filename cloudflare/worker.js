@@ -1029,6 +1029,113 @@ export async function billingPlansEnsureSeed(env) {
   return plans;
 }
 
+// Merge Helcim subscription truth into a billing account. PURE + IDEMPOTENT: history
+// merges keyed by helcimPaymentId, status derives from the payments array, and
+// canceled/comped are STICKY — an operator decision outranks anything Helcim reports
+// (the money movement is still recorded). Helcim amounts are dollars → stored as cents.
+export function reconcileAccount(account, subscription) {
+  if (!subscription) return account;
+  const a = { ...account, history: [...(account.history || [])] };
+  const seen = new Set(a.history.map(h => h.helcimPaymentId).filter(id => id != null));
+  const payments = Array.isArray(subscription.payments) ? subscription.payments : [];
+  for (const p of payments) {
+    if (p.id != null && seen.has(p.id)) continue;
+    a.history.push({
+      event: 'payment', at: p.date || '', amountCents: Math.round(Number(p.amount || 0) * 100),
+      invoiceId: p.invoiceNumber || String(p.id ?? ''), failureReason: (p.status === 'declined' || p.status === 'failed') ? (p.errorMessage || p.status) : null,
+      note: 'helcim:' + (p.status || ''), helcimPaymentId: p.id ?? null,
+    });
+    if (p.id != null) seen.add(p.id);
+  }
+  if (subscription.dateBilling) a.currentPeriodEnd = subscription.dateBilling;
+  const sticky = a.status === 'canceled' || a.status === 'comped';
+  // Chronology = array order (Helcim appends); the LAST settled (non-waiting) payment decides.
+  const settled = payments.filter(p => p.status === 'approved' || p.status === 'declined' || p.status === 'failed');
+  const last = settled[settled.length - 1];
+  if (last) {
+    if (last.status === 'approved') {
+      if (!sticky) a.status = 'active';
+      a.pastDueSince = null; a.lastFailureReason = null;
+    } else {
+      if (!sticky) a.status = 'past_due';
+      if (!a.pastDueSince) a.pastDueSince = Date.now();
+      a.lastFailureReason = last.errorMessage || last.status;
+    }
+  }
+  return a;
+}
+
+const HELCIM_BASE = 'https://api.helcim.com/v2';
+const helcimHeaders = env => ({ 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json', 'Content-Type': 'application/json' });
+// Ensure the account has a Helcim customer to vault payment details against. Tries the
+// namespaced customerCode 'td-<slug>' (spec §4); accepts Helcim's generated code if the
+// API rejects a caller-supplied one. Returns the account (mutated copy) — NOT persisted.
+export async function helcimEnsureBillingCustomer(env, account, salonName) {
+  if (account.helcimCustomerId) return account;
+  const body = { contactName: 'TurnDesk — ' + (salonName || account.accountId), customerCode: 'td-' + account.accountId };
+  let r = await fetch(HELCIM_BASE + '/customers', { method: 'POST', headers: helcimHeaders(env), body: JSON.stringify(body) });
+  let j = await r.json().catch(() => ({}));
+  if (!r.ok) {   // customerCode not accepted → let Helcim generate one
+    r = await fetch(HELCIM_BASE + '/customers', { method: 'POST', headers: helcimHeaders(env), body: JSON.stringify({ contactName: body.contactName }) });
+    j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error('helcim customer create failed (' + r.status + ')');
+  }
+  const c = j.customer || j;
+  return { ...account, helcimCustomerId: c.id ?? null, helcimCustomerCode: c.customerCode || null };
+}
+// One umbrella Helcim payment plan ("TurnDesk SaaS", monthly, forever); every subscription
+// sets its own recurringAmount, so OUR bplan docs stay the price/feature source of truth
+// (spec §10). The Helcim plan id is cached on the bflags doc.
+export async function helcimEnsureUmbrellaPlan(env) {
+  const flags = (await bdoGet(env, '/bdo/flags-get')).flags || {};
+  if (flags.helcimPlanId) return flags.helcimPlanId;
+  const r = await fetch(HELCIM_BASE + '/payment-plans', { method: 'POST', headers: helcimHeaders(env), body: JSON.stringify({
+    paymentPlans: [{ name: 'TurnDesk SaaS', description: 'TurnDesk monthly software subscription', recurringAmount: 1,
+      billingPeriod: 'monthly', billingPeriodIncrements: 1, termType: 'forever', taxType: 'no_tax' }] }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('helcim plan create failed (' + r.status + ')');
+  const created = (Array.isArray(j) ? j[0] : (Array.isArray(j.paymentPlans) ? j.paymentPlans[0] : j)) || {};
+  const id = created.id ?? null;
+  if (!id) throw new Error('helcim plan create returned no id');
+  await bdoPost(env, '/bdo/flags-put', { helcimPlanId: id });
+  return id;
+}
+export async function helcimSubscribe(env, account, priceCents) {
+  const planId = await helcimEnsureUmbrellaPlan(env);
+  const today = new Date().toISOString().slice(0, 10);
+  const r = await fetch(HELCIM_BASE + '/subscriptions', { method: 'POST', headers: helcimHeaders(env), body: JSON.stringify({
+    subscriptions: [{ customerId: account.helcimCustomerId, paymentPlanId: planId, recurringAmount: priceCents / 100,
+      dateActivated: today, paymentMethod: account.paymentMethodType === 'ach' ? 'bank' : 'card' }] }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('helcim subscribe failed (' + r.status + '): ' + JSON.stringify(j).slice(0, 200));
+  const created = (Array.isArray(j) ? j[0] : (Array.isArray(j.subscriptions) ? j.subscriptions[0] : j)) || {};
+  if (created.id == null) throw new Error('helcim subscribe returned no id');
+  return { subscriptionId: created.id };
+}
+export async function helcimGetSubscription(env, subscriptionId) {
+  const r = await fetch(HELCIM_BASE + '/subscriptions/' + encodeURIComponent(subscriptionId), { headers: helcimHeaders(env) });
+  if (!r.ok) return null;
+  const j = await r.json().catch(() => null);
+  return j && (j.subscription || j);
+}
+export async function helcimCancelSubscription(env, subscriptionId) {
+  try {
+    await fetch(HELCIM_BASE + '/subscriptions/' + encodeURIComponent(subscriptionId), {
+      method: 'PATCH', headers: helcimHeaders(env), body: JSON.stringify({ status: 'cancelled' }) });
+  } catch {}   // best-effort — the sticky 'canceled' status is ours regardless
+}
+// Fetch-then-RMW ordering (spec §8): the external Helcim call completes BEFORE the
+// account read+write, so the DO's non-interleaving window stays closed.
+export async function syncAccountFromHelcim(env, account) {
+  if (!account || !account.helcimSubscriptionId) return account;
+  const sub = await helcimGetSubscription(env, account.helcimSubscriptionId);
+  if (!sub) return account;
+  const fresh = (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(account.accountId))).account || account;
+  const merged = reconcileAccount(fresh, sub);
+  await bdoPost(env, '/bdo/account-put', { account: merged });
+  return merged;
+}
+
 // Operator routes: gated by the OPERATOR_TOKEN secret (Bearer or ?op=). All are
 // cross-salon. Returns a Response.
 // Add/refresh the registry owneremail→slug index so the salon-agnostic
