@@ -94,6 +94,14 @@ test('/billing/subscribe is 403 while selfserveBillingEnabled is false — the b
   assert.equal(r.status, 403);
 });
 
+test('/billing/portal-token is also 403 while selfserveBillingEnabled is false — the OTHER charge-enabling route', async () => {
+  const env = makeEnv();
+  await seedSessions(env, 'lux-nails');
+  await seedPlansAndAccount(env, baseAccount());
+  const r = await call(env, '/billing/portal-token', { token: 'tokOwner', body: {} });
+  assert.equal(r.status, 403, 'no payment method can be captured until the flag is on');
+});
+
 test('/billing/subscribe with the flag on creates a Helcim subscription and pins the current version', async () => {
   const env = makeEnv();
   await seedSessions(env, 'lux-nails');

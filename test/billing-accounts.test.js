@@ -179,3 +179,62 @@ test('operator subscribe refuses to mint a SECOND subscription on an already-sub
     assert.equal(helcimTouched, false, 'no Helcim subscribe call — the first subscription is not orphaned');
   } finally { globalThis.fetch = realFetch; }
 });
+
+// Seed a captured card so an account can actually subscribe, and mock Helcim create/customer.
+async function armSubscribe(env, slug) {
+  const acct = (await j(await env.SALON_DO.get('__registry__').fetch('https://do/bdo/account-get?id=' + slug))).account;
+  acct.paymentMethodType = 'card'; acct.helcimCustomerId = 7;
+  await env.SALON_DO.get('__registry__').fetch('https://do/bdo/account-put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account: acct }) });
+}
+test('operator subscribe bills the plan CURRENT-version price and pins it (Helcim recurringAmount = dollars)', async () => {
+  const env = makeEnv();
+  await op(env, '/operator/billing/overview');
+  await reg(env, 'lux-nails');
+  await op(env, '/operator/billing/assign', { slug: 'lux-nails', planId: 'starter' });
+  await armSubscribe(env, 'lux-nails');
+  const realFetch = globalThis.fetch; const calls = [];
+  globalThis.fetch = async (u, init) => {
+    calls.push({ url: String(u), body: init && init.body ? JSON.parse(init.body) : null });
+    if (String(u).includes('/subscriptions')) return new Response(JSON.stringify([{ id: 700 }]), { status: 200 });
+    if (String(u).includes('/payment-plans')) return new Response(JSON.stringify([{ id: 9 }]), { status: 200 });
+    if (String(u).includes('/customers')) return new Response(JSON.stringify({ customer: { id: 7, customerCode: 'td-lux-nails' } }), { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    const r = await j(await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' }));
+    assert.equal(r.account.helcimSubscriptionId, 700);
+    assert.equal(r.account.status, 'active');
+    const sub = calls.find(c => c.url.includes('/subscriptions'));
+    assert.equal(sub.body.subscriptions[0].recurringAmount, 34, '$34 in dollars at the Helcim edge (cents pinned internally)');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('cancel then re-assign reactivates the account so it can be subscribed again (no permanent 409 dead-end)', async () => {
+  const env = makeEnv();
+  await op(env, '/operator/billing/overview');
+  await reg(env, 'lux-nails');
+  await op(env, '/operator/billing/assign', { slug: 'lux-nails', planId: 'starter' });
+  await armSubscribe(env, 'lux-nails');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => {
+    if (String(u).includes('/subscriptions')) return new Response(JSON.stringify([{ id: 800 }]), { status: 200 });
+    if (String(u).includes('/payment-plans')) return new Response(JSON.stringify([{ id: 9 }]), { status: 200 });
+    if (String(u).includes('/customers')) return new Response(JSON.stringify({ customer: { id: 7, customerCode: 'td-lux-nails' } }), { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' });
+    const canceled = await j(await op(env, '/operator/billing/cancel', { slug: 'lux-nails' }));
+    assert.equal(canceled.account.status, 'canceled');
+    assert.equal(canceled.account.helcimSubscriptionId, null, 'cancel clears the dead subscription id');
+    // subscribing a canceled account is refused until reassigned
+    const refused = await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' });
+    assert.equal(refused.status, 409, 'canceled → refuse subscribe');
+    // reassign reactivates
+    const re = await j(await op(env, '/operator/billing/assign', { slug: 'lux-nails', planId: 'pro' }));
+    assert.equal(re.account.status, 'trialing', 'reassign brings a canceled account back to a fresh trialing state');
+    const ok = await j(await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' }));
+    assert.equal(ok.account.status, 'active', 'now it can subscribe again');
+    assert.equal(ok.account.helcimSubscriptionId, 800);
+  } finally { globalThis.fetch = realFetch; }
+});

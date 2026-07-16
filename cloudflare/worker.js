@@ -1178,9 +1178,12 @@ const bAcctGet = async (env, slug) => (await bdoGet(env, '/bdo/account-get?id=' 
 const bAcctPut = (env, account) => bdoPost(env, '/bdo/account-put', { account });
 // Create the REAL Helcim subscription, then apply the result onto a FRESH re-read of the
 // account (spec §8 fetch-before-RMW): the ensure-customer + subscribe network calls finish
-// BEFORE the read-modify-write, so a concurrent operator write (e.g. cancel) during the
-// Helcim round-trip is preserved — we only stamp the subscription fields, not clobber the
-// whole record with a stale snapshot. Shared by both subscribe entry points.
+// BEFORE the read-modify-write, so we stamp only the subscription fields onto the latest
+// account rather than clobbering it with a stale snapshot. If a cancel COMMITTED during our
+// Helcim round-trip (fresh.status === 'canceled'), we undo the just-created subscription and
+// honor the cancel — never leave a live Helcim sub on a canceled account. (A true concurrent
+// DOUBLE-subscribe still needs an atomic per-account claim — deferred; unreachable while the
+// self-serve flag is off, and callers refuse an already-subscribed/canceled account up front.)
 export async function billingDoSubscribe(env, slug, priceCents, salonName, planId, planVersion) {
   let account = await bAcctGet(env, slug);
   if (!account) throw new Error('no billing account');
@@ -1188,7 +1191,13 @@ export async function billingDoSubscribe(env, slug, priceCents, salonName, planI
   const { subscriptionId } = await helcimSubscribe(env, account, priceCents);
   const customerFields = { helcimCustomerId: account.helcimCustomerId, helcimCustomerCode: account.helcimCustomerCode };
   const fresh = (await bAcctGet(env, slug)) || account;
-  let merged = { ...fresh, ...customerFields, helcimSubscriptionId: subscriptionId, status: (fresh.status === 'canceled') ? 'canceled' : 'active', planId, planVersion };
+  if (fresh.status === 'canceled') {
+    await helcimCancelSubscription(env, subscriptionId);
+    const undone = { ...fresh, ...customerFields, helcimSubscriptionId: null };
+    await bAcctPut(env, undone);
+    return undone;
+  }
+  let merged = { ...fresh, ...customerFields, helcimSubscriptionId: subscriptionId, status: 'active', planId, planVersion };
   merged = billingAppendHistory(merged, 'subscribe', '$' + (priceCents / 100).toFixed(2) + '/mo');
   await bAcctPut(env, merged);
   return merged;
@@ -1425,6 +1434,9 @@ export async function handleOperator(request, env, url, method, path) {
     const entry = await registryGet(env, v.slug);
     if (!entry) return json({ error: 'no such salon' }, 404);
     let account = await getAccount(v.slug) || newBillingAccount(v.slug);
+    // Re-assigning a plan to a CANCELED account reactivates it (a returning salon): reset to
+    // a fresh trialing state and drop the dead subscription id, so it can be subscribed again.
+    if (account.status === 'canceled') { account.status = 'trialing'; account.trialEndsAt = null; account.helcimSubscriptionId = null; }
     account.planId = plan.planId;
     account.planVersion = currentVersion(plan).version;
     account = hist(account, 'assign', plan.planId + ' v' + account.planVersion);
@@ -1465,6 +1477,9 @@ export async function handleOperator(request, env, url, method, path) {
     let account = await getAccount(String(b.slug || ''));
     if (!account) return json({ error: 'no billing account' }, 404);
     if (account.helcimSubscriptionId) await helcimCancelSubscription(env, account.helcimSubscriptionId);
+    // Null the id once the live sub is canceled — the sticky 'canceled' status IS the record,
+    // and clearing the id lets a later reassign→subscribe work instead of a permanent 409.
+    account.helcimSubscriptionId = null;
     account.status = 'canceled';
     account = hist(account, 'cancel', '');
     await putAccount(account);
@@ -1480,13 +1495,16 @@ export async function handleOperator(request, env, url, method, path) {
     // A live subscription already exists → refuse rather than minting a SECOND one (which
     // would orphan the first and double-charge). Change plans via cancel + re-subscribe.
     if (account.helcimSubscriptionId) return json({ error: 'already subscribed (Helcim #' + account.helcimSubscriptionId + ') — cancel first to re-subscribe' }, 409);
+    if (account.status === 'canceled') return json({ error: 'account is canceled — re-assign a plan to reactivate before subscribing' }, 409);
     if (!account.paymentMethodType) return json({ error: 'no payment method on file — capture card/bank first' }, 409);
     const plans = await billingPlansEnsureSeed(env);
     const plan = plans.find(p => p.planId === account.planId);
-    const ver = plan && plan.versions.find(x => x.version === account.planVersion);
-    if (!ver || !(ver.priceCents > 0)) return json({ error: 'assigned plan version has no billable price' }, 409);
+    // Bill the plan's CURRENT version at subscribe time and re-pin it — matching the salon
+    // path, so both entry points price a fresh subscribe the same way.
+    const ver = plan && currentVersion(plan);
+    if (!ver || !(ver.priceCents > 0)) return json({ error: 'assigned plan has no billable price' }, 409);
     try {
-      const merged = await billingDoSubscribe(env, slug, ver.priceCents, (await registryGet(env, slug))?.name, account.planId, account.planVersion);
+      const merged = await billingDoSubscribe(env, slug, ver.priceCents, (await registryGet(env, slug))?.name, plan.planId, ver.version);
       return json({ ok: true, account: merged });
     } catch (e) {
       console.error('[billing subscribe]', slug, (e && e.message) || String(e));
@@ -1643,14 +1661,16 @@ export async function handleBilling(request, env, url, method, path, salonId) {
       return json({ ok: true, account });
     }
 
-    if (!account.paymentMethodType) return json({ error: 'add a payment method first' }, 409);
-
     if (account.helcimSubscriptionId) {   // already billing → record the request only (Phase 1)
       account.planId = plan.planId; account.planVersion = ver.version;
       account = histEvent(account, 'plan-change-requested', plan.planId + ' v' + ver.version);
       await putAccount(account);
       return json({ ok: true, account, pending: true });
     }
+    // A canceled account can't self-resurrect (cancel is an operator decision) — an operator
+    // reassign reactivates it. Checked after the already-subscribed branch above.
+    if (account.status === 'canceled') return json({ error: 'this account is canceled — contact TurnDesk to reactivate' }, 409);
+    if (!account.paymentMethodType) return json({ error: 'add a payment method first' }, 409);
 
     try {
       const merged = await billingDoSubscribe(env, salonId, ver.priceCents, salonId, plan.planId, ver.version);

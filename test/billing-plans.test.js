@@ -104,6 +104,19 @@ test('savePlanEdit: a name/visible-only edit does NOT bump the version', () => {
   assert.equal(p.visible, false);
 });
 
+test('savePlanEdit: a PARTIAL capacity edit merges onto the current version (untouched keys survive)', () => {
+  const p = savePlanEdit(basePlan(), { capacity: { maxCalendars: 9 } });   // only one of two capacity keys
+  assert.equal(p.versions.length, 2);
+  const v = currentVersion(p);
+  assert.equal(v.capacity.maxCalendars, 9, 'changed key applied');
+  assert.equal(v.capacity.maxStaffAccounts, 5, 'untouched key NOT blanked');
+});
+
+test('savePlanEdit: resending identical values in a different key order does NOT bump the version', () => {
+  const p = savePlanEdit(basePlan(), { features: { sms: { monthlyLimit: 100, included: true } } });   // keys reversed, same values
+  assert.equal(p.versions.length, 1, 'order-insensitive compare — no spurious version');
+});
+
 test('visiblePlans filters out hidden plans (Multi stays internal)', () => {
   const plans = [basePlan(), { ...basePlan(), planId: 'multi', visible: false }];
   assert.deepEqual(visiblePlans(plans).map(p => p.planId), ['starter']);
