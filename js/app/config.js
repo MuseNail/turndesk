@@ -14,6 +14,7 @@ export const PUSH_PROXY   = ORIGIN + '/push';
 export const REPORT_PROXY = ORIGIN + '/report';
 export const SMS_PROXY    = ORIGIN + '/sms';
 export const GCAL_PROXY   = ORIGIN + '/gcal';
+export const BILLING_PROXY = ORIGIN + '/billing';
 // Fixed URL the printed receipt QR encodes forever. The Worker's /r route
 // redirects it to config.review_url (editable in Settings), so the QR never
 // has to be reprinted to point somewhere new.

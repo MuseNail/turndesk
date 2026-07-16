@@ -51,7 +51,8 @@ GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), a
 
 ### Module layout
 - **Core:** `js/app/main.js`, `store.js` (in-memory state + `applyChange` reducer), `sync.js` (WebSocket/HTTP sync + `dispatch` + outbox), `session.js`, `config.js`, `utils.js`.
-- **Features:** `js/app/features/*.js` — auth, photos, catalog, square-*, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, appt-reminders, recovery, audit.
+- **Features:** `js/app/features/*.js` — auth, photos, catalog, square-*, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, appt-reminders, recovery, audit, **billing** (Settings → Business → Billing; hidden until the operator's `selfserveBillingEnabled` flag is on).
+- **SaaS billing (Phase 1, 2026-07-16 — built, NOTHING enforced):** plans/accounts/flags live in the **registry DO** (`bplan:<planId>` versioned plans, `billing:<accountId>`, `bflags`), Worker logic in `handleBilling` (salon-scoped, owner/admin-only, appadmin denied) + `/operator/billing/*` (operator console Billing card) in `cloudflare/worker.js`. **Poll-first — no billing webhooks exist** (Helcim has no subscription events and the shared account's webhook URL points at Muse's Worker); truth = Helcim `GET subscription → payments[]`, reconciled on view via the pure idempotent `reconcileAccount`. Both flags (`selfserveBillingEnabled`, `enforcementEnabled`) default OFF; enforcement/feature-gating is Phase 2, deliberately unbuilt. Design: `docs/superpowers/specs/2026-07-15-turndesk-saas-billing-design.md` (+ §10 addendum); plan: `docs/superpowers/plans/2026-07-16-saas-billing-phase1.md`.
 
 ---
 
@@ -97,6 +98,7 @@ GitHub Pages serves both apps from the **same origin** (`musenail.github.io`), a
 - **Records merge** (`store.js` `upsertById`) — transaction records are financial data; always merge by id.
 - **`ticketTotal`** (`utils.js`) — single source of truth for a ticket's money.
 - **Per-tenant DO routing** (`worker.js` `salonId`) — a bug here could leak data across salons. Treat tenant isolation as critical from P3 onward.
+- **SaaS billing flags + subscribe paths** (`worker.js` `handleBilling` / `/operator/billing/*`) — flipping `selfserveBillingEnabled` or calling subscribe creates REAL recurring charges on real salons' cards/banks; the pricing page's "no card on file" promise must be rewritten before either flag turns on.
 - **Version bump** — `config.js` / `version.json` / `sw.js` must stay in sync.
 
 ---

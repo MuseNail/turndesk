@@ -278,6 +278,9 @@ const SETTINGS_NAV = [
     { label:'Business Profile', sub:'Name, address & phone — on the app & receipts', content:'bizprofile-section', render:'renderBusinessProfile', adminOnly:true, icon:'store' },
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
+    // Exists ONLY while the operator's selfserve billing flag is on (Phase 1 default: off) —
+    // the getter re-evaluates on every nav render, so there's never a dead entry.
+    { label:'Billing', sub:'Your TurnDesk plan, payment method & history', content:'billing-section', render:'renderBillingSettings', adminOnly:true, icon:'credit_score', get hidden() { return !(window.billingVisible && window.billingVisible()); } },
   ]},
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section', icon:'backup' },
@@ -314,6 +317,7 @@ function _settingsItemRow(it, subText) {
 
 export function settingsNavRoot() {
   _settingsView = 'root'; _settingsCat = null;
+  window.refreshBillingFlags?.();   // fire-and-forget — the Billing entry appears on the next nav render once the flag is on
   _hideAllSettingsSections();
   document.getElementById('settings-category')?.classList.add('hidden');
   const sInput = document.getElementById('settings-search'); if (sInput) sInput.value = '';
