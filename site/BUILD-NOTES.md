@@ -9,8 +9,15 @@ All 4 pages built, styled, and pushed to `main` (GitHub Pages serves them). Asse
 currently at `site.css?v=7` + `site.js?v=3` (bump N on ALL 4 pages when you touch those files).
 - ✅ `site/index.html` — Home: hero, stat strip, "See it in action" (3 rendered windows), 8
   feature cards → `features.html#...`, CTA, footer.
-- ✅ `features.html` — 8 anchored deep-dives (`#turns #checkin #floorplan #reports #payments
-  #texting #booking #ai`).
+- ✅ `features.html` — 9 anchored deep-dives (`#turns #checkin #floorplan #reports #payments
+  #texting #booking #ai #staffapp`). `#staffapp` added 2026-07-15 — the tech-facing staff PWA
+  (assignment lands on the tech's own phone + push notification + a "needs a price" flag + an
+  in-app calculator that syncs the price straight to the front desk). Grounded directly in
+  `js/app/staff.js`/`staff.html` (STATUS_CHIP colors, the real "New assignment" push copy from
+  `cloudflare/worker.js`, the real calculator flow) — NOT the same feature as Reports & Payroll's
+  existing "phone app for owners and managers" (that's `renderFdView`, read-only schedule/hours;
+  this is `renderMain`, the tech's own working queue). Home's feature grid + jump-pill nav updated
+  to match (9 tiles now wrap 4+4+1 on desktop — a known, acceptable minor grid quirk, not a bug).
 - ✅ `pricing.html` — honest $0 beta card, approval-gated start, launch promise, card-processing
   block (NO rate number per owner), 5-Q FAQ.
 - ✅ `contact.html` + `assets/contact.js` (ES module, tested in `test/site-contact.test.js`).

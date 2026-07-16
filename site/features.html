@@ -72,6 +72,7 @@ tailwind.config = { theme: { extend: {
     <a href="#texting" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Text Updates</a>
     <a href="#booking" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Smart Booking</a>
     <a href="#ai" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">AI Insights</a>
+    <a href="#staffapp" class="text-sm font-body font-semibold px-4 py-2 rounded-full border border-surface-high bg-surface-lowest hover:border-primary hover:text-primary hover:-translate-y-0.5 transition">Staff App</a>
   </nav>
 </section>
 
@@ -464,6 +465,74 @@ tailwind.config = { theme: { extend: {
           </g>
         </svg>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Staff App ═══ -->
+<section id="staffapp" class="scroll-mt-24 max-w-[1400px] mx-auto px-5 py-12 border-t border-surface-high">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+    <div class="reveal">
+      <span class="inline-flex items-center gap-2 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-container" style="font-size:19px">smartphone</span></span>
+        <span class="text-xs font-headline font-bold tracking-wide uppercase text-primary">Staff App</span>
+      </span>
+      <h2 class="text-2xl md:text-3xl font-headline font-extrabold tracking-tight mb-3">No more chasing a paper ticket.</h2>
+      <p class="text-base text-on-surface-variant leading-relaxed mb-4">The front desk assigns a customer, and it just shows up on that tech's own phone — no ticket to lose, no name shouted across the floor. If the front desk ever marks something done before it's priced, the tech sees exactly that and fixes it themselves, right from the same screen.</p>
+      <ul class="space-y-2.5 text-base text-on-surface-variant">
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A customer lands on their phone the moment they're assigned</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A push notification for every new assignment or chat message</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A built-in calculator to price it themselves — synced to the front desk the second they save</span></li>
+        <li class="flex gap-2 items-start"><span class="material-symbols-outlined text-primary" style="font-size:18px">check</span><span>A clear "needs a price" flag, so nothing slips through unpriced</span></li>
+      </ul>
+    </div>
+    <div class="reveal w-full md:justify-self-end">
+      <figure class="appshot hover-lift">
+        <div class="appshot__bar"><span class="appshot__dot"></span><span class="appshot__dot"></span><span class="appshot__dot"></span></div>
+        <div class="appshot__body">
+          <div class="rounded-xl mb-3 px-3 py-2.5 flex items-center gap-2.5" style="background:#fff;border:1px solid #e4eae9">
+            <span class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style="background:#1a5252"><span class="material-symbols-outlined text-white" style="font-size:14px">smartphone</span></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between"><span class="text-[9px] font-body font-semibold text-on-surface-variant">TurnDesk Staff</span><span class="text-[8.5px] text-on-surface-variant opacity-60">now</span></div>
+              <div class="text-[11px] font-headline font-bold text-on-surface leading-tight">New assignment</div>
+              <div class="text-[10px] text-on-surface-variant leading-tight">Sarah M. · Gel Manicure @ Chair 2</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between mb-2 px-0.5">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary" style="font-size:17px">badge</span><span class="text-[13px] font-headline font-extrabold text-on-surface">My Customers</span></div>
+            <span class="text-[10px] font-headline font-bold text-primary">$180 · 4 today</span>
+          </div>
+          <div class="flex items-center gap-1 mb-2.5 px-0.5">
+            <span class="text-[10px] font-headline font-bold px-2.5 py-1 rounded-full" style="background:#1a5252;color:#fff">Now (3)</span>
+            <span class="text-[10px] font-body font-semibold px-2.5 py-1 rounded-full text-on-surface-variant">Appts</span>
+            <span class="text-[10px] font-body font-semibold px-2.5 py-1 rounded-full text-on-surface-variant">History</span>
+          </div>
+          <div class="rounded-lg mb-2.5 px-2.5 py-2 flex items-center gap-2" style="background:rgba(107,79,176,.1)">
+            <span class="material-symbols-outlined" style="font-size:15px;color:#6b4fb0">payments</span>
+            <span class="text-[10.5px] font-body font-semibold" style="color:#4a2f85">1 service needs a price</span>
+          </div>
+          <div class="space-y-1.5">
+            <div class="rounded-lg px-2.5 py-2" style="background:#fff;border:1px solid #eef2f1">
+              <div class="flex items-center justify-between mb-0.5"><span class="text-[11.5px] font-headline font-bold text-on-surface">Jenna T.</span><span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:#f5c870;color:#3a2800">Waiting</span></div>
+              <div class="text-[10px] text-on-surface-variant">Classic Pedicure</div>
+            </div>
+            <div class="rounded-lg px-2.5 py-2" style="background:rgba(42,122,79,.07);border:1px solid #cfe6d8">
+              <div class="flex items-center justify-between mb-0.5"><span class="text-[11.5px] font-headline font-bold text-on-surface">Sarah M.</span><span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:#2a7a4f;color:#fff">In Service</span></div>
+              <div class="text-[10px] text-on-surface-variant">Gel Manicure · Chair 2</div>
+            </div>
+            <div class="rounded-lg px-2.5 py-2" style="background:rgba(107,79,176,.08);border:1px solid #ddd2ef">
+              <div class="flex items-center justify-between mb-0.5"><span class="text-[11.5px] font-headline font-bold text-on-surface">Amy R.</span><span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:#6b4fb0;color:#fff">Needs price</span></div>
+              <div class="text-[10px] text-on-surface-variant mb-1.5">Dip Powder</div>
+              <div class="text-[9px] mb-1.5" style="color:#5a3f96">Front desk marked this done — add the price.</div>
+              <div class="flex items-center gap-1.5">
+                <div class="flex-1 rounded-md px-2 py-1.5 text-[11px] font-headline font-semibold" style="background:#fff;border:1px solid #ddd2ef;color:#8a938f">$0.00</div>
+                <div class="rounded-md flex items-center justify-center" style="width:26px;height:26px;background:#6b4fb0"><span class="material-symbols-outlined text-white" style="font-size:14px">calculate</span></div>
+                <div class="rounded-md px-2.5 py-1.5 text-[10px] font-headline font-bold text-white" style="background:#6b4fb0">Save</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </figure>
     </div>
   </div>
 </section>
