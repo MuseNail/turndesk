@@ -80,6 +80,16 @@
       <h2>Salons</h2>
       <div id="salons">Loading…</div>
     </div>
+
+    <div class="card">
+      <h2>Billing</h2>
+      <p class="muted">SaaS subscription billing — Phase 1: nothing is enforced, both switches default OFF. Plan price/feature edits create a new version; existing subscribers stay pinned to the version they signed up under.</p>
+      <div id="billing-flags" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:8px 0 4px">Loading…</div>
+      <h2 style="margin-top:16px">Plans</h2>
+      <div id="billing-plans">Loading…</div>
+      <h2 style="margin-top:16px">Billing accounts</h2>
+      <div id="billing-accounts">Loading…</div>
+    </div>
   </div>
 </main>
 
@@ -112,6 +122,117 @@ async function connect() {
   renderSalons(res.body.salons || []);
   refreshRequests();
   refreshDemoRequests();
+  refreshBilling();
+}
+
+// ── Billing (Phase 1 — operator visibility + controls; nothing enforced) ──────
+const money = c => c == null ? '—' : '$' + (c / 100).toFixed(2);
+async function refreshBilling() {
+  const r = await api('/operator/billing/overview');
+  if (!r.ok) { $('billing-flags').innerHTML = '<span class="muted">Billing unavailable (' + r.status + ')</span>'; return; }
+  const { flags, plans, accounts } = r.body;
+  $('billing-flags').innerHTML = `
+    <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" id="bf-selfserve" ${flags.selfserveBillingEnabled ? 'checked' : ''}> Self-serve billing (salon Settings → Billing)</label>
+    <label style="display:flex;gap:6px;align-items:center;font-weight:600;color:#a32d2d"><input type="checkbox" id="bf-enforce" ${flags.enforcementEnabled ? 'checked' : ''}> ENFORCEMENT (Phase 2 — notify all salons first)</label>`;
+  $('bf-selfserve').addEventListener('change', e => setBillingFlag({ selfserveBillingEnabled: e.target.checked }, e.target));
+  $('bf-enforce').addEventListener('change', e => setBillingFlag({ enforcementEnabled: e.target.checked }, e.target));
+
+  const planRows = (plans || []).map(p => {
+    const v = p.versions[p.versions.length - 1];
+    const sms = v.features && v.features.sms ? (v.features.sms.included ? (v.features.sms.monthlyLimit == null ? 'unlimited' : v.features.sms.monthlyLimit + '/mo') : '—') : '—';
+    return `<tr>
+      <td><strong>${esc(p.name)}</strong><div class="muted">${esc(p.planId)} · v${v.version}${p.visible ? '' : ' · hidden'}</div></td>
+      <td>${money(v.priceCents)}</td>
+      <td>${v.capacity ? (v.capacity.maxStaffAccounts == null ? '∞' : v.capacity.maxStaffAccounts) + ' staff / ' + (v.capacity.maxCalendars == null ? '∞' : v.capacity.maxCalendars) + ' cal' : '—'}</td>
+      <td>${esc(sms)} texts</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-ghost" data-bact="editprice" data-plan="${esc(p.planId)}">edit price</button>
+        &nbsp;<button class="btn-ghost" data-bact="editsms" data-plan="${esc(p.planId)}">edit sms cap</button>
+        &nbsp;<button class="btn-ghost" data-bact="vis" data-plan="${esc(p.planId)}" data-visible="${p.visible ? '0' : '1'}">${p.visible ? 'hide' : 'show'}</button>
+      </td></tr>`;
+  }).join('');
+  $('billing-plans').innerHTML = `<table><thead><tr><th>Plan</th><th>Price</th><th>Caps</th><th>SMS</th><th></th></tr></thead><tbody>${planRows}</tbody></table>`;
+
+  if (!(accounts || []).length) {
+    $('billing-accounts').innerHTML = '<p class="muted">No billing accounts yet. Use “billing” next to a plan below — or assign from here: <button class="btn-ghost" data-bact="assign">Assign a salon to a plan</button></p>';
+  } else {
+    const acctRows = accounts.map(a => `<tr>
+      <td><strong>${esc(a.salonName || a.accountId)}</strong><div class="muted">${esc(a.accountId)}</div></td>
+      <td>${esc(a.planId || '—')}${a.planVersion ? ' v' + a.planVersion : ''}</td>
+      <td><span class="pill ${a.status === 'active' ? 'active' : 'disabled'}">${esc(a.status)}</span>
+        ${a.trialEndsAt ? `<div class="muted">trial ends ${new Date(a.trialEndsAt).toLocaleDateString()}</div>` : ''}
+        ${a.compUntil ? `<div class="muted">comped until ${new Date(a.compUntil).toLocaleDateString()}</div>` : ''}
+        ${a.lastFailureReason ? `<div class="muted" style="color:#a32d2d">${esc(a.lastFailureReason)}</div>` : ''}</td>
+      <td>${esc(a.paymentMethodType || 'no payment method')}${a.helcimSubscriptionId ? '<div class="muted">sub #' + esc(a.helcimSubscriptionId) + '</div>' : ''}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-ghost" data-bact="assign" data-slug="${esc(a.accountId)}">plan…</button>
+        &nbsp;<button class="btn-ghost" data-bact="trial" data-slug="${esc(a.accountId)}">trial…</button>
+        &nbsp;<button class="btn-ghost" data-bact="comp" data-slug="${esc(a.accountId)}">comp…</button>
+        &nbsp;<button class="btn-ghost" data-bact="subscribe" data-slug="${esc(a.accountId)}">subscribe</button>
+        &nbsp;<button class="btn-ghost" data-bact="sync" data-slug="${esc(a.accountId)}">sync</button>
+        &nbsp;<button class="btn-ghost" data-bact="cancelacct" data-slug="${esc(a.accountId)}">cancel</button>
+      </td></tr>`).join('');
+    $('billing-accounts').innerHTML = `<table><thead><tr><th>Salon</th><th>Plan</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>${acctRows}</tbody></table>
+      <p style="margin-top:8px"><button class="btn-ghost" data-bact="assign">Assign a salon to a plan</button></p>`;
+  }
+  $('billing-plans').querySelectorAll('button[data-bact]').forEach(b => b.addEventListener('click', onBillingAction));
+  $('billing-accounts').querySelectorAll('button[data-bact]').forEach(b => b.addEventListener('click', onBillingAction));
+}
+async function setBillingFlag(patch, checkbox) {
+  const enabling = Object.values(patch)[0] === true;
+  const label = patch.enforcementEnabled !== undefined ? 'ENFORCEMENT' : 'self-serve billing';
+  if (enabling && !confirm(`Turn ON ${label}?` + (patch.enforcementEnabled !== undefined ? ' Salons must be notified (push + email) BEFORE this — and the pricing page must be updated.' : ' The pricing page promise ("no card on file") must be updated first.'))) { checkbox.checked = false; return; }
+  const r = await api('/operator/billing/flags', { method: 'POST', body: JSON.stringify(patch) });
+  if (!r.ok) { alert('Failed: ' + (r.body?.error || r.status)); checkbox.checked = !checkbox.checked; }
+}
+async function onBillingAction(e) {
+  const act = e.target.dataset.bact, slug = e.target.dataset.slug, planId = e.target.dataset.plan;
+  if (act === 'editprice') {
+    const dollars = prompt(`New monthly price for “${planId}” (dollars, e.g. 39.00) — creates a NEW version; existing subscribers keep their current price:`);
+    if (dollars == null) return;
+    const cents = Math.round(parseFloat(dollars) * 100);
+    if (!(cents >= 0)) { alert('Enter a valid dollar amount.'); return; }
+    const r = await api('/operator/billing/plans', { method: 'POST', body: JSON.stringify({ planId, priceCents: cents }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'editsms') {
+    const cap = prompt(`Monthly SMS cap for “${planId}” (a number, or blank for unlimited) — creates a NEW version:`);
+    if (cap == null) return;
+    const overview = await api('/operator/billing/overview');
+    const plan = overview.ok ? (overview.body.plans || []).find(p => p.planId === planId) : null;
+    if (!plan) { alert('Plan not found.'); return; }
+    const cur = plan.versions[plan.versions.length - 1];
+    const features = { ...(cur.features || {}), sms: { included: true, monthlyLimit: cap.trim() === '' ? null : Math.max(0, parseInt(cap, 10) || 0) } };
+    const r = await api('/operator/billing/plans', { method: 'POST', body: JSON.stringify({ planId, features }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'vis') {
+    const r = await api('/operator/billing/plans', { method: 'POST', body: JSON.stringify({ planId, visible: e.target.dataset.visible === '1' }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'assign') {
+    const s = slug || prompt('Salon slug to assign:'); if (!s) return;
+    const p = prompt(`Plan id for ${s} (free / starter / pro / multi):`, 'starter'); if (!p) return;
+    const r = await api('/operator/billing/assign', { method: 'POST', body: JSON.stringify({ slug: s.trim(), planId: p.trim() }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'trial') {
+    const d = prompt(`Trial length for ${slug} — 14 or 30 days:`, '14'); if (d == null) return;
+    const r = await api('/operator/billing/trial', { method: 'POST', body: JSON.stringify({ slug, days: parseInt(d, 10) }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'comp') {
+    const m = prompt(`Comp ${slug} free for how many months (1–3)?`, '1'); if (m == null) return;
+    const r = await api('/operator/billing/comp', { method: 'POST', body: JSON.stringify({ slug, months: parseInt(m, 10) }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'subscribe') {
+    if (!confirm(`Subscribe ${slug} NOW? This creates a REAL Helcim subscription and REAL recurring charges on their saved payment method.`)) return;
+    const r = await api('/operator/billing/subscribe', { method: 'POST', body: JSON.stringify({ slug }) });
+    if (r.ok) { alert('Subscribed — Helcim subscription #' + (r.body.account?.helcimSubscriptionId ?? '?')); refreshBilling(); }
+    else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'sync') {
+    const r = await api(`/operator/billing/sync?slug=${encodeURIComponent(slug)}`);
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  } else if (act === 'cancelacct') {
+    if (!confirm(`Cancel billing for ${slug}? Cancels the Helcim subscription (if any); the status stays canceled until you reassign.`)) return;
+    const r = await api('/operator/billing/cancel', { method: 'POST', body: JSON.stringify({ slug }) });
+    if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
+  }
 }
 
 async function refreshRequests() {
