@@ -386,6 +386,11 @@ export function settingsBack() {
   if (_settingsView === 'leaf' && _settingsCat) settingsOpenCategory(_settingsCat);
   else settingsNavRoot();
 }
+// Re-render the currently-open category in place — used when an async visibility change
+// (e.g. the Billing flag resolving) should reveal/hide a leaf without leaving the view.
+export function settingsRefreshOpenCategory() {
+  if (_settingsView === 'cat' && _settingsCat) settingsOpenCategory(_settingsCat);
+}
 
 export function renderSettingsPanel() {
   renderServicesMerged();

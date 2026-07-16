@@ -82,3 +82,34 @@ test('no subscription payload → account returned unchanged', () => {
   const a = reconcileAccount(before, null);
   assert.deepEqual(a, before);
 });
+
+test('an id-less payment does NOT duplicate across repeated syncs (synthetic key)', () => {
+  const s = sub([pay({ id: undefined, invoiceNumber: 'INV-A', amount: 34, status: 'waiting' })]);
+  const a1 = reconcileAccount(acct(), s);
+  const a2 = reconcileAccount(a1, s);
+  const a3 = reconcileAccount(a2, s);
+  assert.equal(a3.history.filter(h => h.event === 'payment').length, 1, 'one row, not one per sync');
+});
+
+test('a waiting→approved transition on the same id UPSERTS the row (no frozen duplicate)', () => {
+  const waiting = sub([pay({ id: 7001, status: 'waiting', amount: 34, date: '2026-07-01' })]);
+  const approved = sub([pay({ id: 7001, status: 'approved', amount: 34, date: '2026-07-01' })]);
+  const a1 = reconcileAccount(acct({ status: 'trialing' }), waiting);
+  assert.equal(a1.history.length, 1);
+  assert.equal(a1.history[0].note, 'helcim:waiting');
+  const a2 = reconcileAccount(a1, approved);
+  assert.equal(a2.history.length, 1, 'still one row — updated in place, not appended');
+  assert.equal(a2.history[0].note, 'helcim:approved', 'the settle is recorded');
+  assert.equal(a2.status, 'active');
+});
+
+test('status is decided by the newest payment BY DATE even when the array is newest-first', () => {
+  // array order = newest-first (declined older, approved is the latest by date but earlier in array)
+  const s = sub([
+    pay({ id: 8002, status: 'approved', amount: 34, date: '2026-07-10' }),
+    pay({ id: 8001, status: 'declined', amount: 34, date: '2026-07-03', errorMessage: 'Insufficient funds' }),
+  ]);
+  const a = reconcileAccount(acct({ status: 'past_due', pastDueSince: 5 }), s);
+  assert.equal(a.status, 'active', 'the 07-10 approval is newest by date, so the account is active');
+  assert.equal(a.pastDueSince, null);
+});

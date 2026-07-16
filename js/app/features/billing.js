@@ -27,19 +27,23 @@ export function billingVisible() {
 
 // Fire-and-forget flag refresh (called when Settings opens). A 401 (non-admin
 // session) or network failure just leaves the section hidden — never an error.
+// If the fetch flips Billing from hidden→visible while the user is already sitting
+// in the Settings category that holds it, re-render that category so the entry
+// appears without needing to back out and re-enter.
 export async function refreshBillingFlags() {
+  const wasVisible = billingVisible();
   try {
     const r = await fetch(BILLING_PROXY + '/status');
-    if (!r.ok) { _flags = { selfserveBillingEnabled: false }; return; }
-    const b = await r.json();
-    _flags = b.flags || { selfserveBillingEnabled: false };
-    _status = b;
+    if (!r.ok) { _flags = { selfserveBillingEnabled: false }; }
+    else { const b = await r.json(); _flags = b.flags || { selfserveBillingEnabled: false }; _status = b; }
   } catch { /* stay hidden on failure */ }
+  if (billingVisible() !== wasVisible) window.settingsRefreshOpenCategory?.();
 }
 
 const money = c => c == null ? '—' : '$' + (c / 100).toFixed(2);
+const fmtDate = d => { if (d == null || d === '') return ''; const t = typeof d === 'number' ? d : Date.parse(d); return Number.isFinite(t) ? new Date(t).toLocaleDateString() : String(d); };
 const histLine = h => {
-  const when = typeof h.at === 'number' ? new Date(h.at).toLocaleDateString() : (h.at || '');
+  const when = fmtDate(h.at);
   if (h.event === 'payment') return `${when} — payment ${money(h.amountCents)}${h.failureReason ? ' · <span class="text-red-700">' + escHtml(h.failureReason) + '</span>' : ''}`;
   return `${when} — ${escHtml(h.event)}${h.note ? ' · ' + escHtml(h.note) : ''}`;
 };
@@ -67,7 +71,7 @@ export async function renderBillingSettings() {
     : a.status === 'trialing' && !a.trialEndsAt ? 'Set up — nothing is billing yet.'
     : a.status === 'trialing' ? 'Free trial until ' + new Date(a.trialEndsAt).toLocaleDateString()
     : a.status === 'comped' ? 'Complimentary until ' + (a.compUntil ? new Date(a.compUntil).toLocaleDateString() : '—')
-    : a.status === 'active' ? 'Active' + (a.currentPeriodEnd ? ' — next bill ' + escHtml(String(a.currentPeriodEnd)) : '')
+    : a.status === 'active' ? 'Active' + (a.currentPeriodEnd ? ' — next bill ' + escHtml(fmtDate(a.currentPeriodEnd)) : '')
     : a.status === 'past_due' ? 'Payment problem' + (a.lastFailureReason ? ' — ' + escHtml(a.lastFailureReason) : '')
     : escHtml(a.status);
   el.innerHTML = `
@@ -92,18 +96,26 @@ export async function renderBillingSettings() {
 export async function billingChoosePlan(planId) {
   const plan = (_status && _status.plans || []).find(p => p.planId === planId);
   if (!plan) return;
-  const already = _status && _status.account && _status.account.helcimSubscriptionId;
-  const msg = already
-    ? `Switch to ${plan.name} (${money(plan.priceCents)}/mo)? The change takes effect at your next billing date.`
-    : `Subscribe to ${plan.name} at ${money(plan.priceCents)}/mo? Your saved payment method will be billed monthly.`;
+  const acct = _status && _status.account;
+  const subscribed = acct && acct.helcimSubscriptionId;
+  const isFree = !(plan.priceCents > 0);
+  // Honest copy per case — Phase 1 does NOT change the live billed amount for an existing
+  // subscription (that's Phase 2), so a paid→paid switch is recorded, not applied now.
+  const msg = isFree
+    ? (subscribed
+        ? `Switch to ${plan.name}? This cancels your paid subscription — you won’t be billed going forward.`
+        : `Switch to ${plan.name}? There’s no charge for this plan.`)
+    : (subscribed
+        ? `Request a switch to ${plan.name} (${money(plan.priceCents)}/mo)? We’ll record it, but the amount you’re billed won’t change until TurnDesk applies it — contact us to switch sooner.`
+        : `Subscribe to ${plan.name} at ${money(plan.priceCents)}/mo? Your saved payment method will be billed monthly.`);
   if (!confirm(msg)) return;
   try {
     const r = await fetch(BILLING_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId }) });
     const b = await r.json().catch(() => ({}));
-    if (!r.ok) { showToast(b.error || 'Could not subscribe'); return; }
-    showToast(already ? 'Plan change saved' : 'Subscribed');
+    if (!r.ok) { showToast(b.error || 'Could not update your plan'); return; }
+    showToast(b.pending ? 'Plan change requested' : subscribed || isFree ? 'Plan updated' : 'Subscribed');
     renderBillingSettings();
-  } catch { showToast('Could not subscribe'); }
+  } catch { showToast('Could not update your plan'); }
 }
 
 // Card/bank capture via HelcimPay.js verify mode. For ACH, the NACHA recurring-debit
@@ -113,7 +125,7 @@ export async function billingAddPayment(ach) {
   if (ach) {
     const text = (_status && _status.achAuthText && _status.achAuthText.text) || '';
     if (!confirm('Bank (ACH) authorization:\n\n' + text + '\n\nDo you agree?')) return;
-    const r = await fetch(BILLING_PROXY + '/ach-authorize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ textVersion: _status && _status.achAuthText && _status.achAuthText.version }) });
+    const r = await fetch(BILLING_PROXY + '/ach-authorize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     if (!r.ok) { showToast('Could not record the authorization'); return; }
   }
   let tokenResp = null;
@@ -126,12 +138,27 @@ export async function billingAddPayment(ach) {
   try { await _loadHelcimPay(); } catch { showToast('Could not load the secure payment form'); return; }
   window.appendHelcimPayIframe(checkoutToken);
   const key = 'helcim-pay-js-' + checkoutToken;
+  // Tear down on EVERY terminal outcome (success, abort) plus a hard 15-min backstop, so
+  // abandoning the form can't leak an accumulating global 'message' listener.
+  let done = false;
+  const cleanup = () => {
+    if (done) return; done = true;
+    window.removeEventListener('message', onMsg);
+    clearTimeout(timer);
+    try { window.removeHelcimPayIframe && window.removeHelcimPayIframe(); } catch {}
+  };
+  const timer = setTimeout(cleanup, 15 * 60 * 1000);
   const onMsg = async (event) => {
     if (!event.data || event.data.eventName !== key) return;
-    if (event.data.eventStatus === 'ABORTED') { window.removeEventListener('message', onMsg); return; }
-    if (event.data.eventStatus !== 'SUCCESS') return;
-    window.removeEventListener('message', onMsg);
+    const st = event.data.eventStatus;
+    if (st !== 'SUCCESS' && st !== 'ABORTED') return;   // ignore non-terminal; timer is the backstop
+    cleanup();
+    if (st === 'ABORTED') return;
     const m = event.data.eventMessage || {};
+    // NOTE: the exact HelcimPay verify message shape isn't confirmed against a live sandbox
+    // (§10 open item). Pass the signed string through untouched — do NOT re-stringify — so
+    // the server's SHA-256(raw+secret) check matches. Must be validated with a real payload
+    // before self-serve billing is enabled.
     const raw = typeof m.data === 'string' ? m.data : JSON.stringify(m.data ?? m);
     try {
       const r = await fetch(BILLING_PROXY + '/verify-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ checkoutToken, rawDataResponse: raw, hash: m.hash || (m.data && m.data.hash) || '' }) });

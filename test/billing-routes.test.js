@@ -128,8 +128,25 @@ test('/billing/subscribe on an already-subscribed account only re-pins (plan cha
   try {
     const r = await j(await call(env, '/billing/subscribe', { token: 'tokOwner', body: { planId: 'pro' } }));
     assert.equal(r.account.planId, 'pro');
-    assert.equal(r.account.history.at(-1).event, 'plan-change');
+    assert.equal(r.pending, true, 'flagged pending so the client can be honest the price isn’t in effect yet');
+    assert.equal(r.account.history.at(-1).event, 'plan-change-requested');
     assert.equal(helcimTouched, false, 'Phase 1 records intent; the live subscription is not touched');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('/billing/subscribe to Free while subscribed cancels the live Helcim subscription (downgrade, not a $0 charge)', async () => {
+  const env = makeEnv();
+  await seedSessions(env, 'lux-nails');
+  await seedPlansAndAccount(env, baseAccount({ paymentMethodType: 'card', helcimCustomerId: 7, helcimSubscriptionId: 900, status: 'active' }));
+  await regDO(env).fetch('https://do/bdo/flags-put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selfserveBillingEnabled: true }) });
+  const realFetch = globalThis.fetch;
+  let cancelHit = false;
+  globalThis.fetch = async (u, init) => { if (String(u).includes('/subscriptions/') && init && init.method === 'PATCH') cancelHit = true; return new Response('{}', { status: 200 }); };
+  try {
+    const r = await j(await call(env, '/billing/subscribe', { token: 'tokOwner', body: { planId: 'free' } }));
+    assert.equal(r.account.planId, 'free');
+    assert.equal(r.account.helcimSubscriptionId, null, 'the live subscription is cleared');
+    assert.equal(cancelHit, true, 'Helcim cancel was called');
   } finally { globalThis.fetch = realFetch; }
 });
 
@@ -140,9 +157,10 @@ test('ACH portal-token requires a prior recorded authorization (NACHA) — 428 w
   await regDO(env).fetch('https://do/bdo/flags-put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selfserveBillingEnabled: true }) });
   const r = await call(env, '/billing/portal-token', { token: 'tokOwner', body: { ach: true } });
   assert.equal(r.status, 428);
-  await call(env, '/billing/ach-authorize', { token: 'tokOwner', body: { textVersion: 'ach-v1' } });
+  await call(env, '/billing/ach-authorize', { token: 'tokOwner', body: {} });
   const acct = (await j(await regDO(env).fetch('https://do/bdo/account-get?id=lux-nails'))).account;
-  assert.equal(acct.achAuthorization.textVersion, 'ach-v1');
+  assert.equal(acct.achAuthorization.textVersion, 'ach-auth-v1', 'the server-authoritative wording version, not a client-supplied string');
+  assert.ok(/^[0-9a-f]{64}$/.test(acct.achAuthorization.textHash), 'a hash of the exact accepted wording is stored as self-contained evidence');
   assert.ok(acct.achAuthorization.acceptedAt > 0);
 });
 

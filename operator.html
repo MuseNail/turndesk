@@ -154,7 +154,7 @@ async function refreshBilling() {
   $('billing-plans').innerHTML = `<table><thead><tr><th>Plan</th><th>Price</th><th>Caps</th><th>SMS</th><th></th></tr></thead><tbody>${planRows}</tbody></table>`;
 
   if (!(accounts || []).length) {
-    $('billing-accounts').innerHTML = '<p class="muted">No billing accounts yet. Use “billing” next to a plan below — or assign from here: <button class="btn-ghost" data-bact="assign">Assign a salon to a plan</button></p>';
+    $('billing-accounts').innerHTML = '<p class="muted">No billing accounts yet. <button class="btn-ghost" data-bact="assign">Assign a salon to a plan</button></p>';
   } else {
     const acctRows = accounts.map(a => `<tr>
       <td><strong>${esc(a.salonName || a.accountId)}</strong><div class="muted">${esc(a.accountId)}</div></td>
@@ -168,7 +168,7 @@ async function refreshBilling() {
         <button class="btn-ghost" data-bact="assign" data-slug="${esc(a.accountId)}">plan…</button>
         &nbsp;<button class="btn-ghost" data-bact="trial" data-slug="${esc(a.accountId)}">trial…</button>
         &nbsp;<button class="btn-ghost" data-bact="comp" data-slug="${esc(a.accountId)}">comp…</button>
-        &nbsp;<button class="btn-ghost" data-bact="subscribe" data-slug="${esc(a.accountId)}">subscribe</button>
+        ${a.helcimSubscriptionId ? '' : `&nbsp;<button class="btn-ghost" data-bact="subscribe" data-slug="${esc(a.accountId)}">subscribe</button>`}
         &nbsp;<button class="btn-ghost" data-bact="sync" data-slug="${esc(a.accountId)}">sync</button>
         &nbsp;<button class="btn-ghost" data-bact="cancelacct" data-slug="${esc(a.accountId)}">cancel</button>
       </td></tr>`).join('');
@@ -201,7 +201,10 @@ async function onBillingAction(e) {
     const plan = overview.ok ? (overview.body.plans || []).find(p => p.planId === planId) : null;
     if (!plan) { alert('Plan not found.'); return; }
     const cur = plan.versions[plan.versions.length - 1];
-    const features = { ...(cur.features || {}), sms: { included: true, monthlyLimit: cap.trim() === '' ? null : Math.max(0, parseInt(cap, 10) || 0) } };
+    // Preserve whether SMS is included for this tier — editing the cap must not silently
+    // switch texting on for a plan that excludes it.
+    const included = !!(cur.features && cur.features.sms && cur.features.sms.included);
+    const features = { sms: { included, monthlyLimit: cap.trim() === '' ? null : Math.max(0, parseInt(cap, 10) || 0) } };
     const r = await api('/operator/billing/plans', { method: 'POST', body: JSON.stringify({ planId, features }) });
     if (r.ok) refreshBilling(); else alert('Failed: ' + (r.body?.error || r.status));
   } else if (act === 'vis') {

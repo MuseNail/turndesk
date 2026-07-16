@@ -160,3 +160,22 @@ test('operator subscribe requires a captured payment method', async () => {
   const r = await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' });
   assert.equal(r.status, 409, 'no payment method on file → 409, no Helcim call');
 });
+
+test('operator subscribe refuses to mint a SECOND subscription on an already-subscribed account (no double charge)', async () => {
+  const env = makeEnv();
+  await op(env, '/operator/billing/overview');
+  await reg(env, 'lux-nails');
+  await op(env, '/operator/billing/assign', { slug: 'lux-nails', planId: 'starter' });
+  // seed a captured payment method + an existing live subscription directly on the account
+  const acct = (await j(await env.SALON_DO.get('__registry__').fetch('https://do/bdo/account-get?id=lux-nails'))).account;
+  acct.paymentMethodType = 'card'; acct.helcimCustomerId = 7; acct.helcimSubscriptionId = 555;
+  await env.SALON_DO.get('__registry__').fetch('https://do/bdo/account-put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account: acct }) });
+  const realFetch = globalThis.fetch;
+  let helcimTouched = false;
+  globalThis.fetch = async (u) => { if (String(u).includes('api.helcim.com')) helcimTouched = true; return new Response('{}', { status: 200 }); };
+  try {
+    const r = await op(env, '/operator/billing/subscribe', { slug: 'lux-nails' });
+    assert.equal(r.status, 409, 'already subscribed → 409');
+    assert.equal(helcimTouched, false, 'no Helcim subscribe call — the first subscription is not orphaned');
+  } finally { globalThis.fetch = realFetch; }
+});

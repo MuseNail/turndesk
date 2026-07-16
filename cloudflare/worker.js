@@ -1010,6 +1010,21 @@ export const SEED_PLANS = [
 ];
 export const currentVersion = plan => plan.versions[plan.versions.length - 1];
 export const visiblePlans = plans => plans.filter(p => p && p.visible);
+// Order-insensitive deep-equal + recursive merge — so a no-op edit (same values, any key
+// order) never spuriously bumps a plan version, and a PARTIAL capacity/features patch
+// merges onto the current version instead of blanking the untouched keys.
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a == null || b == null) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every(k => deepEqual(a[k], b[k]));
+}
+function deepMerge(base, patch) {
+  if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const out = { ...(base && typeof base === 'object' && !Array.isArray(base) ? base : {}) };
+  for (const k of Object.keys(patch)) out[k] = deepMerge(out[k], patch[k]);
+  return out;
+}
 // Editing price/capacity/features appends a NEW version (subscribers stay pinned to the
 // version they signed up under — an operator edit never silently reprices anyone).
 // name/visible are plan-level cosmetics and change in place.
@@ -1018,15 +1033,13 @@ export function savePlanEdit(plan, edit) {
   if (edit.name !== undefined) p.name = String(edit.name);
   if (edit.visible !== undefined) p.visible = !!edit.visible;
   const cur = currentVersion(p);
-  const wants = k => edit[k] !== undefined && JSON.stringify(edit[k]) !== JSON.stringify(cur[k]);
-  if (wants('priceCents') || wants('capacity') || wants('features')) {
-    p.versions.push({
-      version: cur.version + 1,
-      priceCents: edit.priceCents !== undefined ? edit.priceCents : cur.priceCents,
-      capacity: edit.capacity !== undefined ? edit.capacity : cur.capacity,
-      features: edit.features !== undefined ? edit.features : cur.features,
-      createdAt: Date.now(),
-    });
+  const next = {
+    priceCents: edit.priceCents !== undefined ? edit.priceCents : cur.priceCents,
+    capacity: edit.capacity !== undefined ? deepMerge(cur.capacity, edit.capacity) : cur.capacity,
+    features: edit.features !== undefined ? deepMerge(cur.features, edit.features) : cur.features,
+  };
+  if (next.priceCents !== cur.priceCents || !deepEqual(next.capacity, cur.capacity) || !deepEqual(next.features, cur.features)) {
+    p.versions.push({ version: cur.version + 1, ...next, createdAt: Date.now() });
   }
   return p;
 }
@@ -1046,21 +1059,32 @@ export async function billingPlansEnsureSeed(env) {
 export function reconcileAccount(account, subscription) {
   if (!subscription) return account;
   const a = { ...account, history: [...(account.history || [])] };
-  const seen = new Set(a.history.map(h => h.helcimPaymentId).filter(id => id != null));
   const payments = Array.isArray(subscription.payments) ? subscription.payments : [];
+  const cents = p => Math.round(Number(p.amount || 0) * 100);
+  const invOf = p => p.invoiceNumber || String(p.id ?? '');
+  // Stable per-payment key: Helcim's id when present, else a synthetic composite so an
+  // id-less payment (e.g. still 'waiting') doesn't re-append on every sync. Same key is
+  // recomputed from a STORED row (helcimPaymentId/invoiceId/amountCents) so they match.
+  const keyP = p => p.id != null ? 'id:' + p.id : 'syn:' + invOf(p) + '|' + cents(p);
+  const keyH = h => h.helcimPaymentId != null ? 'id:' + h.helcimPaymentId : 'syn:' + (h.invoiceId || '') + '|' + (h.amountCents ?? '');
+  const idx = new Map();
+  a.history.forEach((h, i) => { if (h.event === 'payment') idx.set(keyH(h), i); });
   for (const p of payments) {
-    if (p.id != null && seen.has(p.id)) continue;
-    a.history.push({
-      event: 'payment', at: p.date || '', amountCents: Math.round(Number(p.amount || 0) * 100),
-      invoiceId: p.invoiceNumber || String(p.id ?? ''), failureReason: (p.status === 'declined' || p.status === 'failed') ? (p.errorMessage || p.status) : null,
+    const key = keyP(p);
+    const row = {
+      event: 'payment', at: p.date ? (Date.parse(p.date) || 0) : 0, amountCents: cents(p),
+      invoiceId: invOf(p), failureReason: (p.status === 'declined' || p.status === 'failed') ? (p.errorMessage || p.status) : null,
       note: 'helcim:' + (p.status || ''), helcimPaymentId: p.id ?? null,
-    });
-    if (p.id != null) seen.add(p.id);
+    };
+    if (idx.has(key)) a.history[idx.get(key)] = row;   // UPSERT — a waiting→settled transition updates the row in place
+    else { idx.set(key, a.history.length); a.history.push(row); }
   }
   if (subscription.dateBilling) a.currentPeriodEnd = subscription.dateBilling;
   const sticky = a.status === 'canceled' || a.status === 'comped';
-  // Chronology = array order (Helcim appends); the LAST settled (non-waiting) payment decides.
-  const settled = payments.filter(p => p.status === 'approved' || p.status === 'declined' || p.status === 'failed');
+  // The NEWEST settled payment decides status — chosen by DATE, not array position
+  // (Helcim's payments[] ordering isn't a documented guarantee). Tiebreak on id.
+  const settled = payments.filter(p => p.status === 'approved' || p.status === 'declined' || p.status === 'failed')
+    .slice().sort((x, y) => ((Date.parse(x.date || '') || 0) - (Date.parse(y.date || '') || 0)) || ((x.id || 0) - (y.id || 0)));
   const last = settled[settled.length - 1];
   if (last) {
     if (last.status === 'approved') {
@@ -1143,6 +1167,30 @@ export async function syncAccountFromHelcim(env, account) {
   const fresh = (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(account.accountId))).account || account;
   const merged = reconcileAccount(fresh, sub);
   await bdoPost(env, '/bdo/account-put', { account: merged });
+  return merged;
+}
+
+// ── Billing account helpers (one factory + one history appender, shared by the
+// operator and salon paths so the ~14-field financial record can't drift) ──────
+export const newBillingAccount = slug => ({ accountId: slug, salonSlugs: [slug], planId: null, planVersion: null, status: 'trialing', trialEndsAt: null, compUntil: null, currentPeriodEnd: null, paymentMethodType: null, helcimCustomerId: null, helcimCustomerCode: null, helcimSubscriptionId: null, pastDueSince: null, lastFailureReason: null, achAuthorization: null, history: [] });
+export const billingAppendHistory = (account, event, note) => ({ ...account, history: [...(account.history || []), { event, at: Date.now(), amountCents: null, invoiceId: null, failureReason: null, note: note || '', helcimPaymentId: null }] });
+const bAcctGet = async (env, slug) => (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(slug))).account || null;
+const bAcctPut = (env, account) => bdoPost(env, '/bdo/account-put', { account });
+// Create the REAL Helcim subscription, then apply the result onto a FRESH re-read of the
+// account (spec §8 fetch-before-RMW): the ensure-customer + subscribe network calls finish
+// BEFORE the read-modify-write, so a concurrent operator write (e.g. cancel) during the
+// Helcim round-trip is preserved — we only stamp the subscription fields, not clobber the
+// whole record with a stale snapshot. Shared by both subscribe entry points.
+export async function billingDoSubscribe(env, slug, priceCents, salonName, planId, planVersion) {
+  let account = await bAcctGet(env, slug);
+  if (!account) throw new Error('no billing account');
+  account = await helcimEnsureBillingCustomer(env, account, salonName);
+  const { subscriptionId } = await helcimSubscribe(env, account, priceCents);
+  const customerFields = { helcimCustomerId: account.helcimCustomerId, helcimCustomerCode: account.helcimCustomerCode };
+  const fresh = (await bAcctGet(env, slug)) || account;
+  let merged = { ...fresh, ...customerFields, helcimSubscriptionId: subscriptionId, status: (fresh.status === 'canceled') ? 'canceled' : 'active', planId, planVersion };
+  merged = billingAppendHistory(merged, 'subscribe', '$' + (priceCents / 100).toFixed(2) + '/mo');
+  await bAcctPut(env, merged);
   return merged;
 }
 
@@ -1331,9 +1379,9 @@ export async function handleOperator(request, env, url, method, path) {
   }
 
   // ── SaaS billing (Phase 1 — operator controls; nothing here enforces anything) ──
-  const getAccount = async slug => (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(slug))).account || null;
-  const putAccount = async account => bdoPost(env, '/bdo/account-put', { account });
-  const hist = (account, event, note) => ({ ...account, history: [...(account.history || []), { event, at: Date.now(), amountCents: null, invoiceId: null, failureReason: null, note: note || '', helcimPaymentId: null }] });
+  const getAccount = slug => bAcctGet(env, slug);
+  const putAccount = account => bAcctPut(env, account);
+  const hist = billingAppendHistory;
 
   if (path === '/operator/billing/overview' && method === 'GET') {
     const plans = await billingPlansEnsureSeed(env);
@@ -1376,12 +1424,14 @@ export async function handleOperator(request, env, url, method, path) {
     if (!plan) return json({ error: 'no such plan' }, 404);
     const entry = await registryGet(env, v.slug);
     if (!entry) return json({ error: 'no such salon' }, 404);
-    let account = await getAccount(v.slug);
-    if (!account) account = { accountId: v.slug, salonSlugs: [v.slug], status: 'trialing', trialEndsAt: null, compUntil: null, currentPeriodEnd: null, paymentMethodType: null, helcimCustomerId: null, helcimCustomerCode: null, helcimSubscriptionId: null, pastDueSince: null, lastFailureReason: null, achAuthorization: null, history: [] };
+    let account = await getAccount(v.slug) || newBillingAccount(v.slug);
     account.planId = plan.planId;
     account.planVersion = currentVersion(plan).version;
     account = hist(account, 'assign', plan.planId + ' v' + account.planVersion);
     await putAccount(account);
+    // billingAccountId → billing:<slug> is the real, authoritative plan reference. The
+    // legacy free-text entry.plan (set at provisioning) is DEPRECATED cosmetic display
+    // only — never trust it for billing; the billing account is the source of truth.
     entry.billingAccountId = account.accountId;
     await registryStub(env).fetch(new Request('https://do/registry/put', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entry }) }));
     return json({ ok: true, account });
@@ -1424,23 +1474,22 @@ export async function handleOperator(request, env, url, method, path) {
   // salon, by the owner's explicit action — the salon-facing path stays flag-gated.
   if (path === '/operator/billing/subscribe' && method === 'POST') {
     let b = {}; try { b = await request.json(); } catch {}
-    let account = await getAccount(String(b.slug || ''));
+    const slug = String(b.slug || '');
+    const account = await getAccount(slug);
     if (!account) return json({ error: 'no billing account — assign a plan first' }, 404);
+    // A live subscription already exists → refuse rather than minting a SECOND one (which
+    // would orphan the first and double-charge). Change plans via cancel + re-subscribe.
+    if (account.helcimSubscriptionId) return json({ error: 'already subscribed (Helcim #' + account.helcimSubscriptionId + ') — cancel first to re-subscribe' }, 409);
     if (!account.paymentMethodType) return json({ error: 'no payment method on file — capture card/bank first' }, 409);
     const plans = await billingPlansEnsureSeed(env);
     const plan = plans.find(p => p.planId === account.planId);
     const ver = plan && plan.versions.find(x => x.version === account.planVersion);
     if (!ver || !(ver.priceCents > 0)) return json({ error: 'assigned plan version has no billable price' }, 409);
     try {
-      account = await helcimEnsureBillingCustomer(env, account, (await registryGet(env, account.accountId))?.name);
-      const { subscriptionId } = await helcimSubscribe(env, account, ver.priceCents);
-      account.helcimSubscriptionId = subscriptionId;
-      account.status = 'active';
-      account = hist(account, 'subscribe', '$' + (ver.priceCents / 100).toFixed(2) + '/mo');
-      await putAccount(account);
-      return json({ ok: true, account });
+      const merged = await billingDoSubscribe(env, slug, ver.priceCents, (await registryGet(env, slug))?.name, account.planId, account.planVersion);
+      return json({ ok: true, account: merged });
     } catch (e) {
-      console.error('[billing subscribe]', account.accountId, (e && e.message) || String(e));
+      console.error('[billing subscribe]', slug, (e && e.message) || String(e));
       return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
     }
   }
@@ -1481,19 +1530,20 @@ async function sha256Hex(s) {
 }
 // The recurring-debit authorization text shown at ACH enrollment. Versioned so the
 // exact accepted wording is provable later (NACHA record-keeping) — bump the id when
-// the wording changes, never edit an existing version's meaning.
+// the wording changes, never edit an existing version's meaning. The accepted text's
+// hash is stored on the account at acceptance, so the evidence is self-contained and
+// can't be retroactively altered by editing this constant.
 export const ACH_AUTH_TEXT = {
   version: 'ach-auth-v1',
-  text: 'I authorize TurnDesk to debit my bank account each month for the subscription amount of my selected plan, until I cancel this authorization. I can revoke it any time from Settings → Billing or by contacting TurnDesk. Debits occur on my billing date; if one is returned, it may be retried per my bank’s rules.',
+  text: 'I authorize TurnDesk to debit my bank account each month for the subscription amount of my selected plan, until I cancel this authorization. I can revoke it any time by contacting TurnDesk. Debits occur on my billing date; if one is returned, it may be retried per my bank’s rules.',
 };
-const emptyAccount = slug => ({ accountId: slug, salonSlugs: [slug], planId: null, planVersion: null, status: 'trialing', trialEndsAt: null, compUntil: null, currentPeriodEnd: null, paymentMethodType: null, helcimCustomerId: null, helcimCustomerCode: null, helcimSubscriptionId: null, pastDueSince: null, lastFailureReason: null, achAuthorization: null, history: [] });
 
 export async function handleBilling(request, env, url, method, path, salonId) {
   const user = await billingAdminUser(request, url, env, salonId);
   if (!user) return json({ error: 'unauthorized' }, 401);
-  const getAccount = async () => (await bdoGet(env, '/bdo/account-get?id=' + encodeURIComponent(salonId))).account || null;
-  const putAccount = async account => bdoPost(env, '/bdo/account-put', { account });
-  const histEvent = (account, event, note) => ({ ...account, history: [...(account.history || []), { event, at: Date.now(), amountCents: null, invoiceId: null, failureReason: null, note: note || '', helcimPaymentId: null }] });
+  const getAccount = () => bAcctGet(env, salonId);
+  const putAccount = account => bAcctPut(env, account);
+  const histEvent = billingAppendHistory;
 
   // GET /billing/status → this salon's account + visible plans (flattened to their
   // current version) + the selfserve flag. ?sync=1 reconciles from Helcim first.
@@ -1508,9 +1558,10 @@ export async function handleBilling(request, env, url, method, path, salonId) {
   // POST /billing/ach-authorize { textVersion } → record the NACHA authorization
   // acceptance (timestamp + wording version + who) BEFORE any bank capture.
   if (path === '/billing/ach-authorize' && method === 'POST') {
-    let b = {}; try { b = await request.json(); } catch {}
-    let account = (await getAccount()) || emptyAccount(salonId);
-    account.achAuthorization = { acceptedAt: Date.now(), textVersion: String(b.textVersion || ACH_AUTH_TEXT.version), byUser: user.name || user.id };
+    // Store the server-authoritative version AND a hash of the exact wording the salon
+    // accepted — not just a version pointer — so the evidence stands on its own.
+    let account = (await getAccount()) || newBillingAccount(salonId);
+    account.achAuthorization = { acceptedAt: Date.now(), textVersion: ACH_AUTH_TEXT.version, textHash: await sha256Hex(ACH_AUTH_TEXT.text), byUser: user.name || user.id };
     account = histEvent(account, 'ach-authorize', account.achAuthorization.textVersion);
     await putAccount(account);
     return json({ ok: true, account });
@@ -1522,7 +1573,7 @@ export async function handleBilling(request, env, url, method, path, salonId) {
     const flags = await billingFlags(env);
     if (flags.selfserveBillingEnabled !== true) return json({ error: 'self-serve billing is not enabled' }, 403);
     let b = {}; try { b = await request.json(); } catch {}
-    let account = (await getAccount()) || emptyAccount(salonId);
+    let account = (await getAccount()) || newBillingAccount(salonId);
     if (b.ach && !account.achAuthorization) return json({ error: 'ACH requires the recurring-debit authorization first', achAuthText: ACH_AUTH_TEXT }, 428);
     try {
       account = await helcimEnsureBillingCustomer(env, account, salonId);
@@ -1550,17 +1601,25 @@ export async function handleBilling(request, env, url, method, path, salonId) {
     if (!b.hash || String(b.hash).toLowerCase() !== expect) return json({ error: 'response hash mismatch' }, 400);
     let parsed = {}; try { parsed = JSON.parse(raw); } catch {}
     const data = parsed.data || parsed;
-    let account = (await getAccount()) || emptyAccount(salonId);
-    account.paymentMethodType = data.bankToken ? 'ach' : 'card';
+    let account = (await getAccount()) || newBillingAccount(salonId);
+    // Card-vs-ACH from the verify response. Field names are checked broadly because the
+    // exact HelcimPay verify shape isn't confirmed against a live sandbox yet (see §10
+    // open items) — must be verified before self-serve billing is enabled.
+    const isAch = !!(data.bankToken || data.bankAccountToken || data.achToken || data.accountNumber
+      || (data.paymentType && String(data.paymentType).toLowerCase().includes('ach')));
+    account.paymentMethodType = isAch ? 'ach' : 'card';
     if (data.customerCode) account.helcimCustomerCode = data.customerCode;
     account = histEvent(account, 'payment-method', account.paymentMethodType);
     await putAccount(account);
     return json({ ok: true, account });
   }
-  // POST /billing/subscribe { planId } → first subscribe creates the REAL Helcim
-  // subscription at the plan's current version; on an already-subscribed account a
-  // plan change only re-pins + records intent (the live Helcim subscription is
-  // untouched in Phase 1 — next-cycle amount changes are Phase 2).
+  // POST /billing/subscribe { planId } →
+  //  • a $0/Free plan is a downgrade, never a Helcim subscription: cancel any live paid
+  //    subscription, then pin Free at no charge.
+  //  • an already-subscribed account requesting a paid plan RECORDS the change but does
+  //    NOT alter the live Helcim amount (next-cycle amount changes are Phase 2); returns
+  //    pending:true so the client can be honest that the new price isn't in effect yet.
+  //  • otherwise creates the REAL Helcim subscription at the plan's current version.
   if (path === '/billing/subscribe' && method === 'POST') {
     const flags = await billingFlags(env);
     if (flags.selfserveBillingEnabled !== true) return json({ error: 'self-serve billing is not enabled' }, 403);
@@ -1570,25 +1629,32 @@ export async function handleBilling(request, env, url, method, path, salonId) {
     if (!plan) return json({ error: 'no such plan' }, 404);
     const ver = currentVersion(plan);
     let account = await getAccount();
-    if (!account || !account.paymentMethodType) return json({ error: 'add a payment method first' }, 409);
-    if (account.helcimSubscriptionId) {
-      account.planId = plan.planId;
-      account.planVersion = ver.version;
-      account = histEvent(account, 'plan-change', plan.planId + ' v' + ver.version + ' (next cycle)');
+    if (!account) return json({ error: 'no billing account' }, 409);
+
+    if (!(ver.priceCents > 0)) {   // Free / $0 plan — a downgrade, not a subscription
+      if (account.helcimSubscriptionId) {
+        await helcimCancelSubscription(env, account.helcimSubscriptionId);
+        account = (await getAccount()) || account;   // fresh re-read after the Helcim call (spec §8)
+        account.helcimSubscriptionId = null;
+      }
+      account.planId = plan.planId; account.planVersion = ver.version; account.status = 'active';
+      account = histEvent(account, 'plan-free', plan.planId);
       await putAccount(account);
       return json({ ok: true, account });
     }
-    if (!(ver.priceCents > 0)) return json({ error: 'that plan has no billable price' }, 409);
-    try {
-      account = await helcimEnsureBillingCustomer(env, account, salonId);
-      const { subscriptionId } = await helcimSubscribe(env, account, ver.priceCents);
-      account.planId = plan.planId;
-      account.planVersion = ver.version;
-      account.helcimSubscriptionId = subscriptionId;
-      account.status = 'active';
-      account = histEvent(account, 'subscribe', '$' + (ver.priceCents / 100).toFixed(2) + '/mo');
+
+    if (!account.paymentMethodType) return json({ error: 'add a payment method first' }, 409);
+
+    if (account.helcimSubscriptionId) {   // already billing → record the request only (Phase 1)
+      account.planId = plan.planId; account.planVersion = ver.version;
+      account = histEvent(account, 'plan-change-requested', plan.planId + ' v' + ver.version);
       await putAccount(account);
-      return json({ ok: true, account });
+      return json({ ok: true, account, pending: true });
+    }
+
+    try {
+      const merged = await billingDoSubscribe(env, salonId, ver.priceCents, salonId, plan.planId, ver.version);
+      return json({ ok: true, account: merged });
     } catch (e) {
       console.error('[billing subscribe]', salonId, (e && e.message) || String(e));
       return json({ error: String((e && e.message) || e).slice(0, 300) }, 502);
