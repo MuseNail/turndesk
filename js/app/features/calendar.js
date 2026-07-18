@@ -673,13 +673,13 @@ export function calRenderGrid() {
       const svcRows = linesForColumn(first, cal.id);
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
       const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
-      let bg, border, tc = '#1a1a1a', pastStatus = '', statusColored = true;   // status → border + badge; fill → customer
+      let bg, border, tc = '#1a1a1a', pastStatus = '', statusColored = true, runningLate = false;   // status → border + badge; fill → customer
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
       else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; }
       else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
-      else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }   // TODAY only: passed start, not checked in → "running late" amber
+      else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; runningLate=true; }   // TODAY only: passed start, not checked in → "running late" amber
       else { statusColored=false; bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // plain upcoming → no status
       // Past day: resolve the appointment against the records — Completed (showed up) or
       // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
@@ -703,7 +703,7 @@ export function calRenderGrid() {
       const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
       const linkIcon = linked ? `<span title="${_e('Same appointment — also on ' + linkedCals.map(calName).join(', '))}" class="material-symbols-outlined" style="font-size:12px;color:${border};flex-shrink:0;transform:rotate(-45deg)">link</span>` : '';
       // Once the appointment is checked in, show its queue status as a badge on the bubble.
-      const qLabel = noShow ? 'No Show' : pastStatus || { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
+      const qLabel = noShow ? 'No Show' : pastStatus || { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || (runningLate ? 'Late' : '');
       const qBadge = qLabel ? `<span style="flex-shrink:0;font-size:7.5px;font-weight:800;color:#fff;background:${border};border-radius:999px;padding:1px 5px;white-space:nowrap">${qLabel}</span>` : '';
       body += `<div onclick="calEventClick(event,'${_e(first.id)}')" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
