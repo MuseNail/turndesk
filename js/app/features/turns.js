@@ -5,9 +5,10 @@ import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMa
 import { GROUP_COLORS } from '../config.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -541,9 +542,12 @@ export function renderTurnsQueue() {
     const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${partyLetters.get(e.groupId) || '•'}</span>` : '';
     const groupLbl = e.groupLabel ? `<span class="text-[10px] font-body italic ml-0.5" style="color:${e.groupColor||'#888'}">${e.groupLabel}</span>` : '';
     // Avatar bubble is STATUS-colored + consistent for everyone (green in service · blue done ·
-    // amber waiting), so it reads at a glance and party members no longer get a different-colored
-    // bubble. Party grouping still shows via the small letter badge (groupDot) beside the name.
-    const _av = serviceLineStyle(e.status).pill;
+    // violet awaiting-price · amber waiting), so it reads at a glance and party members no longer
+    // get a different-colored bubble. Party grouping still shows via the small letter badge
+    // (groupDot) beside the name. effectiveEntryStatus maps a complete-but-unpriced ticket to the
+    // violet "Awaiting price" cue so it doesn't look identical to a ready-to-pay "Done" ticket.
+    const _es = effectiveEntryStatus(e);
+    const _av = serviceLineStyle(_es).pill;
     const avatar = `<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-headline font-bold" style="background:${_av.bg};color:${_av.fg}">${escHtml(e.name.charAt(0).toUpperCase())}</div>`;
     const assignments = (e.assignments||[]).filter(a => a.techId || a.serviceId);
     const es = suggestions[e.id] || {};
@@ -578,13 +582,14 @@ export function renderTurnsQueue() {
         <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
       </div>`; }).join('');
     }
-    // C9/D13 vocabulary (recolored v4.79): In Service = green, Done(complete) = blue, Waiting = amber
-    // — match the status pills rendered inside this same card (and the floor-plan tints).
-    const borderColor = e.status==='inservice' ? '#2a7a4f' : e.status==='complete' ? '#1a5c7a' : '#d4860a';
-    const bgTint = e.status==='inservice' ? 'rgba(42,122,79,0.10)' : e.status==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
+    // C9/D13 vocabulary (recolored v4.79): In Service = green, Done(complete) = blue,
+    // Awaiting price = violet, Waiting = amber — match the status pills rendered inside this same
+    // card (and the floor-plan tints). Uses the same awaiting-aware status as the avatar bubble.
+    const borderColor = _es==='inservice' ? '#2a7a4f' : _es==='awaiting' ? '#6b4fb0' : _es==='complete' ? '#1a5c7a' : '#d4860a';
+    const bgTint = _es==='inservice' ? 'rgba(42,122,79,0.10)' : _es==='awaiting' ? 'rgba(107,79,176,0.12)' : _es==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
-        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}</div></div></div>`;
+        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
   }
   waitingList.innerHTML = waiting.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one waiting</div>' : waiting.map(buildCard).join('');
   const activeCards = [...complete, ...inservice];   // completed (awaiting payment) at the top, then in-service

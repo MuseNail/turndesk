@@ -17,6 +17,18 @@ const cfg = () => getState().config;
 export const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
 const isPhoneKey   = key => /^\d{7,15}$/.test(key);
 export const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
+// Compact note indicator for a customer card (turn board / floor tile / queue row): prefers the
+// visit note, falls back to the permanent customer note; the tooltip carries both in full. Editing
+// still happens by tapping the card (opens Assign & Price, which has both editors). '' when neither.
+export function cardNotePreview(phone, txnNote, opts = {}) {
+  const perm = customerNote(phone);
+  const visit = (txnNote || '').trim();
+  const primary = visit || perm;
+  if (!primary) return '';
+  const full = [perm && 'Note: ' + perm, visit && 'Visit: ' + visit].filter(Boolean).join('  ·  ');
+  if (opts.iconOnly) return `<span title="${escHtml(full)}" style="flex-shrink:0;font-size:${opts.fontSize || 10}px" aria-label="Has a note">📝</span>`;
+  return `<div class="text-[10px] leading-tight text-on-surface-variant truncate mt-0.5" title="${escHtml(full)}">📝 ${escHtml(primary)}</div>`;
+}
 
 export let squareCustomers   = [];
 export let customerDirectory = [];

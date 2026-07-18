@@ -1073,9 +1073,33 @@ export function calEventClick(e, apptId) {
   if (noShow) statusBadge = '<span style="color:#dc2626;font-size:11px;font-weight:700">⊘ No Show</span>';
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   const when = startDt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · ' + startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  // Both notes editable here (owner req). Permanent customer note = phone-keyed config (works
+  // pre-check-in). Visit note = the live queue entry's txnNote — but queue.entryPatch refuses a
+  // paid/done ticket, so show it READ-ONLY then rather than an editable field that silently drops.
+  const _taCls = 'w-full text-sm font-body text-on-surface bg-surface-container rounded-lg px-3 py-2 border border-surface-container-high focus:border-primary outline-none resize-none';
+  const custKey = notePhoneKey(phone);
+  const visitPaid = queueMatch && ['paid','done'].includes(queueMatch.status);
+  const visitVal = queueMatch ? (queueMatch.txnNote || '') : '';
+  const notesSection = `<div class="space-y-3 mb-4">
+    <div>
+      <label class="text-[10px] font-body font-bold uppercase tracking-widest text-outline block mb-1">Customer note <span class="normal-case tracking-normal text-on-surface-variant">— permanent</span></label>
+      ${custKey
+        ? `<textarea onchange="calSaveCustNote('${_escAttrJs(phone)}', this.value)" rows="2" placeholder="Allergies, preferences, VIP…" class="${_taCls}">${_escHtml(custKey ? customerNote(phone) : '')}</textarea>`
+        : `<p class="text-xs font-body text-on-surface-variant italic">Add a phone number to this appointment to save a customer note.</p>`}
+    </div>
+    <div>
+      <label class="text-[10px] font-body font-bold uppercase tracking-widest text-outline block mb-1">Visit note <span class="normal-case tracking-normal text-on-surface-variant">— this visit</span></label>
+      ${!queueMatch
+        ? `<p class="text-xs font-body text-on-surface-variant italic">Available after check-in.</p>`
+        : visitPaid
+          ? `<div class="text-sm font-body text-on-surface bg-surface-container rounded-lg px-3 py-2 border border-surface-container-high">${visitVal ? _escHtml(visitVal) : '<span class="italic text-on-surface-variant">No note</span>'}</div><p class="text-[11px] font-body text-on-surface-variant italic mt-1">This ticket is paid — reopen via Assign &amp; Price to edit.</p>`
+          : `<textarea onchange="calSaveVisitNote('${_escAttrJs(queueMatch.id)}', this.value)" rows="2" placeholder="Notes for today's visit…" class="${_taCls}">${_escHtml(visitVal)}</textarea>`}
+    </div>
+  </div>`;
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
     <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    ${notesSection}
     <div class="space-y-2">
       <button onclick="calQuickCheckin('${_escAttrJs(apptId)}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
@@ -1085,6 +1109,23 @@ export function calEventClick(e, apptId) {
       <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${_escAttrJs(apptId)}'); this.closest('.fixed').remove(); }" class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Cancel / Delete</button>
     </div></div>`;
   document.body.appendChild(modal);
+}
+
+// Note saves from the calendar popup. Both re-read fresh state at WRITE time (on blur/change),
+// never a snapshot from when the popup opened — so a concurrent edit elsewhere isn't clobbered.
+export function calSaveCustNote(phone, val) {
+  const key = notePhoneKey(phone);
+  if (!key) return;
+  const notes = { ...(getState().config.customer_notes || {}) };
+  const v = (val || '').trim();
+  if (v) notes[key] = v; else delete notes[key];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
+}
+export function calSaveVisitNote(entryId, val) {
+  // queue.entryPatch merges only txnNote (won't clobber a concurrent fees/price edit) and the
+  // reducer already refuses a paid/done entry — the popup renders those read-only, so this only
+  // fires for an editable ticket.
+  dispatch('queue.entryPatch', { entryId: String(entryId), patch: { txnNote: (val || '').trim() } });
 }
 
 // Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it

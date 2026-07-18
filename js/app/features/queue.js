@@ -12,7 +12,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview } from './square-customers.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -362,6 +362,7 @@ function buildQueueRow(e) {
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
+        ${cardNotePreview(e.phone, e.txnNote)}
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">
         <button onclick="showEditCheckin('${id}')" title="Edit check-in info" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">edit_note</span></button>

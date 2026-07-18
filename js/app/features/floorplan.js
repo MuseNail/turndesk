@@ -13,6 +13,7 @@ import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, 
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -150,6 +151,7 @@ function stationHtml(id, entry) {
       <div class="flex items-start justify-between gap-1">
         ${entry.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:${Math.round(15*fs)}px;height:${Math.round(15*fs)}px;border-radius:4px;background:${entry.groupColor||'#888'};color:#fff;font-size:${Math.round(9*fs)}px;font-weight:800;flex-shrink:0;margin-top:1px">${_fpLetters.get(entry.groupId)||'•'}</span>` : ''}
         <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${escHtml(entry.name)}</div>
+        ${cardNotePreview(entry.phone, entry.txnNote, { iconOnly: true, fontSize: Math.round(10 * fs) })}
         <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
       </div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
