@@ -19,7 +19,7 @@ export function toggleActiveStaff(id) {
   const wasActive = !inactive.includes(id);   // active → toggling DEACTIVATES
   dispatch('config.set', { key: 'inactive_staff', value: wasActive ? [...inactive, id] : inactive.filter(x => x !== id) });
   renderStaffList();
-  if (wasActive) showToast('Moved to deactivated — tap “Show deactivated” to undo');
+  if (wasActive) showToast('Moved to deactivated — tap “Show deactivated” below to undo');
 }
 export function toggleAllActiveStaff() {
   dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.length === 0 ? cfg().staff.map(s => s.id) : [] });

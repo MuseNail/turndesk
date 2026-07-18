@@ -686,7 +686,7 @@ export function calRenderGrid() {
       if (isPastDay && isAppt && !noShow) {
         const rawP = (primaryPhone || '').replace(/\D/g, '');
         const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
-        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; }
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; statusColored=true; }   // keep the blue Completed border (match week view)
         else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
       }
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // manual no-show overrides all
@@ -847,7 +847,10 @@ function calRenderWeekGrid() {
         bg = cc + '1f'; tc = '#1a1a1a';
         if (!wkStatus) border = cc;   // plain → customer border; past-completed keeps its blue
       }
-      const techDot = (cal && calId !== '') ? `<span title="${escHtml(calDisplayName(cal))}" style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0"></span>` : '';
+      // Tech identity as an initial in a tech-colored circle — readable at any block height
+      // (a bare color dot can't be decoded to a tech now that the per-staff legend is gone).
+      const techInit = (calDisplayName(cal) || '?').trim().charAt(0).toUpperCase();
+      const techDot = (cal && calId !== '') ? `<span title="${_escHtml(calDisplayName(cal))}" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;background:${color};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_escHtml(techInit)}</span>` : '';
       body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(first.id)}')" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}${techDot}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
         + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
@@ -1084,7 +1087,7 @@ export function calEventClick(e, apptId) {
     <div>
       <label class="text-[10px] font-body font-bold uppercase tracking-widest text-outline block mb-1">Customer note <span class="normal-case tracking-normal text-on-surface-variant">— permanent</span></label>
       ${custKey
-        ? `<textarea onchange="calSaveCustNote('${_escAttrJs(phone)}', this.value)" rows="2" placeholder="Allergies, preferences, VIP…" class="${_taCls}">${_escHtml(custKey ? customerNote(phone) : '')}</textarea>`
+        ? `<textarea onchange="calSaveCustNote('${_escAttrJs(phone)}', this.value)" rows="2" placeholder="Allergies, preferences, VIP…" class="${_taCls}">${_escHtml(customerNote(phone))}</textarea>`
         : `<p class="text-xs font-body text-on-surface-variant italic">Add a phone number to this appointment to save a customer note.</p>`}
     </div>
     <div>
@@ -1092,13 +1095,13 @@ export function calEventClick(e, apptId) {
       ${!queueMatch
         ? `<p class="text-xs font-body text-on-surface-variant italic">Available after check-in.</p>`
         : visitPaid
-          ? `<div class="text-sm font-body text-on-surface bg-surface-container rounded-lg px-3 py-2 border border-surface-container-high">${visitVal ? _escHtml(visitVal) : '<span class="italic text-on-surface-variant">No note</span>'}</div><p class="text-[11px] font-body text-on-surface-variant italic mt-1">This ticket is paid — reopen via Assign &amp; Price to edit.</p>`
+          ? `<div class="text-sm font-body text-on-surface-variant px-1 py-1">${visitVal ? _escHtml(visitVal) : '<span class="italic">No note</span>'}</div><p class="text-[11px] font-body text-on-surface-variant italic mt-0.5 flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:12px">lock</span>Paid — reopen via Assign &amp; Price to edit.</p>`
           : `<textarea onchange="calSaveVisitNote('${_escAttrJs(queueMatch.id)}', this.value)" rows="2" placeholder="Notes for today's visit…" class="${_taCls}">${_escHtml(visitVal)}</textarea>`}
     </div>
   </div>`;
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-[10px] font-body font-bold uppercase tracking-widest text-outline mt-1">From the booking</p><p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     ${notesSection}
     <div class="space-y-2">
       <button onclick="calQuickCheckin('${_escAttrJs(apptId)}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>

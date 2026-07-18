@@ -23,9 +23,11 @@ export const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(
 export function cardNotePreview(phone, txnNote, opts = {}) {
   const perm = customerNote(phone);
   const visit = (txnNote || '').trim();
-  const primary = visit || perm;
+  // visitOnly (tight floor tiles): show ONLY when THIS visit has a note, so the icon isn't
+  // on every regular who has a permanent note — keeps it a meaningful "note for today" signal.
+  const primary = opts.visitOnly ? visit : (visit || perm);
   if (!primary) return '';
-  const full = [perm && 'Note: ' + perm, visit && 'Visit: ' + visit].filter(Boolean).join('  ·  ');
+  const full = [!opts.visitOnly && perm && 'Customer note: ' + perm, visit && 'Visit: ' + visit].filter(Boolean).join('  ·  ');
   if (opts.iconOnly) return `<span title="${escHtml(full)}" style="flex-shrink:0;font-size:${opts.fontSize || 10}px" aria-label="Has a note">📝</span>`;
   return `<div class="text-[10px] leading-tight text-on-surface-variant truncate mt-0.5" title="${escHtml(full)}">📝 ${escHtml(primary)}</div>`;
 }

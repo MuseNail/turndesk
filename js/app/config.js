@@ -40,12 +40,14 @@ export const GROUP_COLORS = [
 
 // Stable per-CUSTOMER calendar colors (utils.js customerColor hashes a customer key
 // into this palette). 16 distinct dark hues tuned to read well as a light tint
-// (color+'1f' fill) with a solid border — same visual family as calendar.js's
-// per-tech STAFF_PALETTE (kept a separate list on purpose so the two don't couple).
+// (color+'1f' fill) with a solid border. DELIBERATELY avoids the calendar's status
+// hues — in-service green, done blue, waiting/running-late amber, no-show red — because
+// a plain-upcoming block's border IS the customer color, so a green/blue/amber customer
+// color would be mistaken for a status. Purples, magentas, browns, teal/cyan, indigo.
 export const CUSTOMER_COLORS = [
-  '#1a5252','#7b1fa2','#0277bd','#00695c','#e65100','#5c3d8f',
-  '#2a7a4f','#7a2a1a','#785a1a','#7a1a5c','#1a5c7a','#455a64',
-  '#00838f','#c2185b','#558b2f','#4527a0',
+  '#1a5252','#7b1fa2','#6a1b9a','#4527a0','#8e24aa','#5c3d8f',
+  '#ad1457','#37474f','#6d4c41','#7a1a5c','#4e342e','#283593',
+  '#00838f','#c2185b','#512da8','#00695c',
 ];
 
 export const SCHEDULE_COLORS = {
