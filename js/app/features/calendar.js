@@ -3,8 +3,12 @@ import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
 import { PUSH_PROXY } from '../config.js';
 import { withAuth } from '../apptoken.js';
-import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel } from '../utils.js';
-import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
+import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
+
+// Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
+// blank/placeholder → neutral gray. One source of truth for both grid views.
+const apptCustomerColor = g0 => customerColor(notePhoneKey(g0.phone || '') || (g0.name || '').trim().toLowerCase());
 
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
@@ -669,14 +673,14 @@ export function calRenderGrid() {
       const svcRows = linesForColumn(first, cal.id);
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
       const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
-      let bg, border, tc = '#1a1a1a', pastStatus = '';   // status is conveyed by the bubble's color
+      let bg, border, tc = '#1a1a1a', pastStatus = '', statusColored = true;   // status → border + badge; fill → customer
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
       else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; }
       else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
       else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }   // TODAY only: passed start, not checked in → "running late" amber
-      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
+      else { statusColored=false; bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // plain upcoming → no status
       // Past day: resolve the appointment against the records — Completed (showed up) or
       // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
       if (isPastDay && isAppt && !noShow) {
@@ -686,6 +690,14 @@ export function calRenderGrid() {
         else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
       }
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // manual no-show overrides all
+      // FILL by CUSTOMER (owner: "color everything by customer") — the status stays visible via
+      // the left border + the badge. No-show keeps its loud red fill; the left border becomes the
+      // customer color only for a plain-upcoming block (which has no status to show).
+      if (isAppt && !noShow && pastStatus !== 'No Show') {
+        const cc = apptCustomerColor(g0);
+        bg = cc + '1f'; tc = '#1a1a1a';
+        if (!statusColored) border = cc;
+      }
 
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
       const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
@@ -820,16 +832,24 @@ function calRenderWeekGrid() {
       const gap = laneCount > 1 ? 3 : 0;
       const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
       const bLeft = 4 + lane * (laneW + gap);
-      let bg = color + '1f', border = color, tc = '#1a1a1a';
+      let bg = color + '1f', border = color, tc = '#1a1a1a', wkStatus = false;
       if (isPastDay && isAppt && !noShow) {
         const rawP = ((first.guests || [])[0]?.phone || '').replace(/\D/g, '');
         const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
-        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
-        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; wkStatus=true; }
+        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; wkStatus='noshow'; }
       }
-      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; wkStatus='noshow'; }
+      // FILL by CUSTOMER (owner: "color everything by customer"). Week columns are DAYS, so
+      // tech identity is no longer in the fill — a small tech-colored dot carries it instead.
+      if (isAppt && wkStatus !== 'noshow') {
+        const cc = apptCustomerColor(g0);
+        bg = cc + '1f'; tc = '#1a1a1a';
+        if (!wkStatus) border = cc;   // plain → customer border; past-completed keeps its blue
+      }
+      const techDot = (cal && calId !== '') ? `<span title="${escHtml(calDisplayName(cal))}" style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0"></span>` : '';
       body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(first.id)}')" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
-        + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
+        + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}${techDot}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
         + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
         + `</div>`;
       } catch (_bErr) { console.warn('[calendar] skipped a week booking render:', _bErr); }
@@ -838,14 +858,11 @@ function calRenderWeekGrid() {
   });
   body += '</div>';
 
-  // Staff color key — week blocks are tinted by tech, so name the colors. Pinned above
-  // the scrollport (doesn't scroll away); one chip per visible calendar, grid order.
-  const legend = `<div id="cal-week-legend" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0;padding:6px 12px;border-bottom:1.5px solid var(--outline-variant, #cfd8d8);background:var(--surface-container-lowest, #f5f7f8)">`
-    + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--on-surface-variant, #41484d)">Staff</span>`
-    + visible.map(cal => {
-        const color = cal.id === uCal ? '#9ca3af' : cal.color;
-        return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-body);font-weight:600;color:var(--on-surface, #0e1a1a)"><span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>${escHtml(calDisplayName(cal))}</span>`;
-      }).join('')
+  // Week blocks are now filled by CUSTOMER (a small dot on each block carries the tech). The
+  // old per-staff color key would no longer match the fills, so it's replaced by a caption.
+  const legend = `<div id="cal-week-legend" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;padding:6px 12px;border-bottom:1.5px solid var(--outline-variant, #cfd8d8);background:var(--surface-container-lowest, #f5f7f8)">`
+    + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--on-surface-variant, #41484d)">Colored by customer</span>`
+    + `<span style="font-size:11px;font-family:var(--font-body);color:var(--on-surface-variant, #41484d)">— the dot on each booking shows the technician</span>`
     + `</div>`;
   grid.innerHTML = `<div style="height:100%;display:flex;flex-direction:column">${legend}<div id="cal-scroll" style="flex:1;min-height:0;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W * 7}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div></div>`;
   const gb = document.getElementById('cal-scroll');
