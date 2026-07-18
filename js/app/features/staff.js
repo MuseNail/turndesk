@@ -1,7 +1,7 @@
 // ── Staff CRUD + weekly schedule ────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, byName, setSwitchVisual, escHtml } from '../utils.js';
+import { showToast, localDateStr, byName, escHtml, partitionStaff, normalizeSsn4, maskSsn } from '../utils.js';
 import { SCHEDULE_COLORS } from '../config.js';
 
 const cfg = () => getState().config;
@@ -9,16 +9,17 @@ const setStaff = (staff) => dispatch('config.set', { key: 'staff', value: staff 
 
 // ── Active staff (config.inactive_staff) ──────────
 export function isStaffActive(id) { return !cfg().inactive_staff.includes(id); }
-export function toggleActiveStaff(id, btn) {
+// Deactivated techs are collapsed out of the list (device-local reveal). Full re-render on
+// every toggle so a row actually moves between the active/deactivated groups — no in-place
+// class walk (which would leave a just-deactivated row sitting in the active group).
+let _showInactive = false;
+export function toggleShowInactiveStaff() { _showInactive = !_showInactive; renderStaffList(); }
+export function toggleActiveStaff(id) {
   const inactive = cfg().inactive_staff;
-  const nowActive = inactive.includes(id);   // currently inactive → toggling activates
-  dispatch('config.set', { key: 'inactive_staff', value: inactive.includes(id) ? inactive.filter(x => x !== id) : [...inactive, id] });
-  if (!btn) { renderStaffList(); return; }
-  setSwitchVisual(btn, nowActive);
-  btn.title = nowActive ? 'Active — shown in menus' : 'Inactive — hidden from menus';
-  // Reflect the same active/inactive state on the technician's name (struck-through when off).
-  const name = btn.closest('div[onclick]')?.querySelector('.font-headline.font-semibold');
-  if (name) { name.classList.toggle('line-through', !nowActive); name.classList.toggle('text-outline-variant', !nowActive); }
+  const wasActive = !inactive.includes(id);   // active → toggling DEACTIVATES
+  dispatch('config.set', { key: 'inactive_staff', value: wasActive ? [...inactive, id] : inactive.filter(x => x !== id) });
+  renderStaffList();
+  if (wasActive) showToast('Moved to deactivated — tap “Show deactivated” to undo');
 }
 export function toggleAllActiveStaff() {
   dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.length === 0 ? cfg().staff.map(s => s.id) : [] });
@@ -29,18 +30,18 @@ export function toggleAllActiveStaff() {
 export function renderStaffMerged() { window.showStaffListView?.(); renderStaffList(); }
 
 // ── Staff CRUD ────────────────────────────────────
-export function renderStaffList() {
-  const list = document.getElementById('staff-list');
-  if (!list) return;
-  list.innerHTML = [...cfg().staff].sort(byName).map(st => {
-    const active = isStaffActive(st.id);
-    const photoHtml = st.photo
-      ? `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
-      : `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${escHtml(st.name.charAt(0).toUpperCase())}</span></div></button>`;
-    const staffSvcs = (st.services && st.services.length > 0)
-      ? st.services.map(sid => cfg().services.find(s => s.id === sid)?.abbr || '?').join(', ')
-      : 'All services';
-    return `
+function _staffRowHtml(st) {
+  const active = isStaffActive(st.id);
+  const photoHtml = st.photo
+    ? `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
+    : `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${escHtml(st.name.charAt(0).toUpperCase())}</span></div></button>`;
+  const staffSvcs = (st.services && st.services.length > 0)
+    ? st.services.map(sid => cfg().services.find(s => s.id === sid)?.abbr || '?').join(', ')
+    : 'All services';
+  // Compact contact line (phone + masked last-4 SSN) shown only when set. Both are
+  // non-sensitive (SSN is last-4 only). escHtml every rendered value.
+  const contact = [st.phone ? escHtml(st.phone) : '', maskSsn(st.ssn4)].filter(Boolean).join('  ·  ');
+  return `
     <div onclick="showEditStaff('${st.id}')" title="Edit technician" class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between cursor-pointer hover:border-primary/50 hover:shadow-sm transition-all">
       <div class="flex items-center gap-4 min-w-0">
         ${photoHtml}
@@ -50,10 +51,11 @@ export function renderStaffList() {
             ${st.commission != null ? `<span class="text-xs font-body text-on-surface-variant">${st.commission}% commission</span>` : ''}
             <span class="text-xs font-body text-primary truncate">${staffSvcs}</span>
           </div>
+          ${contact ? `<div class="text-[11px] font-body text-on-surface-variant mt-0.5 truncate">${contact}</div>` : ''}
         </div>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="event.stopPropagation();toggleActiveStaff('${st.id}',this)" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
+        <button onclick="event.stopPropagation();toggleActiveStaff('${st.id}')" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
           <span class="text-[9px] font-body uppercase tracking-wider ${active ? 'text-primary' : 'text-outline-variant'}">Active</span>
           <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${active ? 'left-7' : 'left-0.5'}"></div></div>
         </button>
@@ -63,7 +65,22 @@ export function renderStaffList() {
         </div>
       </div>
     </div>`;
-  }).join('');
+}
+export function renderStaffList() {
+  const list = document.getElementById('staff-list');
+  if (!list) return;
+  const { active, inactive } = partitionStaff([...cfg().staff].sort(byName), cfg().inactive_staff);
+  let html = active.length ? active.map(_staffRowHtml).join('')
+    : `<p class="text-sm font-body text-on-surface-variant px-1 py-4">${inactive.length ? 'All technicians are deactivated.' : 'No staff added yet.'}</p>`;
+  // The "Show N deactivated" row ALWAYS renders when any are deactivated (even with zero
+  // active), so "Toggle All Active" can never leave a blank list with no way back.
+  if (inactive.length) {
+    html += `<button onclick="toggleShowInactiveStaff()" class="w-full text-left px-5 py-3 mt-1 text-xs font-body font-semibold text-on-surface-variant hover:text-primary flex items-center gap-1">
+      <span class="material-symbols-outlined" style="font-size:16px">${_showInactive ? 'expand_less' : 'expand_more'}</span>
+      ${_showInactive ? 'Hide' : 'Show'} ${inactive.length} deactivated</button>`;
+    if (_showInactive) html += inactive.map(_staffRowHtml).join('');
+  }
+  list.innerHTML = html;
 }
 
 // Full-size photo lightbox for a technician (tap the avatar in Turns / Staff).
@@ -100,6 +117,7 @@ export function showAddStaff() {
   document.getElementById('staff-modal-title').textContent = 'Add Technician';
   document.getElementById('staff-name-input').value = '';
   { const ln = document.getElementById('staff-legalname-input'); if (ln) ln.value = ''; }
+  _setStaffContactFields({});
   document.getElementById('staff-commission-input').value = '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = '';
   document.getElementById('staff-edit-id').value = '';
@@ -117,6 +135,7 @@ export function showEditStaff(id) {
   document.getElementById('staff-modal-title').textContent = 'Edit Technician';
   document.getElementById('staff-name-input').value = st.name;
   { const ln = document.getElementById('staff-legalname-input'); if (ln) ln.value = st.legalName || ''; }
+  _setStaffContactFields(st);
   document.getElementById('staff-commission-input').value = st.commission != null ? st.commission : '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = st.pin || '';
   document.getElementById('staff-edit-id').value = id;
@@ -150,6 +169,16 @@ export function staffAppHistChanged() {
 export function closeStaffModal() {
   const m = document.getElementById('staff-modal'); m.classList.add('hidden'); m.style.display = '';
 }
+// Contact + payroll-identity fields. Defensive (`if (el)`) so a missing input can never
+// throw — and because saveStaff writes these on EVERY save, a field the form fails to
+// populate here would otherwise be wiped; `|| ''` keeps a round-trip lossless.
+function _setStaffContactFields(st) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('staff-phone-input', st.phone);
+  set('staff-email-input', st.email);
+  set('staff-address-input', st.address);
+  set('staff-ssn4-input', st.ssn4);
+}
 // Paycheck (gross) config — how the tech's check portion is set on the Payroll page.
 function _setStaffCheckFields(type, value) {
   const ts = document.getElementById('staff-check-type'); if (ts) ts.value = type;
@@ -172,6 +201,10 @@ function _setStaffDeductFields(pct, threshold) {
 export function saveStaff() {
   const name = document.getElementById('staff-name-input').value.trim();
   const legalName = (document.getElementById('staff-legalname-input')?.value || '').trim();
+  const phone = (document.getElementById('staff-phone-input')?.value || '').trim();
+  const email = (document.getElementById('staff-email-input')?.value || '').trim();
+  const address = (document.getElementById('staff-address-input')?.value || '').trim();
+  const ssn4 = normalizeSsn4(document.getElementById('staff-ssn4-input')?.value || '');   // store LAST-4 ONLY
   const commRaw = document.getElementById('staff-commission-input').value.trim();
   const commission = commRaw !== '' ? parseFloat(commRaw) : null;
   const pin = (document.getElementById('staff-pin-input')?.value || '').trim();
@@ -203,9 +236,9 @@ export function saveStaff() {
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app };
+    if (i >= 0) staff[i] = { ...staff[i], name, legalName, phone, email, address, ssn4, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app });
+    staff.push({ id: `staff-${Date.now()}`, name, legalName, phone, email, address, ssn4, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app });
   }
   setStaff(staff);
   closeStaffModal();
@@ -293,7 +326,7 @@ export function renderSchedule() {
       <div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div>
     </div>`).join('');
 
-  const staffRows = [...cfg().staff].sort(byName).map(st => {
+  const staffRows = [...cfg().staff].sort(byName).filter(st => isStaffActive(st.id)).map(st => {
     const photoHtml = st.photo
       ? `<img src="${st.photo}" class="w-8 h-8 rounded-full object-cover border border-surface-container-high flex-shrink-0">`
       : `<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${escHtml(st.name.charAt(0).toUpperCase())}</span></div>`;
@@ -328,7 +361,7 @@ export function renderSchedule() {
     <div class="flex items-center border-b-2 border-surface-container-high sticky top-0 z-20" style="${stickyBg}">
       <div class="w-[160px] flex-shrink-0 sticky left-0 z-30" style="${stickyBg}"></div>${headerCols}
     </div>
-    ${staffRows || '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No staff added yet. Add staff in the Staff tab.</div>'}`;
+    ${staffRows || '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No active technicians. Reactivate one in Settings → Technicians to schedule them.</div>'}`;
 }
 
 export function openSchedulePicker(date, staffId) {

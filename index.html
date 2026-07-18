@@ -1977,6 +1977,28 @@ tailwind.config = {
         <input id="staff-name-input" type="text" placeholder="e.g. Christina"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
       </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
+          <input id="staff-phone-input" type="tel" autocomplete="off" placeholder="(909) 555-0123"
+            class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Email</label>
+          <input id="staff-email-input" type="email" autocomplete="off" placeholder="name@email.com"
+            class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Home Address</label>
+        <input id="staff-address-input" type="text" autocomplete="off" placeholder="Street, city, state ZIP"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">SSN <span class="normal-case tracking-normal text-on-surface-variant">(last 4 only — for payroll)</span></label>
+        <input id="staff-ssn4-input" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="1234"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+      </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Commission %</label>
         <input id="staff-commission-input" type="number" min="0" max="100" step="1" placeholder="e.g. 40"

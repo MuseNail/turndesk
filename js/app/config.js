@@ -38,6 +38,16 @@ export const GROUP_COLORS = [
   '#2a7a4f','#7a1a5c','#4f4f1a','#1a3a7a','#7a4f1a',
 ];
 
+// Stable per-CUSTOMER calendar colors (utils.js customerColor hashes a customer key
+// into this palette). 16 distinct dark hues tuned to read well as a light tint
+// (color+'1f' fill) with a solid border — same visual family as calendar.js's
+// per-tech STAFF_PALETTE (kept a separate list on purpose so the two don't couple).
+export const CUSTOMER_COLORS = [
+  '#1a5252','#7b1fa2','#0277bd','#00695c','#e65100','#5c3d8f',
+  '#2a7a4f','#7a2a1a','#785a1a','#7a1a5c','#1a5c7a','#455a64',
+  '#00838f','#c2185b','#558b2f','#4527a0',
+];
+
 export const SCHEDULE_COLORS = {
   // Working is the common case → a soft light fill so the exceptions (Off/Sick/
   // Vacation) stand out when scanning the grid.

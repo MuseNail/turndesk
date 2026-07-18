@@ -2,6 +2,7 @@
 // Ported from the original utils.js. No global mutable app state lives here.
 // Functions used by inline HTML handlers are exported and attached to window in main.js.
 import { getState } from './store.js';
+import { CUSTOMER_COLORS } from './config.js';   // config.js imports only apiorigin.js → no cycle
 
 // The salon's own business name (config.business is an object { name, address, … }). Falls back to
 // the platform name so printed/exported docs (receipts, reports, payroll, day-sheets) are never blank
@@ -31,6 +32,32 @@ export function ticketTotal(r) {
 // itself sits inside a double-quoted on*= attribute (JS-string escape first, then HTML-
 // escape so the browser's attribute decode yields a clean JS literal).
 export const escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// ── Staff PII helpers (Feature batch 2026-07) ────
+// SSN is stored as LAST-4 ONLY (owner decision) — never the full number — so the value
+// synced to devices/backups is not sensitive. normalizeSsn4 strips to the last 4 digits.
+export const normalizeSsn4 = raw => String(raw == null ? '' : raw).replace(/\D/g, '').slice(-4);
+export const maskSsn = ssn4 => ssn4 ? '•••-••-' + ssn4 : '';
+// Split a staff array into active vs inactive by inactive_staff-id membership, preserving order.
+export function partitionStaff(staff, inactiveIds) {
+  const inact = new Set(inactiveIds || []);
+  const active = [], inactive = [];
+  for (const s of (staff || [])) (inact.has(s.id) ? inactive : active).push(s);
+  return { active, inactive };
+}
+
+// ── Stable per-customer calendar color (Feature batch 2026-07) ────
+// Deterministic hash of a customer key (normalized phone, else lowercased name) into
+// CUSTOMER_COLORS, so the same customer always reads the same color across their
+// bookings. Empty or placeholder ('guest') keys return neutral gray — a name-less
+// walk-in must NOT look like a shared real customer.
+export function customerColor(key) {
+  const k = String(key == null ? '' : key).trim().toLowerCase();
+  if (!k || k === 'guest') return '#9ca3af';
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return CUSTOMER_COLORS[h % CUSTOMER_COLORS.length];
+}
 export const escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ── Throttle wait message ────────────────────────────────────────────────────
