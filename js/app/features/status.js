@@ -24,6 +24,16 @@ export function effectiveServiceStatus(entry, a) {
   const s = getAssignmentStatus(entry, a);
   return (s === 'complete' && a && a.awaitingPrice) ? 'awaiting' : s;
 }
+// Entry-level counterpart to isAwaitingPrice: the whole ticket is finished (entry.status
+// 'complete') but at least one done service still has no price, so checkout is gated. Lets the
+// Turns customer card show the violet "Awaiting price" signal (avatar bubble + border/tint)
+// instead of the blue "Done" — otherwise an unpriced ticket looks identical to a ready-to-pay one.
+export function isEntryAwaitingPrice(entry) {
+  return !!(entry && entry.status === 'complete' && (entry.assignments || []).some(isAwaitingPrice));
+}
+export function effectiveEntryStatus(entry) {
+  return isEntryAwaitingPrice(entry) ? 'awaiting' : ((entry && entry.status) || 'waiting');
+}
 
 export function deriveEntryStatus(entry) {
   if (!entry.assignments || entry.assignments.length === 0) return entry.status || 'waiting';

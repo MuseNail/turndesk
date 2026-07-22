@@ -1,7 +1,7 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle } from '../js/app/features/status.js';
+import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle, isEntryAwaitingPrice, effectiveEntryStatus } from '../js/app/features/status.js';
 
 // The 4-state workflow: waiting → inservice → complete → paid (legacy 'done' ≡ paid).
 // These encode the exact spec so a regression in the state machine fails CI.
@@ -83,4 +83,21 @@ test('applyAssignmentStatus: leaving complete clears a stale awaitingPrice flag'
   const b = { status: 'complete', awaitingPrice: true };
   applyAssignmentStatus(b, 'complete');      // staying complete keeps it (e.g. re-derive)
   assert.equal(b.awaitingPrice, true);
+});
+
+test('isEntryAwaitingPrice / effectiveEntryStatus: a complete ticket with an unpriced service reads awaiting', () => {
+  const awaiting = { status: 'complete', assignments: [{ status: 'complete', awaitingPrice: true }, { status: 'complete' }] };
+  assert.equal(isEntryAwaitingPrice(awaiting), true);
+  assert.equal(effectiveEntryStatus(awaiting), 'awaiting');
+  // A fully-priced complete ticket stays "Done" (blue), not violet.
+  const priced = { status: 'complete', assignments: [{ status: 'complete' }, { status: 'complete' }] };
+  assert.equal(isEntryAwaitingPrice(priced), false);
+  assert.equal(effectiveEntryStatus(priced), 'complete');
+  // An in-service ticket is never awaiting-price at the entry level, even if a done service is unpriced.
+  const busy = { status: 'inservice', assignments: [{ status: 'complete', awaitingPrice: true }, { status: 'inservice' }] };
+  assert.equal(isEntryAwaitingPrice(busy), false);
+  assert.equal(effectiveEntryStatus(busy), 'inservice');
+  // Waiting / empty entries fall through to their own status.
+  assert.equal(effectiveEntryStatus({ status: 'waiting', assignments: [] }), 'waiting');
+  assert.equal(effectiveEntryStatus({}), 'waiting');
 });
