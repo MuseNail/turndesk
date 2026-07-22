@@ -1,7 +1,7 @@
 // ── Service Worker (v4.85 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'turndesk-v0.48';
+const CACHE_NAME = 'turndesk-v0.49';
 
 const PRECACHE_URLS = [
   '/turndesk/',
@@ -145,10 +145,15 @@ self.addEventListener('push', event => {
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  // A support-ticket push (tag td-ticket-*) is for the DEVELOPER → focus/open the operator
+  // console, not the staff schedule. Everything else is a staff assignment/chat alert.
+  const isTicket = String((event.notification && event.notification.tag) || '').startsWith('td-ticket-');
+  const target = isTicket ? '/turndesk/operator.html' : '/turndesk/staff.html';
+  const matchPart = isTicket ? '/turndesk/operator' : '/turndesk/staff';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      for (const c of list) { if (c.url.includes('/turndesk/staff') && 'focus' in c) return c.focus(); }
-      return clients.openWindow('/turndesk/staff.html');
+      for (const c of list) { if (c.url.includes(matchPart) && 'focus' in c) return c.focus(); }
+      return clients.openWindow(target);
     })
   );
 });

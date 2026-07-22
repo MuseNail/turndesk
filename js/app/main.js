@@ -46,9 +46,10 @@ import * as receipt from './features/receipt.js';
 import * as diagnostics from './features/diagnostics.js';
 import * as landing from './features/landing.js';
 import * as billing from './features/billing.js';
+import * as support from './features/support.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -660,6 +661,10 @@ function boot() {
   // launch/visibilitychange) still notices a new deploy and prompts on its own. Skipped while
   // hidden — visibilitychange already covers the return-to-app case.
   setInterval(() => { if (!document.hidden) checkAppVersion(); }, 20 * 60 * 1000);
+  // Help-desk unread badge: a dev reply the staff haven't seen puts a dot on the Settings
+  // nav button (front-desk browsers usually have no push sub, so this poll is the signal).
+  if (session.getActiveUser()) support.pollSupportUnread();
+  setInterval(() => { if (!document.hidden && session.getActiveUser()) support.pollSupportUnread(); }, 3 * 60 * 1000);
   registerServiceWorker();
 }
 

@@ -1,5 +1,9 @@
 import { slugify, validateSignupRequest } from './signup-util.js';
 import { validateDemoRequest } from './demo-util.js';
+import {
+  validateTicketInput, validateReplyInput, ticketKey, newTicketId,
+  buildTicket, applyReply, markRead, ticketVisibleToSalon, sanitizeTicketForSalon,
+} from './support-util.js';
 // ── Cloudflare Worker — musedashboard ─────────────────────────────────────────
 //
 // Routes
@@ -491,6 +495,44 @@ export default {
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
+    // ── In-app help desk (staff → dev tickets) ──────────────────────────────────
+    // Already behind the §13 gate (appAuthOk ran above), so the session is valid FOR
+    // salonId. Tickets aggregate in the reserved registry DO (one place for every
+    // salon's tickets); the salon + submitter are stamped SERVER-SIDE here, never from
+    // the client body, and every registry ticket op is filtered by this validated slug.
+    if (path.startsWith('/support/')) {
+      const who = await authIdentity(env, salonId, requestToken(request, url));
+      if (!who) return json({ error: 'unauthorized' }, 401);   // no identity → can't attribute a ticket
+
+      if (path === '/support/tickets' && method === 'GET') {
+        const r = await registryStub(env).fetch(new Request('https://do/support/list?salon=' + encodeURIComponent(salonId)));
+        return new Response(await r.text(), { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+      }
+      if (path === '/support/ticket' && method === 'POST') {
+        let b = {}; try { b = await request.json(); } catch {}
+        const r = await registryPost(env, request, '/support/create', {
+          salon: salonId, submitter: who, type: b.type, subject: b.subject, message: b.message, appVersion: b.appVersion,
+        });
+        return new Response(await r.text(), { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+      }
+      const mReply = path.match(/^\/support\/ticket\/([^/]+)\/reply$/);
+      if (mReply && method === 'POST') {
+        let b = {}; try { b = await request.json(); } catch {}
+        const r = await registryPost(env, request, '/support/reply', {
+          salon: salonId, id: decodeURIComponent(mReply[1]), message: b.message, author: who.name || 'Staff',
+        });
+        return new Response(await r.text(), { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+      }
+      const mRead = path.match(/^\/support\/ticket\/([^/]+)\/read$/);
+      if (mRead && method === 'POST') {
+        const r = await registryPost(env, request, '/support/mark-read', {
+          salon: salonId, id: decodeURIComponent(mRead[1]), who: 'salon',
+        });
+        return new Response(await r.text(), { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+      }
+      return json({ error: 'not found' }, 404);
+    }
+
     // ── AI analytics (Anthropic Claude, or Google Gemini fallback) ──────────────
     // POST /ai/ask { question, data } → an LLM. Keys are held server-side as secrets
     // so they never ship in the public PWA. Prefers Claude when ANTHROPIC_API_KEY is
@@ -975,6 +1017,39 @@ async function registryGet(env, slug) {
   } catch { return null; }
 }
 
+// Resolve the authenticated user behind a §13 session token (kind/id/name/role), by
+// asking the token's OWN salon DO. appAuthOk only returns a boolean, so the /support/*
+// routes call this to stamp the submitter SERVER-SIDE — a client-supplied identity is
+// never trusted. Returns null if the token is invalid for that salon.
+async function authIdentity(env, salonId, token) {
+  if (!salonId || !token) return null;
+  try {
+    const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+    const r = await stub.fetch(new Request('https://do/auth/check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+    }));
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j.ok && j.user) ? j.user : null;
+  } catch { return null; }
+}
+
+// The bearer/query token from the current request (mirrors appAuthOk's extraction).
+function requestToken(request, url) {
+  const h = request.headers.get('Authorization') || '';
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+}
+
+// Forward a server-authored JSON body to the registry DO (tickets live there). The body
+// is built by the Worker from the VALIDATED salon + server-resolved identity — never the
+// client's raw payload — and CF-Connecting-IP rides along for the registry's rate limit.
+async function registryPost(env, request, path, body) {
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (ip) headers['CF-Connecting-IP'] = ip;
+  return registryStub(env).fetch(new Request('https://do' + path, { method: 'POST', headers, body: JSON.stringify(body) }));
+}
+
 // ── SaaS billing (Phase 1 — infrastructure only, nothing enforced) ─────────────
 // Billing state lives in the registry DO (bflags / bplan:<planId> / billing:<accountId>),
 // reached only via registryStub — same pattern as salon:<slug>. Money is integer CENTS
@@ -1327,6 +1402,58 @@ export async function handleOperator(request, env, url, method, path) {
     const r = await registryStub(env).fetch(new Request('https://do/demo/decide', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: b.id, status: b.status }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
+
+  // ── In-app help desk (operator side) ──────────────────────────────────────────
+  // Cross-salon ticket inbox + dev reply/status. Storage lives in the registry DO;
+  // {salon,id} identify a ticket and the DO re-verifies the ticket's own salon.
+  if (path === '/operator/tickets' && method === 'GET') {
+    const qs = url.search || '';
+    const r = await registryStub(env).fetch(new Request('https://do/support/all' + qs));
+    return json(await r.json().catch(() => ({ tickets: [] })));
+  }
+  if (path === '/operator/tickets/reply' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await registryStub(env).fetch(new Request('https://do/support/dev-reply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ salon: b.salon, id: b.id, message: b.message, author: b.author || 'Support' }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
+  if (path === '/operator/tickets/status' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await registryStub(env).fetch(new Request('https://do/support/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ salon: b.salon, id: b.id, status: b.status }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
+  if (path === '/operator/tickets/read' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await registryStub(env).fetch(new Request('https://do/support/mark-read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ salon: b.salon, id: b.id, who: 'dev' }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
+  // Dev push subscription — stored in the registry DO under push:dev:<hash>, which is
+  // exactly the prefix the registry's sendPushToTech('dev', …) reads when a ticket lands.
+  if (path === '/operator/push-subscribe' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    if (!b.subscription || !b.subscription.endpoint) return json({ error: 'subscription required' }, 400);
+    const r = await registryStub(env).fetch(new Request('https://do/push/subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ techId: 'dev', subscription: b.subscription }),
+    }));
+    return json(await r.json().catch(() => ({})), r.status);
+  }
+  if (path === '/operator/push-unsubscribe' && method === 'POST') {
+    let b = {}; try { b = await request.json(); } catch {}
+    const r = await registryStub(env).fetch(new Request('https://do/push/unsubscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ techId: 'dev', endpoint: b.endpoint }),
     }));
     return json(await r.json().catch(() => ({})), r.status);
   }
@@ -1910,6 +2037,7 @@ export class TurnDeskDO {
         id, status: 'pending', name: val.name, email: val.email, phone: val.phone,
         lookingFor: val.lookingFor, createdAt: now, decidedAt: 0, ip,
       });
+      await this.ensureBackupScheduled();   // registry durability shouldn't depend on a ticket existing
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (url.pathname === '/signup/request' && request.method === 'POST') {
@@ -1940,7 +2068,120 @@ export class TurnDeskDO {
         id, status: 'pending', business: val.business, ownerName: val.ownerName, email: val.email,
         phone: val.phone, note: val.note, ownerRecord, proposedSlug: cand, finalSlug: '', createdAt: now, decidedAt: 0, ip,
       });
+      await this.ensureBackupScheduled();   // registry durability shouldn't depend on a ticket existing
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── In-app help desk tickets (registry-only storage) ────────────────────────
+    // Reached ONLY via registryStub (a client can't address the reserved __registry__
+    // DO — RESERVED_SLUGS blocks X-Salon). The Worker has already authenticated the
+    // caller (salon session for /support/create|reply, OPERATOR_TOKEN for the dev
+    // routes) and stamped a trusted salon + submitter. Keys: `ticket:<salon>:<id>`.
+    const _supJson = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+    if (url.pathname === '/support/create' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const salon = String(b.salon || '');
+      if (!salon) return _supJson({ error: 'missing salon' }, 400);
+      const v = validateTicketInput(b);
+      if (!v.ok) return _supJson({ error: v.error }, 400);
+      // Per-IP rate limit (mirrors sreqrl:) — a runaway client can't flood the inbox / dev push.
+      const ip = request.headers.get('CF-Connecting-IP') || 'local';
+      const rlKey = 'suprl:' + ip, now = Date.now();
+      const rl = (await this.state.storage.get(rlKey)) || { since: now, n: 0 };
+      if (now - rl.since > 3600000) { rl.since = now; rl.n = 0; }
+      if (rl.n >= 30) return _supJson({ error: 'Too many messages — please try again later.' }, 429);
+      // Per-salon open-ticket cap bounds growth in the shared registry DO.
+      let open = 0;
+      const existing = await this.state.storage.list({ prefix: 'ticket:' + salon + ':' });
+      for (const [, t] of existing) if (t && t.status !== 'resolved' && t.status !== 'archived') open++;
+      if (open >= 100) return _supJson({ error: 'You have too many open tickets — please resolve some first.' }, 429);
+      rl.n++; await this.state.storage.put(rlKey, rl);
+      const id = newTicketId(now, crypto.randomUUID().replace(/-/g, '').slice(0, 8));
+      const ticket = buildTicket({ salon, id, now, submitter: b.submitter || {}, type: v.value.type, subject: v.value.subject, message: v.value.message, appVersion: b.appVersion });
+      await this.state.storage.put(ticketKey(salon, id), ticket);
+      await this.ensureBackupScheduled();       // kick off the registry backup cycle (tickets must be durable)
+      await this._notifyDevNewTicket(ticket);   // best-effort dev push (Stage 4)
+      return _supJson({ ok: true, ticket: sanitizeTicketForSalon(ticket) });
+    }
+    if (url.pathname === '/support/reply' && request.method === 'POST') {
+      // Salon-side reply. The salon + id come from the Worker (validated session); we
+      // STILL re-verify ticket.salon === salon before any read-back (defense in depth)
+      // and 404 on mismatch so a bad id can't confirm another salon's ticket exists.
+      let b = {}; try { b = await request.json(); } catch {}
+      const salon = String(b.salon || ''), id = String(b.id || '');
+      const v = validateReplyInput(b);
+      if (!v.ok) return _supJson({ error: v.error }, 400);
+      const ticket = await this.state.storage.get(ticketKey(salon, id));
+      if (!ticketVisibleToSalon(ticket, salon)) return _supJson({ error: 'not found' }, 404);
+      applyReply(ticket, { from: 'salon', author: String(b.author || 'Staff'), text: v.value.message, now: Date.now() });
+      await this.state.storage.put(ticketKey(salon, id), ticket);
+      await this._notifyDevNewTicket(ticket);   // best-effort dev push (Stage 4)
+      return _supJson({ ok: true, ticket: sanitizeTicketForSalon(ticket) });
+    }
+    if (url.pathname === '/support/list' && request.method === 'GET') {
+      const salon = url.searchParams.get('salon') || '';
+      if (!salon) return _supJson({ tickets: [] });
+      const map = await this.state.storage.list({ prefix: 'ticket:' + salon + ':' });
+      const arr = []; for (const [, t] of map) if (t.status !== 'archived') arr.push(sanitizeTicketForSalon(t));
+      arr.sort((a, b) => b.updatedAt - a.updatedAt);   // newest activity first
+      return _supJson({ tickets: arr });
+    }
+    // Operator-facing (reached only via handleOperator after OPERATOR_TOKEN). Full
+    // cross-salon view + dev reply/status. Every mutating op re-verifies the ticket's
+    // own salon before touching it, so a wrong {salon,id} pair can't cross tenants.
+    if (url.pathname === '/support/all' && request.method === 'GET') {
+      const fType = url.searchParams.get('type') || '';
+      const fStatus = url.searchParams.get('status') || '';
+      const fSalon = url.searchParams.get('salon') || '';
+      const unreadOnly = url.searchParams.get('unread') === '1';
+      const map = await this.state.storage.list({ prefix: 'ticket:' });
+      const arr = [];
+      for (const [, t] of map) {
+        if (t.status === 'archived' && fStatus !== 'archived') continue;
+        if (fType && t.type !== fType) continue;
+        if (fStatus && t.status !== fStatus) continue;
+        if (fSalon && t.salon !== fSalon) continue;
+        if (unreadOnly && !t.unreadForDev) continue;
+        arr.push(t);
+      }
+      arr.sort((a, b) => b.updatedAt - a.updatedAt);
+      const unread = [...map.values()].filter(t => t && t.unreadForDev && t.status !== 'archived').length;
+      return _supJson({ tickets: arr.slice(0, 500), unread });
+    }
+    if (url.pathname === '/support/dev-reply' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const salon = String(b.salon || ''), id = String(b.id || '');
+      const v = validateReplyInput(b);
+      if (!v.ok) return _supJson({ error: v.error }, 400);
+      const ticket = await this.state.storage.get(ticketKey(salon, id));
+      if (!ticketVisibleToSalon(ticket, salon)) return _supJson({ error: 'not found' }, 404);
+      applyReply(ticket, { from: 'dev', author: String(b.author || 'Support'), text: v.value.message, now: Date.now() });
+      markRead(ticket, 'dev');   // the dev is the one replying → they've read it
+      await this.state.storage.put(ticketKey(salon, id), ticket);
+      await this._notifyStaffReply(ticket);   // best-effort staff push (Stage 5)
+      return _supJson({ ok: true, ticket });
+    }
+    if (url.pathname === '/support/status' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const salon = String(b.salon || ''), id = String(b.id || '');
+      const status = ['open', 'replied', 'resolved', 'archived'].includes(b.status) ? b.status : null;
+      if (!status) return _supJson({ error: 'bad status' }, 400);
+      const ticket = await this.state.storage.get(ticketKey(salon, id));
+      if (!ticketVisibleToSalon(ticket, salon)) return _supJson({ error: 'not found' }, 404);
+      ticket.status = status;
+      ticket.updatedAt = Date.now();
+      markRead(ticket, 'dev');
+      await this.state.storage.put(ticketKey(salon, id), ticket);
+      return _supJson({ ok: true, ticket });
+    }
+    if (url.pathname === '/support/mark-read' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const salon = String(b.salon || ''), id = String(b.id || '');
+      const ticket = await this.state.storage.get(ticketKey(salon, id));
+      if (!ticketVisibleToSalon(ticket, salon)) return _supJson({ error: 'not found' }, 404);
+      markRead(ticket, b.who === 'salon' ? 'salon' : 'dev');
+      await this.state.storage.put(ticketKey(salon, id), ticket);
+      return _supJson({ ok: true, ticket: sanitizeTicketForSalon(ticket) });
     }
     // ── Provision: seed a brand-new salon's starter config ──────────────────────
     if (url.pathname === '/provision/seed' && request.method === 'POST') {
@@ -2159,6 +2400,44 @@ export class TurnDeskDO {
     }
 
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
+  }
+
+  // Best-effort push to the developer when a salon files/updates a ticket. The dev's
+  // subscription lives under `push:dev:` in THIS (registry) instance; sendPushToTech
+  // reads that prefix. Fully fleshed with the operator subscribe flow (Stage 4);
+  // never throws (a push failure must not roll back the ticket write).
+  async _notifyDevNewTicket(ticket) {
+    try {
+      const last = ticket.messages[ticket.messages.length - 1] || {};
+      await this.sendPushToTech('dev', {
+        title: 'TurnDesk — ' + (ticket.type === 'bug' ? '🐞 bug' : ticket.type === 'question' ? '❓ question' : '💬 feedback') + ' from ' + ticket.salon,
+        body: (ticket.subject + ' — ' + String(last.text || '')).slice(0, 180),
+        tag: 'td-ticket-' + ticket.id,
+      });
+    } catch {}
+  }
+
+  // Best-effort push to the salon staffer who opened a ticket, when the dev replies.
+  // Delivery is opportunistic (front-desk browsers often have no push sub — the staff
+  // app's poll + unread badge is the reliable signal); we push the ticket's own salon
+  // DO, targeting the submitter's canonical push id. Runs on the registry instance, so
+  // it hops to the salon DO's /push/notify. Never throws.
+  async _notifyStaffReply(ticket) {
+    try {
+      const pushId = ticket.submitterPushId;
+      if (!pushId || !ticket.salon || !this.env.SALON_DO) return;
+      const last = ticket.messages[ticket.messages.length - 1] || {};
+      const stub = this.env.SALON_DO.get(this.env.SALON_DO.idFromName(ticket.salon));
+      await stub.fetch(new Request('https://do/push/notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          techIds: [pushId],
+          title: 'TurnDesk Support replied',
+          body: (ticket.subject + ' — ' + String(last.text || '')).slice(0, 180),
+          tag: 'td-ticket-' + ticket.id,
+        }),
+      }));
+    } catch {}
   }
 
   // Push to every device subscribed for this tech; prune dead subs. With `payload`
@@ -2793,6 +3072,32 @@ export class TurnDeskDO {
   // slug-bearing request first — but a safe no-regression floor).
   _backupPrefix(slug) { return slug ? 'backups/' + slug + '/' : 'backups/'; }
 
+  // This DO class backs BOTH the per-salon instances and the single reserved
+  // '__registry__' instance. Only the registry ever holds these keys (a salon DO
+  // never does), so their presence identifies the registry — no extra plumbing.
+  async _isRegistryInstance() {
+    for (const p of ['salon:', 'signup:', 'demo:', 'ticket:', 'owneremail:']) {
+      if ((await this.state.storage.list({ prefix: p, limit: 1 })).size > 0) return true;
+    }
+    return !!(await this.state.storage.get('bflags'));
+  }
+
+  // Full snapshot of the registry DO for R2 backup. The registry had NO backup path
+  // before this — a reset/corruption would lose every salon's tickets AND the signup/
+  // demo/billing/owner-index records with no recovery. Written to backups/__registry__/.
+  async buildRegistrySnapshot() {
+    const state = { salons: [], signups: [], demos: [], tickets: [], ownerIndex: [], billing: { plans: [], accounts: [] } };
+    for (const [, v] of await this.state.storage.list({ prefix: 'salon:' }))   state.salons.push(v);
+    for (const [, v] of await this.state.storage.list({ prefix: 'signup:' }))  state.signups.push(v);
+    for (const [, v] of await this.state.storage.list({ prefix: 'demo:' }))    state.demos.push(v);
+    for (const [, v] of await this.state.storage.list({ prefix: 'ticket:' }))  state.tickets.push(v);
+    for (const [k, v] of await this.state.storage.list({ prefix: 'owneremail:' })) state.ownerIndex.push({ key: k, ...v });
+    const bflags = await this.state.storage.get('bflags'); if (bflags) state.billing.flags = bflags;
+    for (const [, v] of await this.state.storage.list({ prefix: 'bplan:' }))   state.billing.plans.push(v);
+    for (const [, v] of await this.state.storage.list({ prefix: 'billing:' })) state.billing.accounts.push(v);
+    return { registry: true, state, at: new Date().toISOString(), schemaVersion: this.SCHEMA_VERSION };
+  }
+
   async ensureBackupScheduled() {
     const cur = await this.state.storage.getAlarm();
     if (cur === null) await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
@@ -2801,8 +3106,41 @@ export class TurnDeskDO {
   // Periodic backup of the full snapshot to R2 + idempotency-marker pruning.
   async alarm() {
     try {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const isRegistry = await this._isRegistryInstance();
+      if (isRegistry) {
+        // The reserved registry instance: back up the cross-salon snapshot (tickets +
+        // salons + signups/demos/billing) under its own prefix, and keep the newest ~120.
+        if (this.env.PHOTOS_BUCKET) {
+          await this.env.PHOTOS_BUCKET.put('backups/__registry__/registry-' + ts + '.json', JSON.stringify(await this.buildRegistrySnapshot()), {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          try {
+            const objs = [];
+            let cursor;
+            do {
+              const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/__registry__/', cursor });
+              for (const o of (listed.objects || [])) objs.push(o);
+              cursor = listed.truncated ? listed.cursor : undefined;
+            } while (cursor);
+            objs.sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
+            const stale = objs.slice(120).map(o => o.key);
+            for (let i = 0; i < stale.length; i += 128) await this.env.PHOTOS_BUCKET.delete(stale.slice(i, i + 128));
+          } catch (e) { console.error('[registry-retention] prune failed:', (e && e.message) || String(e)); }
+        }
+        // Drop stale per-IP rate-limit counters (findrl:/sreqrl:/dreqrl:/suprl:) — {since}-based,
+        // safe to remove once their 1-hour window has long passed. (The registry alarm now runs,
+        // so without this these would accumulate one key per abusive IP forever.)
+        const rlNow = Date.now();
+        for (const p of ['findrl:', 'sreqrl:', 'dreqrl:', 'suprl:']) {
+          const keys = await this.state.storage.list({ prefix: p });
+          const dead = [...keys.entries()].filter(([, v]) => !v || (rlNow - (v.since || 0)) > 7200000).map(([k]) => k);
+          for (let i = 0; i < dead.length; i += 128) await this.state.storage.delete(dead.slice(i, i + 128));
+        }
+        await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
+        return;   // registry keeps none of the salon housekeeping below (no mut:/queue/etc.)
+      }
       const snap = await this.buildSnapshot();
-      const ts   = new Date().toISOString().replace(/[:.]/g, '-');
       const slug = await this._getSlug();
       if (this.env.PHOTOS_BUCKET) {
         await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'state-' + ts + '.json', JSON.stringify(snap), {

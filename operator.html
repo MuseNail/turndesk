@@ -76,6 +76,20 @@
     <h2 style="margin-top:24px">Pending demo requests</h2>
     <div id="demo-requests">Loading…</div>
 
+    <div class="card" id="tickets-card">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">Support tickets <span id="tickets-unread"></span></h2>
+        <div style="flex:1"></div>
+        <button class="btn-ghost" id="tickets-notify">Enable notifications</button>
+        <select id="tickets-fstatus"><option value="">all statuses</option><option value="open">open</option><option value="replied">replied</option><option value="resolved">resolved</option></select>
+        <select id="tickets-ftype"><option value="">all types</option><option value="bug">bug</option><option value="question">question</option><option value="feedback">feedback</option></select>
+        <label style="display:flex;gap:4px;align-items:center;font-size:13px"><input type="checkbox" id="tickets-funread"> unread only</label>
+        <button class="btn-ghost" id="tickets-refresh">↻</button>
+      </div>
+      <div id="tickets" style="margin-top:10px">Loading…</div>
+      <div id="ticket-thread"></div>
+    </div>
+
     <div class="card">
       <h2>Salons</h2>
       <div id="salons">Loading…</div>
@@ -122,6 +136,8 @@ async function connect() {
   renderSalons(res.body.salons || []);
   refreshRequests();
   refreshDemoRequests();
+  refreshTickets();
+  refreshNotifyLabel();
   refreshBilling();
 }
 
@@ -395,6 +411,126 @@ $('f-create').addEventListener('click', async () => {
     msg($('create-msg'), 'Error: ' + (r.body?.error || r.status), 'err');
   }
 });
+
+// ── Support tickets (in-app help desk, dev side) ──────────────────────────────
+let _tickets = [], _openTicket = null;
+const VAPID_PUBLIC_KEY = 'BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30VYBq7Xzvf5Xl5DqsuqUchNE7xnfcaCrvgUvfJ2uKk';
+function urlB64ToBytes(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s), arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+const tWhen = ts => { try { return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+const tTypeIcon = t => ({ bug: '🐞', question: '❓', feedback: '💬' }[t] || '•');
+
+async function refreshTickets() {
+  const params = new URLSearchParams();
+  const st = $('tickets-fstatus')?.value, ty = $('tickets-ftype')?.value, un = $('tickets-funread')?.checked;
+  if (st) params.set('status', st);
+  if (ty) params.set('type', ty);
+  if (un) params.set('unread', '1');
+  const r = await api('/operator/tickets' + (params.toString() ? '?' + params : ''));
+  if (!r.ok) { $('tickets').innerHTML = '<p class="muted">Tickets unavailable (' + r.status + ')</p>'; return; }
+  _tickets = r.body.tickets || [];
+  $('tickets-unread').innerHTML = r.body.unread ? `<span class="pill" style="background:#e5484d;color:#fff">${r.body.unread} new</span>` : '';
+  if (!_tickets.length) { $('tickets').innerHTML = '<p class="muted">No tickets match.</p>'; if (!_openTicket) $('ticket-thread').innerHTML = ''; return; }
+  const rows = _tickets.map(t => `<tr${t.unreadForDev ? ' style="font-weight:600"' : ''}>
+    <td>${tTypeIcon(t.type)} ${esc(t.subject)}${t.unreadForDev ? ' <span class="pill" style="background:#e5484d;color:#fff">new</span>' : ''}</td>
+    <td>${esc(t.salon)}<div class="muted">${esc(t.submittedBy || '')}${t.submitterRole ? ' · ' + esc(t.submitterRole) : ''}</div></td>
+    <td><span class="pill ${t.status === 'resolved' ? 'disabled' : 'active'}">${esc(t.status)}</span></td>
+    <td class="muted">${tWhen(t.updatedAt)}</td>
+    <td style="text-align:right"><button class="btn-ghost" data-tkt="${esc(t.id)}" data-salon="${esc(t.salon)}">open</button></td>
+  </tr>`).join('');
+  $('tickets').innerHTML = `<table><thead><tr><th>Subject</th><th>Salon</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $('tickets').querySelectorAll('button[data-tkt]').forEach(b => b.addEventListener('click', () => openTicket(b.dataset.salon, b.dataset.tkt)));
+  if (_openTicket) { const t = _tickets.find(x => x.id === _openTicket.id && x.salon === _openTicket.salon); if (t) renderThread(t); }
+}
+
+async function openTicket(salon, id) {
+  const t = _tickets.find(x => x.id === id && x.salon === salon); if (!t) return;
+  _openTicket = { id, salon };
+  renderThread(t);
+  if (t.unreadForDev) { t.unreadForDev = false; api('/operator/tickets/read', { method: 'POST', body: JSON.stringify({ salon, id }) }).then(refreshTickets); }
+}
+
+function renderThread(t) {
+  const msgs = (t.messages || []).map(m => {
+    const dev = m.from === 'dev';
+    return `<div style="display:flex;justify-content:${dev ? 'flex-end' : 'flex-start'};margin:6px 0">
+      <div style="max-width:78%;padding:8px 12px;border-radius:12px;background:${dev ? '#0f6e56' : '#eef0f3'};color:${dev ? '#fff' : '#1a1d27'};font-size:14px">
+        <div>${esc(m.text)}</div>
+        <div style="font-size:10px;opacity:.7;margin-top:3px">${esc(dev ? (m.author || 'You') : (m.author || 'Staff'))} · ${tWhen(m.at)}</div>
+      </div></div>`;
+  }).join('');
+  $('ticket-thread').innerHTML = `<div class="card" style="margin-top:12px;border-color:#0f6e56">
+    <div style="display:flex;align-items:center;gap:8px">
+      <strong>${tTypeIcon(t.type)} ${esc(t.subject)}</strong>
+      <span class="pill ${t.status === 'resolved' ? 'disabled' : 'active'}">${esc(t.status)}</span>
+      <span class="muted">${esc(t.salon)} · ${esc(t.submittedBy || '')}${t.submitterRole ? ' (' + esc(t.submitterRole) + ')' : ''}${t.appVersion ? ' · ' + esc(t.appVersion) : ''}</span>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" id="tkt-close">close</button>
+    </div>
+    <div style="max-height:320px;overflow-y:auto;margin:10px 0;padding:6px;background:#fafafa;border-radius:8px">${msgs}</div>
+    <div style="display:flex;gap:8px">
+      <input id="tkt-reply" placeholder="Write a reply…" style="flex:1">
+      <button class="btn-primary" id="tkt-send">Reply</button>
+      ${t.status === 'resolved'
+        ? '<button class="btn-ghost" id="tkt-reopen">Reopen</button>'
+        : '<button class="btn-ghost" id="tkt-resolve">Resolve</button>'}
+      <button class="btn-ghost" id="tkt-archive" title="Hide this ticket (for cleaning test tickets)">Archive</button>
+    </div>
+  </div>`;
+  $('tkt-close').addEventListener('click', () => { _openTicket = null; $('ticket-thread').innerHTML = ''; });
+  $('tkt-send').addEventListener('click', () => sendDevReply(t.salon, t.id));
+  $('tkt-reply').addEventListener('keydown', e => { if (e.key === 'Enter') sendDevReply(t.salon, t.id); });
+  $('tkt-resolve')?.addEventListener('click', () => setTicketStatus(t.salon, t.id, 'resolved'));
+  $('tkt-reopen')?.addEventListener('click', () => setTicketStatus(t.salon, t.id, 'open'));
+  $('tkt-archive')?.addEventListener('click', () => { if (confirm('Archive (hide) this ticket? The salon keeps their copy.')) setTicketStatus(t.salon, t.id, 'archived', true); });
+}
+
+async function sendDevReply(salon, id) {
+  const input = $('tkt-reply'); const message = (input?.value || '').trim(); if (!message) return;
+  input.disabled = true;
+  const r = await api('/operator/tickets/reply', { method: 'POST', body: JSON.stringify({ salon, id, message }) });
+  if (r.ok) await refreshTickets(); else { alert(r.body?.error || 'Reply failed'); input.disabled = false; }
+}
+async function setTicketStatus(salon, id, status, closeAfter) {
+  const r = await api('/operator/tickets/status', { method: 'POST', body: JSON.stringify({ salon, id, status }) });
+  if (r.ok) { if (closeAfter) { _openTicket = null; $('ticket-thread').innerHTML = ''; } await refreshTickets(); }
+  else alert(r.body?.error || 'Update failed');
+}
+
+async function enableDevNotifications(btn) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { alert('This browser does not support notifications.'); return; }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { alert('Notifications not allowed.'); return; }
+    const swPath = location.pathname.replace(/[^/]*$/, 'sw.js');
+    await navigator.serviceWorker.register(swPath).catch(() => {});
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(VAPID_PUBLIC_KEY) });
+    const r = await api('/operator/push-subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) });
+    if (btn) btn.textContent = r.ok ? 'Notifications on ✓' : 'Failed — retry';
+  } catch (e) { if (btn) btn.textContent = 'Failed — retry'; }
+}
+
+// Reflect an already-enabled subscription so the dev isn't unsure whether it's on.
+async function refreshNotifyLabel() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted') $('tickets-notify').textContent = 'Notifications on ✓';
+  } catch {}
+}
+$('tickets-notify').addEventListener('click', e => enableDevNotifications(e.target));
+$('tickets-refresh').addEventListener('click', refreshTickets);
+$('tickets-fstatus').addEventListener('change', refreshTickets);
+$('tickets-ftype').addEventListener('change', refreshTickets);
+$('tickets-funread').addEventListener('change', refreshTickets);
 
 if (token) connect();
 </script>
