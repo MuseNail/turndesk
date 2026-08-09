@@ -4,12 +4,13 @@
 // store to re-render on remote changes, and runs startup.
 
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import { salonSlug } from './apptoken.js';
 import * as reporter from './reporter.js';   // automatic error reporting — arm early so it catches boot-time throws
 import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as session from './session.js';
-import { APP_VERSION } from './config.js';
+import { APP_VERSION, isSandboxSalon } from './config.js';
 import * as utils from './utils.js';
 import * as auth from './features/auth.js';
 import * as photos from './features/photos.js';
@@ -644,6 +645,10 @@ function boot() {
   chat.onChatSync();   // baseline the chat unread badge from cache on load
   apptReminders.startApptReminders();   // appointment reminder banners (30s timer)
   updateSyncIndicator(store.getState());
+
+  // Sandbox salons (the public 'demo'): hide shared-account features the Worker 403s (F6),
+  // so the product tour shows a clean UI instead of "not available in the demo" errors.
+  if (isSandboxSalon(salonSlug())) document.getElementById('ai-panel')?.classList.add('hidden');
 
   // Confirm screen: tap anywhere to return to welcome
   const confirmScreen = document.getElementById('screen-confirm');

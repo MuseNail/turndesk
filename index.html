@@ -714,7 +714,8 @@ tailwind.config = {
           <div id="rpt-perf"></div>
         </div>
 
-        <!-- Ask about your data (AI) -->
+        <!-- Ask about your data (AI) — #ai-panel is hidden for sandbox/demo salons (F6) in main.js -->
+        <div id="ai-panel">
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Ask About Your Data</h3>
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2">
@@ -727,6 +728,7 @@ tailwind.config = {
           </div>
           <div id="ai-answer" class="hidden mt-3 text-sm font-body text-on-surface whitespace-pre-wrap bg-surface-container rounded-lg p-3 leading-relaxed"></div>
         </div>
+        </div><!-- /#ai-panel -->
 
         <!-- Per-staff breakdown -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Staff Breakdown</h3>

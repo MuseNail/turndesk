@@ -345,6 +345,16 @@ export default {
     // route added later is gated by default.
     if (!(await appAuthOk(request, url, env, salonId))) return json({ error: 'unauthorized' }, 401);
 
+    // Sandbox gate (§F6): a sandbox salon (the public 'demo') may drive its OWN DO freely, but
+    // must never reach the SHARED platform accounts — one Helcim/Square merchant, the SMS number,
+    // the AI key, and platform billing all use account-wide secrets. Placed here (right after auth,
+    // before every route branch) so a shared-account route added later can't be forgotten. An
+    // anonymous demo login therefore can't read/charge/refund/text/drain across all tenants.
+    if (isSandboxSalon(salonId) &&
+        (path.startsWith('/helcim') || path.startsWith('/square') || path.startsWith('/sms/') || path === '/ai/ask' || path.startsWith('/billing/'))) {
+      return json({ error: 'not available in the demo' }, 403);
+    }
+
     // ── Review-QR redirect (public) ───────────────────────────────────────────
     // The printed receipt QR encodes …/r forever; this looks up the current
     // destination (config.review_url, editable in Settings) and 302-redirects.
@@ -975,6 +985,18 @@ const _TIMING_DUMMY = { salt: 'AAAAAAAAAAAAAAAAAAAAAA==', hash: 'A'.repeat(44), 
 // reached only by operator routes). Reserved slugs can never be real salons.
 const REGISTRY_NAME = '__registry__';
 const RESERVED_SLUGS = new Set([REGISTRY_NAME, 'admin', 'operator', 'api', 'assets', 'icons', 'www', 'app', 'static', 'demo-reserved']);
+
+// Sandbox salons — currently the public 'demo' tour. Their OWN durable object works normally
+// (queue/turns/floor/reports on the demo's own data), but they must NEVER reach the SHARED
+// platform accounts (one Helcim/Square merchant + SMS number + AI key + billing), gated in
+// _handle right after auth. This is a synchronous in-memory check (no registry read) so a
+// registry blip can never silently "un-sandbox" demo and reopen the shared accounts. The demo
+// login is intentionally public (self-serve tour), so we sandbox the CAPABILITIES, not the login.
+// (Security review 2026-08-03, finding F6 / Chain A.)
+const SANDBOX_SLUGS = new Set(['demo']);
+export function isSandboxSalon(salonId) {
+  return SANDBOX_SLUGS.has(String(salonId || '').trim().toLowerCase());
+}
 // Default nail-salon menu a new salon starts with (owner edits in Settings).
 const STARTER_SERVICES = [
   { id: 'svc-mani',  label: 'Classic Manicure', abbr: 'MANI', baseCost: 25 },

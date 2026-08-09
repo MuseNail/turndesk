@@ -15,3 +15,7 @@ Thumbs.db
 
 # Local scratch
 mockups/
+
+# Private security reports — NEVER commit/publish (repo-root .md is served by Pages)
+.security/
+SECURITY-REVIEW-*.md

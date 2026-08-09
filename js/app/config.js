@@ -4,6 +4,14 @@ export const APP_VERSION = 'td-v0.49';
 export const APP_NAME    = 'turndesk';
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 
+// Sandbox salons (the public 'demo' tour): the client hides shared-account features (Ask-AI, etc.)
+// for these, mirroring the Worker's server-side sandbox gate (review F6). Keep in sync with
+// cloudflare/worker.js SANDBOX_SLUGS.
+export const SANDBOX_SLUGS = ['demo'];
+export function isSandboxSalon(slug) {
+  return SANDBOX_SLUGS.includes(String(slug || '').trim().toLowerCase());
+}
+
 const ORIGIN = apiOrigin();
 export const SQUARE_PROXY = ORIGIN + '/square';
 export const HELCIM_PROXY = ORIGIN + '/helcim';
