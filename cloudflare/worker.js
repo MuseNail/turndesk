@@ -345,13 +345,15 @@ export default {
     // route added later is gated by default.
     if (!(await appAuthOk(request, url, env, salonId))) return json({ error: 'unauthorized' }, 401);
 
-    // Sandbox gate (§F6): a sandbox salon (the public 'demo') may drive its OWN DO freely, but
+    // Sandbox gate (F6): a sandbox salon (the public 'demo') may drive its OWN DO freely, but
     // must never reach the SHARED platform accounts — one Helcim/Square merchant, the SMS number,
     // the AI key, and platform billing all use account-wide secrets. Placed here (right after auth,
-    // before every route branch) so a shared-account route added later can't be forgotten. An
-    // anonymous demo login therefore can't read/charge/refund/text/drain across all tenants.
+    // before every route branch). Each shared-account family is matched by PREFIX so a new route
+    // added under an EXISTING prefix can't be forgotten; a brand-new shared secret under a NEW
+    // prefix must still be added to this list by hand. An anonymous demo login therefore can't
+    // read/charge/refund/text/drain across all tenants.
     if (isSandboxSalon(salonId) &&
-        (path.startsWith('/helcim') || path.startsWith('/square') || path.startsWith('/sms/') || path === '/ai/ask' || path.startsWith('/billing/'))) {
+        (path.startsWith('/helcim') || path.startsWith('/square') || path.startsWith('/sms/') || path.startsWith('/ai/') || path.startsWith('/billing/'))) {
       return json({ error: 'not available in the demo' }, 403);
     }
 

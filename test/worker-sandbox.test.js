@@ -34,6 +34,16 @@ for (const path of ['/helcim/ping', '/helcim/purchase', '/helcim/result', '/helc
   });
 }
 
+// ── future-proofing: the /ai family is gated by PREFIX, not just the exact /ai/ask ─
+// The gate's comment promises "a shared-account route added later can't be forgotten." A future
+// shared-key AI route (e.g. /ai/summarize, /ai/insights — same account-wide ANTHROPIC/GEMINI key)
+// must also be sandboxed, or the demo foothold silently regains the F23 AI-budget-drain leg of
+// Chain A with no failing test. (3-lens review of the F6 build, 2026-08-09.)
+test("sandbox 'demo' is BLOCKED (403) from a hypothetical future /ai/* route (prefix, not exact-match)", async () => {
+  const r = await hit('/ai/summarize', 'demo');
+  assert.equal(r.status, 403, 'the /ai/ family must be gated by prefix so future shared-key AI routes are covered');
+});
+
 // ── scoping: a REAL salon is NOT blocked by the sandbox gate ──────────────────────
 test("a real salon is NOT sandbox-blocked — /ai/ask reaches the handler (503 'not configured'), not 403", async () => {
   // Hermetic proof the gate is scoped to sandbox salons only: a real salon passes the gate and

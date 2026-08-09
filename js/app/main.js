@@ -646,8 +646,10 @@ function boot() {
   apptReminders.startApptReminders();   // appointment reminder banners (30s timer)
   updateSyncIndicator(store.getState());
 
-  // Sandbox salons (the public 'demo'): hide shared-account features the Worker 403s (F6),
-  // so the product tour shows a clean UI instead of "not available in the demo" errors.
+  // Sandbox salons (the public 'demo'): the Worker is the real boundary — it 403s every shared
+  // account route (F6). This only hides the inline Ask-AI panel, which would otherwise render a raw
+  // 403 in-page on the reports view; the other shared features (SMS test, charge-card, billing)
+  // already surface a clean toast when used, so they're left in place for the tour.
   if (isSandboxSalon(salonSlug())) document.getElementById('ai-panel')?.classList.add('hidden');
 
   // Confirm screen: tap anywhere to return to welcome
