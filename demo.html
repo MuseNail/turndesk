@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- CSP connect-src allowlist (security review F4/F5) — keep IDENTICAL to index.html; see its note. -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://turndesk.musenailandspa.workers.dev wss://turndesk.musenailandspa.workers.dev https://turndesk-staging.musenailandspa.workers.dev wss://turndesk-staging.musenailandspa.workers.dev http://localhost:8787 ws://localhost:8787 https://*.googleapis.com https://apis.google.com https://secure.helcim.app">
 <!-- Force browsers to always fetch fresh HTML — prevents stale cached versions after deploys -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">

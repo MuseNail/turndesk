@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
+<!-- CSP connect-src allowlist (security review F4/F5) — keep IDENTICAL to index.html; see its note. Guards the operator god-token against exfil. -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://turndesk.musenailandspa.workers.dev wss://turndesk.musenailandspa.workers.dev https://turndesk-staging.musenailandspa.workers.dev wss://turndesk-staging.musenailandspa.workers.dev http://localhost:8787 ws://localhost:8787 https://*.googleapis.com https://apis.google.com https://secure.helcim.app">
 <title>TurnDesk — Operator</title>
 <style>
   :root { --bg:#f4f6f7; --card:#fff; --line:#d7dde0; --ink:#16201f; --muted:#5b6166; --teal:#1a5252; --teal2:#237370; --red:#a32d2d; }
