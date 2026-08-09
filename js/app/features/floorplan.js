@@ -355,14 +355,14 @@ function seatCustomer(entryId, stationId) {
   if (!e) return;
   // A 'paid' broadcast (or other edit) from another device can land during the drag; re-dispatching
   // the whole entry would revert it. Bail if it's already checked out.
-  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }   // xss-ok: showToast → textContent
   const occupant = collectFloor().byStation[stationId];
   if (occupant && String(occupant.id) !== String(e.id)) { showToast(`${stationId} is taken by ${occupant.name}`); return; }
   e.station = stationId;                                    // seat the customer — works with OR without an assigned tech
   activeAssignments(e).forEach(a => { a.station = stationId; });   // keep per-service station in sync (no-op if none yet)
   dispatch('queue.upsert', { entry: e });
   renderFloorPlan();
-  showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);
+  showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);   // xss-ok: showToast → textContent
 }
 
 // ── Assign a tech by dropping them on a station ───
@@ -379,7 +379,7 @@ function validTechStations() {
 function assignTechToStation(techId, stationId) {
   const e = collectFloor().byStation[stationId];
   if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
-  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }   // xss-ok: showToast → textContent
   // Capacity: how many DISTINCT techs are already on this customer at this station?
   const techsHere = new Set((e.assignments || []).filter(a => a.station === stationId && a.techId).map(a => a.techId));
   const cap = categoryMaxTechs(stationType(stationId));

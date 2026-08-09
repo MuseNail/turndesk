@@ -2,7 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { canDo, getActiveUser } from '../session.js';
-import { showToast, commitNumpad, ticketTotal } from '../utils.js';
+import { showToast, commitNumpad, ticketTotal, escHtml } from '../utils.js';
 import { isAwaitingPrice } from './status.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
@@ -149,12 +149,12 @@ function payCustomerBlock(e) {
   (e.assignments || []).forEach(a => { const s = cfg().services.find(x => x.id === a.serviceId); lines.push(payLine(s?.label || 'Service', a.cost || 0)); });
   (e.items || []).forEach(it => { const item = cfg().items.find(x => x.id === it.itemId); lines.push(payLine(`${item?.label || 'Item'} ×${it.qty || 1}`, (it.price || 0) * (it.qty || 0))); });
   (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
-  (e.giftcardSales || []).forEach(g => lines.push(payLine(`Gift Card${g.serial ? ' #' + g.serial : ''}${g.to ? ' → ' + g.to : ''}`, +g.amount || 0)));   // sold (liability, not income) — charged here
-  if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + e.discountNote + ')' : ''}`, -e.discount));
+  (e.giftcardSales || []).forEach(g => lines.push(payLine(`Gift Card${g.serial ? ' #' + escHtml(g.serial) : ''}${g.to ? ' → ' + escHtml(g.to) : ''}`, +g.amount || 0)));   // sold (liability, not income) — charged here
+  if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + escHtml(e.discountNote) + ')' : ''}`, -e.discount));
   if (e.tip > 0) lines.push(payLine('Tip', e.tip));   // informational only — never part of ticketTotal (the header total below)
   const blockTotal = ticketTotal(e) + (e.giftcardSales || []).reduce((a, g) => a + (+g.amount || 0), 0);
   return `<div class="bg-surface-container rounded-xl px-4 py-3">
-    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${blockTotal.toFixed(2)}</span></div>
+    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${escHtml(e.name)}</span><span class="font-headline font-bold text-primary">$${blockTotal.toFixed(2)}</span></div>
     ${lines.join('') || '<div class="text-xs text-on-surface-variant italic">No charges</div>'}
   </div>`;
 }
@@ -711,7 +711,7 @@ function renderPayGc() {
     const g = cards.find(x => x.id === t.giftcardId);
     const proj = g ? (_gcBal(g) - _gcStagedFor(t.giftcardId)) : 0;
     return `<div class="flex items-center justify-between bg-primary-container/15 border border-surface-container-high rounded-lg px-3 py-2 mb-1.5">
-      <span class="text-sm font-body text-on-surface">Gift card #${t.serial || '—'}${t.who ? ' · ' + t.who : ''}</span>
+      <span class="text-sm font-body text-on-surface">Gift card #${escHtml(t.serial) || '—'}${t.who ? ' · ' + escHtml(t.who) : ''}</span>
       <span class="flex items-center gap-2"><span class="text-xs font-headline font-semibold text-on-surface-variant">$${(t.amount || 0).toFixed(2)} used · bal $${proj.toFixed(2)}</span>
       <button onclick="sqRemoveGiftcard('${t.giftcardId}')" title="Remove" class="text-outline hover:text-error flex items-center"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></span>
     </div>`;
@@ -843,7 +843,7 @@ function _gcPickerRows(room) {
     const who = g.to || g.from || '';
     const deflt = Math.min(avail, room).toFixed(2);
     return `<div class="flex items-center gap-2 px-3 py-2 border-t border-surface-container">
-      <div class="flex-1 min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">#${g.serial || '—'}${who ? ' · ' + who : ''}</div><div class="text-[11px] text-on-surface-variant">balance $${avail.toFixed(2)}</div></div>
+      <div class="flex-1 min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">#${escHtml(g.serial) || '—'}${who ? ' · ' + escHtml(who) : ''}</div><div class="text-[11px] text-on-surface-variant">balance $${avail.toFixed(2)}</div></div>
       <input id="sqgc-amt-${g.id}" type="text" inputmode="decimal" value="${deflt}" class="w-20 border border-surface-container-high rounded-lg px-2 py-1 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary">
       <button onclick="sqApplyGiftcard('${g.id}')" class="bg-primary text-on-primary rounded-lg px-3 py-1.5 text-xs font-headline font-bold flex-shrink-0">Record</button>
     </div>`;
