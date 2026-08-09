@@ -312,7 +312,7 @@ export function renderGcalCalendarList() {
         return `<label class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer">
           <input type="radio" name="unassigned-cal" ${isU?'checked':''} onchange="setUnassignedCal('${c.id.replace(/'/g,"\\'")}')" style="accent-color:#1a5252;width:16px;height:16px;flex-shrink:0">
           <span style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></span>
-          <span class="flex-grow text-sm font-body text-on-surface">${c.name}${isP?' <span style="font-size:10px;color:#9ca3af">(primary)</span>':''}</span>
+          <span class="flex-grow text-sm font-body text-on-surface">${_escHtml(c.name)}${isP?' <span style="font-size:10px;color:#9ca3af">(primary)</span>':''}</span>
           ${isU?'<span style="font-size:10px;font-weight:600;color:#1a5252">Unassigned →</span>':''}
         </label>`;
       }).join('');
@@ -1328,7 +1328,7 @@ function _doCalCheckin(members, appt, partySize) {
   const onTurns = document.getElementById('panel-turns')?.classList.contains('active');
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
   if (!onTurns) window.showDashPanel?.('queue');
-  showToast(added > 1 ? `${added} guests added to queue from calendar ✓` : `${firstName} added to queue from calendar ✓`);
+  showToast(added > 1 ? `${added} guests added to queue from calendar ✓` : `${firstName} added to queue from calendar ✓`);   // xss-ok: showToast sets textContent (no HTML)
 }
 export function calQuickCheckin(apptId) {
   const party = _gatherParty(apptId);
@@ -1500,7 +1500,7 @@ function _guestLinesHtml(gi) {
 }
 function renderApptExtraGuests() {
   const container = document.getElementById('appt-extra-guests'); if (!container) return;
-  container.innerHTML = _apptExtraGuests.map((g,idx) => `<div class="border border-surface-container-high rounded-xl p-3 mb-2 bg-surface-container-low" data-appt-guest="${idx}"><div class="flex items-center justify-between mb-2"><span class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest">Guest ${idx+2}</span><button type="button" onclick="apptRemoveGuest(${idx})" class="text-outline-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></div><div class="ac-input-wrap mb-2"><input type="tel" placeholder="Phone (optional)" autocomplete="off" value="${(g.phone||'').replace(/"/g,'&quot;')}" id="appt-extra-phone-${idx}" oninput="apptExtraAcSearch(this,${idx},'phone')" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-phone-${idx}" class="autocomplete-list hidden"></div></div><div class="grid grid-cols-2 gap-2"><div class="ac-input-wrap"><input type="text" placeholder="First Name *" autocomplete="off" value="${(g.first||'').replace(/"/g,'&quot;')}" id="appt-extra-first-${idx}" oninput="apptExtraAcSearch(this,${idx},'first'); autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-first-${idx}" class="autocomplete-list hidden"></div></div><input type="text" placeholder="Last Name" value="${(g.last||'').replace(/"/g,'&quot;')}" id="appt-extra-last-${idx}" oninput="autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"></div>${_guestLinesHtml(idx)}</div>`).join('');
+  container.innerHTML = _apptExtraGuests.map((g,idx) => `<div class="border border-surface-container-high rounded-xl p-3 mb-2 bg-surface-container-low" data-appt-guest="${idx}"><div class="flex items-center justify-between mb-2"><span class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest">Guest ${idx+2}</span><button type="button" onclick="apptRemoveGuest(${idx})" class="text-outline-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></div><div class="ac-input-wrap mb-2"><input type="tel" placeholder="Phone (optional)" autocomplete="off" value="${_escHtml(g.phone)}" id="appt-extra-phone-${idx}" oninput="apptExtraAcSearch(this,${idx},'phone')" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-phone-${idx}" class="autocomplete-list hidden"></div></div><div class="grid grid-cols-2 gap-2"><div class="ac-input-wrap"><input type="text" placeholder="First Name *" autocomplete="off" value="${_escHtml(g.first)}" id="appt-extra-first-${idx}" oninput="apptExtraAcSearch(this,${idx},'first'); autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-first-${idx}" class="autocomplete-list hidden"></div></div><input type="text" placeholder="Last Name" value="${_escHtml(g.last)}" id="appt-extra-last-${idx}" oninput="autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"></div>${_guestLinesHtml(idx)}</div>`).join('');
 }
 export function apptExtraAcSearch(input, idx, field) {
   if (field === 'phone') formatPhone(input);
@@ -1522,7 +1522,7 @@ export function apptExtraAcFill(idx, name, phone) {
 function _buildTechOptions(sel) {
   const isU = !sel;   // '' / null → Unassigned (the default)
   return `<option value="" ${isU ? 'selected' : ''}>Unassigned</option>`
-    + buildStaffColumns().filter(c => c.id !== '').map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join('');
+    + buildStaffColumns().filter(c => c.id !== '').map(c => `<option value="${_escHtml(c.id)}" ${c.id === sel ? 'selected' : ''}>${_escHtml(c.name)}</option>`).join('');
 }
 function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
 

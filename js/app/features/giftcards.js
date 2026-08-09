@@ -1,7 +1,7 @@
 // ── Gift cards + backup/restore utilities ───────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr } from '../utils.js';
+import { showToast, todayStr, localDateStr, escHtml } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { customerDirectory, ensureCustomerInStore } from './square-customers.js';
 import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
@@ -149,7 +149,7 @@ export function gcRecipientSearch(input) {
   if (q.length < 2) { drop.classList.add('hidden'); return; }
   _gcAcMatches = customerDirectory.filter(c => ((c.firstName || '') + ' ' + (c.lastName || '')).trim().toLowerCase().includes(q)).slice(0, 6);
   if (!_gcAcMatches.length) { drop.classList.add('hidden'); return; }
-  drop.innerHTML = _gcAcMatches.map((c, i) => { const name = ((c.firstName || '') + ' ' + (c.lastName || '')).trim(); return `<div class="autocomplete-item" onmousedown="gcPickRecipient(${i})"><div class="ac-name">${name || '—'}</div><div class="ac-phone">${c.phone || 'No phone'}</div></div>`; }).join('');
+  drop.innerHTML = _gcAcMatches.map((c, i) => { const name = ((c.firstName || '') + ' ' + (c.lastName || '')).trim(); return `<div class="autocomplete-item" onmousedown="gcPickRecipient(${i})"><div class="ac-name">${escHtml(name) || '—'}</div><div class="ac-phone">${escHtml(c.phone) || 'No phone'}</div></div>`; }).join('');
   drop.classList.remove('hidden');
 }
 export function gcPickRecipient(i) {
@@ -282,12 +282,12 @@ export function renderGiftCards() {
     return `<div onclick="showEditGiftCard('${g.id}')" title="Edit gift card" class="rounded-xl border flex items-center gap-0 overflow-hidden cursor-pointer hover:shadow-md transition-shadow" style="background:${sc.bg};border-color:${sc.border}">
       <div class="flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-xl px-4 self-stretch" style="width:88px;background:${sc.border}22;border-right:1px solid ${sc.border}40;color:${sc.lc}">$${(g.amount||0).toFixed(0)}</div>
       <div class="flex-shrink-0 flex items-center justify-center px-3" style="width:96px"><span class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style="background:${sc.border}20;color:${sc.lc}">${sc.label}</span></div>
-      <div class="flex-shrink-0 text-xs font-body font-semibold text-on-surface px-2" style="width:90px">${g.serial ? '#'+g.serial : '—'}</div>
+      <div class="flex-shrink-0 text-xs font-body font-semibold text-on-surface px-2" style="width:90px">${g.serial ? '#'+escHtml(g.serial) : '—'}</div>
       <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:96px">${g.datePurchased ? formatDate(g.datePurchased) : '—'}</div>
-      <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.from ? `<span class="text-on-surface">${g.from}</span>` : '<span class="text-outline-variant">—</span>'}</div>
-      <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.to ? `<span class="text-on-surface">${g.to}</span>` : '<span class="text-outline-variant">—</span>'}</div>
-      <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${g.phone || '—'}</div>
-      <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${g.notes || ''}</div>
+      <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.from ? `<span class="text-on-surface">${escHtml(g.from)}</span>` : '<span class="text-outline-variant">—</span>'}</div>
+      <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.to ? `<span class="text-on-surface">${escHtml(g.to)}</span>` : '<span class="text-outline-variant">—</span>'}</div>
+      <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${escHtml(g.phone) || '—'}</div>
+      <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${escHtml(g.notes)}</div>
       <div class="flex-shrink-0 text-right px-4 py-3" style="width:96px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${isOverdrawn?'#c53030':balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${used>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${used.toFixed(2)} used</div>`:''}</div>
     </div>`;
   }).join('');

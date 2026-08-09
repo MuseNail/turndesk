@@ -484,7 +484,7 @@ export function renderTurnsTechGrid() {
         const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
-            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
+            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
@@ -540,7 +540,7 @@ export function renderTurnsQueue() {
   function buildCard(e) {
     const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
     const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${partyLetters.get(e.groupId) || '•'}</span>` : '';
-    const groupLbl = e.groupLabel ? `<span class="text-[10px] font-body italic ml-0.5" style="color:${e.groupColor||'#888'}">${e.groupLabel}</span>` : '';
+    const groupLbl = e.groupLabel ? `<span class="text-[10px] font-body italic ml-0.5" style="color:${e.groupColor||'#888'}">${escHtml(e.groupLabel)}</span>` : '';
     // Avatar bubble is STATUS-colored + consistent for everyone (green in service · blue done ·
     // violet awaiting-price · amber waiting), so it reads at a glance and party members no longer
     // get a different-colored bubble. Party grouping still shows via the small letter badge
@@ -589,7 +589,7 @@ export function renderTurnsQueue() {
     const bgTint = _es==='inservice' ? 'rgba(42,122,79,0.10)' : _es==='awaiting' ? 'rgba(107,79,176,0.12)' : _es==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
-        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
+        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
   }
   waitingList.innerHTML = waiting.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one waiting</div>' : waiting.map(buildCard).join('');
   const activeCards = [...complete, ...inservice];   // completed (awaiting payment) at the top, then in-service
@@ -636,7 +636,7 @@ export function openTurnsAssign(techId, slotIndex) {
     list.innerHTML = Object.values(byCustomer).map(({ entry: e, svcs }) => {
       const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
       const svcButtons = svcs.map(({ serviceId, svcLabel }) => `<button onclick="assignServiceFromTurns('${e.id}','${serviceId}')" class="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-container transition-colors text-left border-t border-surface-container-high"><div class="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0"></div><span class="text-sm font-body font-semibold text-on-surface">${svcLabel}</span></button>`).join('');
-      return `<div class="border border-surface-container-high rounded-xl mb-2 overflow-hidden"><div class="px-4 py-2 bg-surface-container flex items-center justify-between"><span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span><span class="text-[11px] font-body text-on-surface-variant">${timeStr}</span></div>${svcButtons}</div>`;
+      return `<div class="border border-surface-container-high rounded-xl mb-2 overflow-hidden"><div class="px-4 py-2 bg-surface-container flex items-center justify-between"><span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span><span class="text-[11px] font-body text-on-surface-variant">${timeStr}</span></div>${svcButtons}</div>`;
     }).join('');
   }
   const m = document.getElementById('turns-assign-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -943,7 +943,7 @@ function renderTurnsHistoryView() {
       const tap = canAdd ? `onclick="showHistoricalEntryModal('${e.id}')"` : '';
       return `<div class="flex-shrink-0 w-[150px] px-1">
         <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px${outline}">
-          <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
+          <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
           <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
           <div class="text-[9px] opacity-60">${timeStr}</div>
         </button></div>`;

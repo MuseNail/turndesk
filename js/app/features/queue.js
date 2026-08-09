@@ -215,7 +215,7 @@ function renderQueueHistoryView(list, empty) {
     const svcs = (e.services||[]).map(sid => svc(sid)?.label || sid).join(', ') || '—';
     const time = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
     return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between opacity-90">
-      <div class="min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badge[e.status]||'badge-done'}">${e.status}</span></div>
+      <div class="min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badge[e.status]||'badge-done'}">${e.status}</span></div>
         <div class="text-xs font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
         <div class="text-[11px] font-body text-outline">${time}</div></div>
       <div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">$${(e.totalCost||0).toFixed(2)}</div></div>`;
@@ -323,7 +323,7 @@ function buildQueueRow(e) {
   const statusEdgeColor = { waiting: '#f5c870', inservice: '#2a7a4f', complete: '#1a5c7a', paid: '#5b6166', done: '#5b6166' }[e.status] || '#c2cacd';
   const leftEdge = e.groupId ? `border-left:5px solid ${e.groupColor};` : `border-left:4px solid ${statusEdgeColor};`;
   const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;background:${e.groupColor};color:#fff;font-size:10px;font-weight:800;flex-shrink:0;margin-right:1px">${_partyLetters.get(e.groupId) || '•'}</span>` : '';
-  const groupTag = e.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${e.groupColor}">${e.groupLabel}</span>` : '';
+  const groupTag = e.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${e.groupColor}">${escHtml(e.groupLabel)}</span>` : '';
   // Wait timer = the front desk's #1 triage signal. For a WAITING guest it's a pill that
   // escalates amber (≥15m) → red (≥25m); pill color only, no card outline. The number stays
   // live because updateElapsedTimes rewrites the inner data-checkin-ts span's text (the icon
@@ -354,14 +354,14 @@ function buildQueueRow(e) {
     <div class="queue-row ${cardBg} rounded-xl py-1.5 px-3 border flex items-stretch gap-1.5" data-id="${id}" style="${leftEdge}">
       <div class="flex-grow min-w-0 py-1 cursor-pointer" onclick="showGroupAssignModal('${id}')" title="Assign & Price">
         <div class="flex items-center gap-1 flex-wrap leading-tight">
-          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${visitBadge}${groupTag ? ' ' + groupTag : ''}
+          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${visitBadge}${groupTag ? ' ' + groupTag : ''}
           ${apptBadge}${totalDisplay}
           ${timeEl}
         </div>
         ${assignSummary ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
-        <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
+        <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + escHtml(e.phone) : ''}</div>
         ${cardNotePreview(e.phone, e.txnNote)}
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">
@@ -396,7 +396,7 @@ export function updateStatus(id, status) {
     applyEntryStatus(entry);
   } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
-  if (entry.status === 'paid' && !wasPaid) window.logAudit?.('Payment', `${entry.name || '—'} · $${ticketTotal(entry).toFixed(2)}`);
+  if (entry.status === 'paid' && !wasPaid) window.logAudit?.('Payment', `${entry.name || '—'} · $${ticketTotal(entry).toFixed(2)}`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
   // R6: when a ticket is paid, commit any recorded gift-card use (log the redemption + draw down
   // the app balance, tied to this ticket). Idempotent. The Square charge is unaffected.
   if (entry.status === 'paid' && entry.giftcardRedemptions && entry.giftcardRedemptions.length) window.gcSyncTicket?.(String(entry.id), entry.giftcardRedemptions);
@@ -617,14 +617,14 @@ export function submitManualAdd(skipApptGuard) {
   if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitManualAdd(true))) return;
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`, groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length], primaryName = newEntries[0].name;
-    newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });
+    newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });   // xss-ok: groupLabel BUILD; rendered escaped at queue 326/1189/1754 + turns 543
   }
   newEntries.forEach(e => upsert(e));
   upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
-  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);
+  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();
-  showToast(`${newEntries.map(e => e.name).join(' & ')} added to queue`);
+  showToast(`${newEntries.map(e => e.name).join(' & ')} added to queue`);   // xss-ok: showToast → textContent
 }
 
 // ── Edit Check-In ─────────────────────────────────
@@ -639,12 +639,12 @@ export function showEditCheckin(entryId) {
   document.getElementById('edit-checkin-content').innerHTML = `
     <div class="grid grid-cols-2 gap-3">
       <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">First Name</label>
-        <input id="eci-first" type="text" value="${firstName}" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
+        <input id="eci-first" type="text" value="${escHtml(firstName)}" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
       <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Last Name</label>
-        <input id="eci-last" type="text" value="${lastName}" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
+        <input id="eci-last" type="text" value="${escHtml(lastName)}" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
     </div>
     <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
-      <input id="eci-phone" type="tel" value="${entry.phone || ''}" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
+      <input id="eci-phone" type="tel" value="${escHtml(entry.phone || '')}" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline focus:border-primary outline-none"></div>
     <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Services</label>
       <div class="grid grid-cols-3 gap-2">
         ${cfg().services.map(s => `
@@ -663,7 +663,7 @@ export function saveEditCheckin(force) {
   const entry = q().find(e => String(e.id) === String(_editCheckinId));
   if (!entry) return;
   if (force !== true && (entry.updatedAt || 0) > (_editCheckinOpenedAt || 0) && entry.updatedBy && entry.updatedBy !== DEVICE_ID) {
-    showWarnModal('Changed on another device', `${(entry.name || 'This check-in').split(' ')[0]} was updated on another device since you opened it. Saving now overwrites that change. Save anyway?`, () => saveEditCheckin(true), 'Save anyway'); return;
+    showWarnModal('Changed on another device', `${(entry.name || 'This check-in').split(' ')[0]} was updated on another device since you opened it. Saving now overwrites that change. Save anyway?`, () => saveEditCheckin(true), 'Save anyway'); return;   // xss-ok: showWarnModal → textContent
   }
   const first = document.getElementById('eci-first')?.value.trim();
   const last  = document.getElementById('eci-last')?.value.trim();
@@ -852,7 +852,7 @@ export function showGroupAssignModal(entryId) {
   // Hard lock: if this ticket (or its party) is open on another device, don't open — tell the user.
   const key = _lockKeyFor(entry);
   const held = _lockHeldByOther(key);
-  if (held) { window.showWarnModal?.('Ticket open on another device', `This ticket is being edited on ${held.name ? held.name + "'s device" : 'another device'}. Close it there first, then open it here.`, () => {}, 'OK'); return; }
+  if (held) { window.showWarnModal?.('Ticket open on another device', `This ticket is being edited on ${held.name ? held.name + "'s device" : 'another device'}. Close it there first, then open it here.`, () => {}, 'OK'); return; }   // xss-ok: showWarnModal → textContent (held.name is a device owner, not a customer)
   _lockKey = key; _acquireLock(key); _startLockHb(key);
   _bindAssignIdle(); _resetAssignIdle();
   groupAssignEntries = entry.groupId ? q().filter(e => e.groupId === entry.groupId).map(e => String(e.id)) : [String(entry.id)];
@@ -883,7 +883,7 @@ function renderGroupAssignTabs() {
     const isActive = i === activeGroupTab, color = entry.groupColor || '#1a5252';
     return `<div class="flex items-center gap-1">
         <button onclick="switchGroupTab(${i})" class="px-4 py-2 rounded-full text-sm font-body font-semibold transition-all flex items-center gap-2 ${isActive ? 'text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}" style="${isActive ? `background:${color}` : ''}">
-          <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>${entry.name.split(' ')[0]}
+          <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>${escHtml(entry.name.split(' ')[0])}
         </button>
         ${isActive ? `<button onclick="openCustomerFromAssign('${id}')" title="Edit customer" class="w-7 h-7 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:16px">person_edit</span></button>` : ''}
       </div>`;
@@ -943,7 +943,7 @@ export function markAwaitingPrice(entryId, serviceId) {
   a.comped = false; a.compReason = '';
   a.cost = 0;
   setAssignmentStatus(entry, serviceId, 'complete');   // dispatches queue.upsert; applyAssignmentStatus stamps a.updatedAt
-  window.logAudit?.('Awaiting price', `${entry.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${staffById(a.techId)?.name || 'tech'} to price`);
+  window.logAudit?.('Awaiting price', `${entry.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${staffById(a.techId)?.name || 'tech'} to price`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
   renderGroupAssignContent();
 }
 
@@ -967,7 +967,7 @@ export function revertServiceStatus(entryId, serviceId, prevStatus) {
   showWarnModal('Move status back?', `This moves ${svc(serviceId)?.label || 'this service'} back to "${label}". Use this only to correct a mistake.`, () => {
     const e = q().find(x => String(x.id) === String(entryId)); if (!e) return;
     setAssignmentStatus(e, serviceId, prevStatus, true);   // isRevert → restore the pre-mistake status timer
-    window.logAudit?.('Status revert', `${e.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${label}`);
+    window.logAudit?.('Status revert', `${e.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${label}`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
     renderGroupAssignContent();
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
   }, 'Move back');
@@ -1178,15 +1178,16 @@ export function renderGroupAssignContent() {
 
   const hasSupplement = cfg().items.length > 0;   // fees moved to checkout (v4.51)
   const _nm = (entry.name||'').trim().split(/\s+/), _first = _nm[0] || '', _last = _nm.slice(1).join(' ') || '';
+  const groupLbl = entry.groupLabel ? `<span class="text-[10px] font-body italic flex-shrink-0" style="color:${color}">${escHtml(entry.groupLabel)}</span>` : '';
   content.innerHTML = `
     <div class="flex items-center gap-2 mb-3 flex-wrap"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
-      <input id="ga-first" type="text" value="${_first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
+      <input id="ga-first" type="text" value="${escHtml(_first)}" oninput="autoCapitalize(this)" placeholder="First"
         class="font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
-      <input id="ga-last" type="text" value="${_last.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Last"
+      <input id="ga-last" type="text" value="${escHtml(_last)}" oninput="autoCapitalize(this)" placeholder="Last"
         class="font-headline font-semibold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
-      <input id="ga-phone" type="tel" value="${(entry.phone||'').replace(/"/g,'&quot;')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
+      <input id="ga-phone" type="tel" value="${escHtml(entry.phone||'')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
         class="text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
-      ${entry.groupLabel ? `<span class="text-[10px] font-body italic flex-shrink-0" style="color:${color}">${entry.groupLabel}</span>` : ''}</div>
+      ${groupLbl}</div>
     <div class="mb-1"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2 mb-4">${svcPicker}</div></div>
     ${serviceRows}
@@ -1206,7 +1207,7 @@ export function renderGroupAssignContent() {
         <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note)</span></label><input id="ga-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
         <button type="button" onclick="assignAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to ticket</button>
       </div>
-      ${(entry.giftcardSales || []).map((g, i) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + String(g.serial).replace(/[<>&"]/g, '') : ''}${g.to ? ' → ' + String(g.to).replace(/[<>&"]/g, '') : ''}</span><button type="button" onclick="assignRemoveGiftCard(${i})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
+      ${(entry.giftcardSales || []).map((g, i) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + escHtml(g.serial) : ''}${g.to ? ' → ' + escHtml(g.to) : ''}</span><button type="button" onclick="assignRemoveGiftCard(${i})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
     </div>
     <div class="border-t border-surface-container-high pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">${isParty ? 'Whole-ticket ' : ''}Discount</div>
       <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
@@ -1379,11 +1380,11 @@ function _renderAssignOneList() {
     return `<div data-assign-entry="${e.id}" class="mb-4">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
-        <input type="text" value="${first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
+        <input type="text" value="${escHtml(first)}" oninput="autoCapitalize(this)" placeholder="First"
           class="ga-first font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
-        <input type="text" value="${last.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Last"
+        <input type="text" value="${escHtml(last)}" oninput="autoCapitalize(this)" placeholder="Last"
           class="ga-last font-headline font-semibold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
-        <input type="tel" value="${(e.phone||'').replace(/"/g,'&quot;')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
+        <input type="tel" value="${escHtml(e.phone||'')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
           class="ga-phone text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
         <button onclick="openCustomerFromAssign('${e.id}')" title="Edit customer" class="w-7 h-7 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">person_edit</span></button>
         ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
@@ -1714,7 +1715,7 @@ export function showEditServicesModal(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
   editServicesEntryId = entryId;
-  document.getElementById('edit-services-guest-name').textContent = `Guest: ${entry.name}`;
+  document.getElementById('edit-services-guest-name').textContent = `Guest: ${entry.name}`;   // xss-ok: textContent (not innerHTML)
   document.getElementById('edit-services-grid').innerHTML = cfg().services.map(s => {
     const selected = entry.services.includes(s.id);
     return `<button type="button" onclick="this.classList.toggle('selected')" data-service="${s.id}" class="service-btn flex flex-col items-center justify-center py-3 rounded-lg border transition-all duration-200 ${selected ? 'bg-primary text-on-primary border-primary selected' : 'bg-surface-container text-on-surface-variant border-outline-variant/30 hover:bg-primary/10 hover:text-primary'}">
@@ -1751,7 +1752,7 @@ export function showSplitMergeModal(entryId) {
       ${groupMembers.map(m => `<label class="flex items-center gap-3 p-3 rounded-xl bg-surface-container cursor-pointer hover:bg-surface-container-high transition-colors">
         <input type="checkbox" id="split-cb-${m.id}" class="w-4 h-4 accent-primary">
         <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${entry.groupColor}"></span>
-        <div><div class="font-headline font-semibold text-on-surface text-sm">${m.name}</div>${m.groupLabel ? `<div class="text-[10px] font-body italic text-outline">${m.groupLabel}</div>` : ''}</div></label>`).join('')}
+        <div><div class="font-headline font-semibold text-on-surface text-sm">${escHtml(m.name)}</div>${m.groupLabel ? `<div class="text-[10px] font-body italic text-outline">${escHtml(m.groupLabel)}</div>` : ''}</div></label>`).join('')}
     </div>
     <button onclick="executeSplit()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Split Selected</button>`;
   const m = document.getElementById('split-merge-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -1790,13 +1791,13 @@ export function showMergeSelectModal(entryId) {
   const candidates = q().filter(e => String(e.id) !== String(entryId) && !isPaidStatus(e.status));
   document.getElementById('split-merge-title').textContent = 'Merge with Guest';
   document.getElementById('split-merge-content').innerHTML = `
-    <p class="text-sm font-body text-on-surface-variant mb-4">Select a guest to merge with <strong>${entry.name}</strong>. They become a party with a shared color.</p>
+    <p class="text-sm font-body text-on-surface-variant mb-4">Select a guest to merge with <strong>${escHtml(entry.name)}</strong>. They become a party with a shared color.</p>
     <div class="space-y-2 mb-5 max-h-64 overflow-y-auto no-scroll">
       ${candidates.length === 0 ? '<p class="text-sm font-body text-on-surface-variant text-center py-4">No other guests in queue.</p>' :
         candidates.map(c => `<label class="flex items-center gap-3 p-3 rounded-xl bg-surface-container cursor-pointer hover:bg-surface-container-high transition-colors">
           <input type="radio" name="merge-pick" value="${c.id}" class="w-4 h-4 accent-primary">
           ${c.groupColor ? `<span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${c.groupColor}"></span>` : '<span class="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-outline-variant"></span>'}
-          <div><div class="font-headline font-semibold text-on-surface text-sm">${c.name}</div><div class="text-[11px] font-body text-on-surface-variant">${c.services.map(sid => svc(sid)?.label||sid).join(', ') || '—'}</div></div></label>`).join('')}
+          <div><div class="font-headline font-semibold text-on-surface text-sm">${escHtml(c.name)}</div><div class="text-[11px] font-body text-on-surface-variant">${c.services.map(sid => svc(sid)?.label||sid).join(', ') || '—'}</div></div></label>`).join('')}
     </div>
     ${candidates.length > 0 ? `<button onclick="executeMerge('${entryId}')" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Merge</button>` : ''}`;
   const m = document.getElementById('split-merge-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -1811,10 +1812,10 @@ export function executeMerge(entryId) {
   const groupColor = target.groupColor || entry.groupColor || GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length];
   const allMembers = q().filter(e => String(e.id) === String(entryId) || String(e.id) === String(targetId) || (e.groupId && (e.groupId === entry.groupId || e.groupId === target.groupId)));
   const primaryName = allMembers[0].name;
-  allMembers.forEach((m, i) => { m.groupId = groupId; m.groupColor = groupColor; m.groupLabel = i === 0 ? `${m.name} (primary)` : `${primaryName} — ${m.name}`; upsert(m); });
+  allMembers.forEach((m, i) => { m.groupId = groupId; m.groupColor = groupColor; m.groupLabel = i === 0 ? `${m.name} (primary)` : `${primaryName} — ${m.name}`; upsert(m); });   // xss-ok: groupLabel BUILD; rendered escaped at queue 326/1189/1754 + turns 543
   closeSplitMergeModal();
   renderQueue();
-  showToast(`${entry.name} & ${target.name} merged into a party`);
+  showToast(`${entry.name} & ${target.name} merged into a party`);   // xss-ok: showToast → textContent
 }
 
 // ── Warn modal + reopen ───────────────────────────
@@ -1832,7 +1833,7 @@ export function closeWarnModal() {
 export function confirmReopen(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
-  showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {
+  showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {   // xss-ok: showWarnModal → textContent
     if (entry.assignments && entry.assignments.length) {
       entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') applyAssignmentStatus(a, 'inservice'); });
       applyEntryStatus(entry, true);   // reopen = correction → restore the pre-paid status timer
@@ -1844,8 +1845,8 @@ export function confirmReopen(entryId) {
     // (reversible — re-paying re-saves it; see voidRecordOnReopen). Do this BEFORE upsert.
     window.voidRecordOnReopen?.(String(entry.id));
     upsert(entry);
-    window.logAudit?.('Reopen', `${entry.name || '—'} reopened — sale voided until re-paid`);
+    window.logAudit?.('Reopen', `${entry.name || '—'} reopened — sale voided until re-paid`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
-    showToast(`${entry.name}'s ticket reopened`);
+    showToast(`${entry.name}'s ticket reopened`);   // xss-ok: showToast → textContent
   });
 }

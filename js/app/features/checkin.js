@@ -233,12 +233,12 @@ export function submitCheckin(skipApptGuard) {
     const groupId = `grp-${Date.now()}`;
     const groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length];
     const primaryName = newEntries[0].name;
-    newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });
+    newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });   // xss-ok: groupLabel BUILD (synced/persisted); rendered escaped at queue 326/1189/1754 + turns 543
   }
 
   newEntries.forEach(e => dispatch('queue.upsert', { entry: e }));
   upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
-  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} checked in`);
+  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} checked in`);   // xss-ok: logAudit detail, rendered escaped via _esc at the audit view (audit.js:106)
 
   document.getElementById('confirm-name').textContent = newEntries.map(e => e.name).join(' & ');
   window.goTo?.('screen-confirm');

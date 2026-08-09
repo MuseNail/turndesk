@@ -156,7 +156,7 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
     return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
       <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>
       <div class="text-[11px] font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
-      ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${note}”</div>` : ''}
+      ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${escHtml(note)}”</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -875,7 +875,7 @@ export function drillDownStaff(techId) {
       <button onclick="resetServiceTime('${techId}')" title="Reset this technician's service-time averages (starts fresh from today; does not touch any records)" class="flex items-center gap-1 text-[11px] font-body font-semibold text-error hover:opacity-80 transition-opacity"><span class="material-symbols-outlined" style="font-size:14px">restart_alt</span>Reset</button>
     </div>
     <div class="flex flex-wrap gap-1.5">${avgBySvc.map(x => `<span class="text-xs font-body bg-surface-container-lowest border border-surface-container-high rounded-lg px-2.5 py-1"><span class="text-on-surface font-semibold">${x.label}</span> · <span class="${x.avgMs!=null?'text-primary font-bold':'text-outline'}">${x.avgMs!=null?'~'+fmtDur(x.avgMs):'—'}</span>${x.avgMs!=null?`<span class="text-outline"> (${x.n})</span>`:''}</span>`).join('')}</div></div>` : '';
-  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
+  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${escHtml(row.customer)}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
   const turnTxt = t => t==='full'?'1 turn':t==='half'?'½ turn':'Bonus';
   _drill = {
     title: `${name} — Service Detail`,
@@ -906,7 +906,7 @@ export function drillDownService(sid) {
     rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.tech, r.station, '$'+r.cost.toFixed(2)]),
     summary: [['Services', String(rows.length)], ['Total', '$'+rows.reduce((acc,r)=>acc+r.cost,0).toFixed(2)]],
   };
-  showDrillPanel(_drill.title, rows.map(row => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${row.customer}</div><div class="text-xs font-body text-on-surface-variant">Tech: ${row.tech}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div></div>`).join(''));
+  showDrillPanel(_drill.title, rows.map(row => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${escHtml(row.customer)}</div><div class="text-xs font-body text-on-surface-variant">Tech: ${row.tech}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div></div>`).join(''));
 }
 export function drillDownFee(feeId) {
   const d = window._currentReportData; if (!d) return;
@@ -921,7 +921,7 @@ export function drillDownFee(feeId) {
     summary: [['Times charged', String(rows.length)], ['Total', '$'+total.toFixed(2)]],
   };
   showDrillPanel(_drill.title, rows.length
-    ? rows.map(r => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${r.customer}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${r.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${r.amount.toFixed(2)}</div></div>`).join('')
+    ? rows.map(r => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${escHtml(r.customer)}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${r.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${r.amount.toFixed(2)}</div></div>`).join('')
     : '');
 }
 export function drillDownGiftcards(kind) {
@@ -940,7 +940,7 @@ export function drillDownGiftcards(kind) {
       summary: [['Redemptions', String(list.length)], ['Redeemed', '$' + total.toFixed(2)]],
     };
     showDrillPanel(_drill.title, list.length
-      ? list.map(x => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${x.serial ? '#' + x.serial : '(no serial)'}${x.to ? ' · ' + x.to : ''}</div><div class="text-[11px] font-body text-outline">${fmt(x.date)}</div></div><div class="font-headline font-bold text-on-surface">$${x.amount.toFixed(2)}</div></div>`).join('')
+      ? list.map(x => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${x.serial ? '#' + escHtml(x.serial) : '(no serial)'}${x.to ? ' · ' + escHtml(x.to) : ''}</div><div class="text-[11px] font-body text-outline">${fmt(x.date)}</div></div><div class="font-headline font-bold text-on-surface">$${x.amount.toFixed(2)}</div></div>`).join('')
       : '');
     return;
   }
@@ -953,11 +953,11 @@ export function drillDownGiftcards(kind) {
     summary: [['Cards', String(cards.length)], ['Sold', '$' + total.toFixed(2)]],
   };
   showDrillPanel(_drill.title, cards.length
-    ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial ? '#' + g.serial : '(no serial)'}${g.to ? ' · to ' + g.to : ''}</div><div class="text-[11px] font-body text-outline">${fmt(g.datePurchased)}${g.from ? ' · from ' + g.from : ''}</div></div><div class="font-headline font-bold text-on-surface">$${(g.amount || 0).toFixed(2)}</div></div>`).join('')
+    ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial ? '#' + escHtml(g.serial) : '(no serial)'}${g.to ? ' · to ' + escHtml(g.to) : ''}</div><div class="text-[11px] font-body text-outline">${fmt(g.datePurchased)}${g.from ? ' · from ' + escHtml(g.from) : ''}</div></div><div class="font-headline font-bold text-on-surface">$${(g.amount || 0).toFixed(2)}</div></div>`).join('')
     : '');
 }
 // Shared simple drill row: customer · optional sub-line · time, with a right-aligned amount.
-const _drillRow = (customer, time, amount, sub, neg) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${customer}</div>${sub?`<div class="text-xs font-body text-on-surface-variant truncate">${sub}</div>`:''}<div class="text-[11px] font-body text-outline">${time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${time.toLocaleDateString()}</div></div><div class="font-headline font-bold flex-shrink-0 ml-3 ${neg?'text-error':'text-on-surface'}">${neg?'-':''}$${amount.toFixed(2)}</div></div>`;
+const _drillRow = (customer, time, amount, sub, neg) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${escHtml(customer)}</div>${sub?`<div class="text-xs font-body text-on-surface-variant truncate">${escHtml(sub)}</div>`:''}<div class="text-[11px] font-body text-outline">${time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${time.toLocaleDateString()}</div></div><div class="font-headline font-bold flex-shrink-0 ml-3 ${neg?'text-error':'text-on-surface'}">${neg?'-':''}$${amount.toFixed(2)}</div></div>`;
 const _drillTime = r => new Date(r.completedAt || r.checkinTime);
 // Compact total bar (count + total) shown above the rows so the drill confirms the card's number.
 const _drillSummaryBar = summary => `<div class="bg-primary/10 rounded-xl border border-primary/30 flex divide-x divide-primary/20 mb-2 sticky top-0 z-10">${summary.map(([l,v])=>`<div class="flex-1 px-3 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">${l}</div><div class="font-headline font-bold text-on-surface text-base">${v}</div></div>`).join('')}</div>`;
@@ -1102,7 +1102,7 @@ export function openReconcile() {
   const body = rows.length ? rows.map(r => {
     const over = r.diff > 0;   // charged > recorded → record short (likely a dropped fee)
     const col = over ? '#c53030' : '#9a4a00', label = over ? 'record short' : 'record over';
-    return `<div onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${r.names}</div><div class="text-[11px] font-body text-on-surface-variant">recorded $${r.recorded.toFixed(2)} · charged $${r.charged.toFixed(2)}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleDateString()} · tap to open &amp; fix</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold" style="color:${col}">${over?'+':'−'}$${Math.abs(r.diff).toFixed(2)}</div><div class="text-[10px] font-body" style="color:${col}">${label}</div></div></div>`;
+    return `<div onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${escHtml(r.names)}</div><div class="text-[11px] font-body text-on-surface-variant">recorded $${r.recorded.toFixed(2)} · charged $${r.charged.toFixed(2)}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleDateString()} · tap to open &amp; fix</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold" style="color:${col}">${over?'+':'−'}$${Math.abs(r.diff).toFixed(2)}</div><div class="text-[10px] font-body" style="color:${col}">${label}</div></div></div>`;
   }).join('') : '<p class="text-sm font-body text-on-surface-variant text-center py-4">Everything matches what was charged — no mismatches this period. ✓</p>';
   showDrillPanel(_drill.title, _drillSummaryBar(_drill.summary) + note + body);
 }
@@ -2229,7 +2229,7 @@ export function showTxnDetail(recordId) {
   const isPast = dt < new Date(new Date().setHours(0, 0, 0, 0));
   const editBtn = (!isRefund && canDo('historicalEntry') && isPast)
     ? `<button onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="w-full mt-3 py-2.5 rounded-xl border border-primary text-primary font-headline font-bold text-sm hover:bg-primary/5 transition-colors">Edit this transaction</button>` : '';
-  _drill = { title: `${r.name || 'Transaction'} — Detail`, columns: ['Line', 'Amount'], rows: drillRows, summary: [[isRefund ? 'Refund' : 'Total', money(r.totalCost)], ...((r.tip || 0) > 0 ? [['Tip', money(r.tip)]] : [])] };
+  _drill = { title: `${r.name || 'Transaction'} — Detail`, columns: ['Line', 'Amount'], rows: drillRows, summary: [[isRefund ? 'Refund' : 'Total', money(r.totalCost)], ...((r.tip || 0) > 0 ? [['Tip', money(r.tip)]] : [])] };   // xss-ok: _drill.title is rendered via textContent (showDrillPanel :1317); the actual render at :2233 also _eTxn-escapes it
   showDrillPanel(`${_eTxn(r.name || 'Transaction')} — Detail`,
     `<div class="text-[11px] font-body text-outline mb-2">${dt.toLocaleDateString()} · ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${r.phone ? ' · ' + _eTxn(r.phone) : ''} · ${isRefund ? 'Refund' : (r.status || 'paid')}${isRefund && r.discountNote ? ' · ' + _eTxn(r.discountNote) : ''}</div>${rows.join('')}${paid ? `<div class="mt-2 pt-2 border-t border-surface-container-high">${paid}</div>` : ''}${editBtn}`);
 }
@@ -2271,9 +2271,9 @@ export function renderTransactions() {
     const totalDisplay = isRefund ? `<div class="text-lg font-headline font-extrabold text-error">-$${Math.abs(r.totalCost||0).toFixed(2)}</div>` : `<div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>`;
     return `<div onclick="showTxnDetail('${r.id}')" title="Tap for the full breakdown" class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund?'border-error/30':'border-surface-container-high'} cursor-pointer hover:shadow-md transition-shadow">
       <div class="flex items-start justify-between"><div class="flex-grow min-w-0">
-        <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
+        <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${escHtml(r.name)}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
-        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${_paidByHtml(r)}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
+        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+escHtml(r.phone):''}</div>${_paidByHtml(r)}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
             ${!isRefund?`<button onclick="event.stopPropagation();printCustomerReceipt('${r.id}')" title="Print receipt on the roll" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">print</span> Print</button>`:''}
@@ -2310,7 +2310,7 @@ export function renderTransactions() {
         <div class="flex-grow min-w-0">
           <div class="flex items-center gap-2 flex-wrap mb-1">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:${c};color:#fff;font-size:11px;font-weight:800;flex-shrink:0">${letter}</span>
-            <span class="font-headline font-bold text-on-surface">${primary} · party of ${b.members.length}</span>
+            <span class="font-headline font-bold text-on-surface">${escHtml(primary)} · party of ${b.members.length}</span>
             <span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold badge-done">paid</span>
             <span class="material-symbols-outlined party-chevron text-on-surface-variant" style="font-size:18px;transition:transform .15s">expand_more</span>
           </div>
@@ -2379,9 +2379,11 @@ function renderTxnMergeList() {
       const sel = _txnMergeSel.has(String(r.id));
       const grp = r.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${r.groupColor || '#888'};color:#fff;font-size:9px;font-weight:800;margin-right:5px;vertical-align:middle">${letters.get(r.groupId) || '•'}</span>` : '';
       const svcSummary = (r.services || []).map(sid => svc(sid)?.label || sid).join(', ');
+      // xss-ok: grp is a generated letter-badge (built above, no customer text); the name is escHtml-escaped.
+      const nameCell = grp + escHtml(r.name || '(no name)');
       return `<button type="button" onclick="toggleTxnMergeSelect('${r.id}')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${sel ? 'border-primary bg-primary/5' : 'border-surface-container-high hover:bg-surface-container'}">
         <span class="material-symbols-outlined" style="font-size:20px;color:${sel ? 'var(--primary,#1a5252)' : '#9aa0a3'}">${sel ? 'check_box' : 'check_box_outline_blank'}</span>
-        <div class="flex-grow min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${grp}${r.name || '(no name)'}</div>
+        <div class="flex-grow min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${nameCell}</div>
           <div class="text-[11px] font-body text-on-surface-variant truncate">${when}${svcSummary ? ' · ' + svcSummary : ''}</div></div>
         <span class="font-headline font-bold text-primary flex-shrink-0">$${(r.totalCost || 0).toFixed(2)}</span></button>`;
     }).join('');
@@ -2407,7 +2409,9 @@ export function mergeSelectedTxns() {
   const groupColor = existing?.groupColor || GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
   const ordered = [...recs].sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime));   // earliest = primary
   const primaryName = ordered[0]?.name || '';
-  ordered.forEach((r, i) => _persistGroupOnRecord(String(r.id), groupId, groupColor, i === 0 ? `${r.name} (primary)` : `${primaryName} — ${r.name}`));
+  // This BUILDS the persisted groupLabel (record.save via _persistGroupOnRecord). Escaping here would corrupt
+  // the stored value; the label is rendered escaped at its render sites (and shown as a letter-badge).
+  ordered.forEach((r, i) => _persistGroupOnRecord(String(r.id), groupId, groupColor, i === 0 ? `${r.name} (primary)` : `${primaryName} — ${r.name}`));   // xss-ok: persisted groupLabel BUILD (see above)
   closeTxnMergeModal();
   renderTransactions();
   showToast(`Merged ${recs.length} tickets into one party ✓`);
@@ -2531,8 +2535,8 @@ function buildReportHtml(d) {
   const staffEntries = Object.entries(d.staffMap).sort((a,b)=>b[1].income-a[1].income);
   const totalComm = staffEntries.reduce((sum,[tid,data])=>{ const t = staffById(tid); return sum + (t?.commission!=null?data.income*t.commission/100:0); }, 0);
   const shopKeeps = d.totalIncome - totalComm;
-  const staffRows = staffEntries.map(([tid,data])=>{ const t = staffById(tid); const comm = t?.commission!=null?data.income*t.commission/100:null; const turns = data.fullTurns+data.halfTurns; return `<tr><td>${t?.name||'Unknown'}</td><td>${data.count}</td><td>${turns}t${data.bonusTurns>0?' +'+data.bonusTurns+'b':''}</td><td>$${data.income.toFixed(2)}</td><td>${t?.commission!=null?t.commission+'%':'—'}</td><td>${comm!=null?'$'+comm.toFixed(2):'—'}</td><td>${comm!=null?'$'+(data.income-comm).toFixed(2):'—'}</td></tr>`; }).join('');
-  const txRows = d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = [...new Set((r.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name||'').filter(Boolean))].join(', '); return `<tr><td>${dt.toLocaleDateString()}</td><td>${fmtT(dt)}</td><td>${r.name}</td><td>${r.services.map(sid=>svc(sid)?.label||sid).join(', ')}</td><td>${staffNames||'—'}</td><td>$${(r.totalCost||0).toFixed(2)}</td><td>${r.status}</td></tr>`; }).join('');
+  const staffRows = staffEntries.map(([tid,data])=>{ const t = staffById(tid); const comm = t?.commission!=null?data.income*t.commission/100:null; const turns = data.fullTurns+data.halfTurns; return `<tr><td>${escHtml(t?.name||'Unknown')}</td><td>${data.count}</td><td>${turns}t${data.bonusTurns>0?' +'+data.bonusTurns+'b':''}</td><td>$${data.income.toFixed(2)}</td><td>${t?.commission!=null?t.commission+'%':'—'}</td><td>${comm!=null?'$'+comm.toFixed(2):'—'}</td><td>${comm!=null?'$'+(data.income-comm).toFixed(2):'—'}</td></tr>`; }).join('');
+  const txRows = d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = [...new Set((r.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name||'').filter(Boolean))].join(', '); return `<tr><td>${dt.toLocaleDateString()}</td><td>${fmtT(dt)}</td><td>${escHtml(r.name)}</td><td>${escHtml(r.services.map(sid=>svc(sid)?.label||sid).join(', '))}</td><td>${escHtml(staffNames)||'—'}</td><td>$${(r.totalCost||0).toFixed(2)}</td><td>${r.status}</td></tr>`; }).join('');
   const logo = cfg().logo || LOGO_PATH;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Report ${period}</title><style>
     body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.report-header{display:flex;align-items:center;gap:16px;margin-bottom:8px}.report-logo{max-width:140px;max-height:56px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}

@@ -80,12 +80,12 @@ async function _fetchMerged() {
     const at = d.at ? new Date(d.at).getTime() : 0;
     if (at >= earliest) return;
     const rec = recById[String(d.id)];
-    derived.push({ at: d.at, action: 'Delete', by: d.by || '—', detail: `${rec?.name || '—'}${d.reason ? ' · ' + d.reason : ''}`, device: '' });
+    derived.push({ at: d.at, action: 'Delete', by: d.by || '—', detail: `${rec?.name || '—'}${d.reason ? ' · ' + d.reason : ''}`, device: '' });   // xss-ok: detail is a BUILD, rendered escaped via _esc at the audit view (:106)
   });
   records.filter(r => r.status === 'refund').forEach(r => {
     const at = new Date(r.completedAt || r.checkinTime).getTime();
     if (at >= earliest) return;
-    derived.push({ at: r.completedAt || r.checkinTime, action: 'Refund', by: r.loggedBy || '—', detail: `${r.name || '—'} · $${Math.abs(r.totalCost || 0).toFixed(2)}`, device: '' });
+    derived.push({ at: r.completedAt || r.checkinTime, action: 'Refund', by: r.loggedBy || '—', detail: `${r.name || '—'} · $${Math.abs(r.totalCost || 0).toFixed(2)}`, device: '' });   // xss-ok: detail is a BUILD, rendered escaped via _esc at the audit view (:106)
   });
   return [...audit, ...derived].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
 }
