@@ -99,7 +99,7 @@ function _gsSearch(qstr) {
   if (recs.length) out.push({ label: 'Recent transactions', icon: 'receipt_long', rows: recs.map(r => {
     const d = new Date(r.completedAt || r.checkinTime);
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return { title: esc(`${r.name || '(no name)'} — $${(r.totalCost || 0).toFixed(2)}`),
+    return { title: esc(`${r.name || '(no name)'} — $${(r.totalCost || 0).toFixed(2)}`),   // xss-ok: whole title is esc()-wrapped (gate flags the inner ${r.name} — nested-capture false positive)
       sub: esc(d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + (r.status === 'refund' ? ' · refund' : '')),
       go: `gsGo('txn','${day}')` };
   }) });

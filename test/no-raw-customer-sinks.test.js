@@ -31,6 +31,10 @@ const FILES = [
   'js/app/features/staff.js',        // staff/tech views (already escapes; lock it in)
   'js/app/features/audit.js',    // guards the logAudit compensating control (detail escaped at its render)
   'js/app/features/checkin.js',  // the public input surface — confirm it renders customer input only safely
+  // The remaining walk-in render surfaces (all escaped today; gated to prevent a future regression):
+  'js/app/features/square-customers.js', 'js/app/features/search.js', 'js/app/features/receipt.js',
+  'js/app/features/appt-reminders.js', 'js/app/features/chat.js', 'js/app/features/recovery.js',
+  'js/app/features/quicksale.js', 'js/app/features/cashdrawer.js', 'js/app/reports-app.js',
 ];
 // A ${...} interpolation reading a CUSTOMER-INPUT-controlled field off a customer/record/giftcard/guest/
 // row entity (e/entry/m/target/held = queue entry & merge members, r/x/rec/row = report/drill record,
@@ -45,7 +49,7 @@ const BARE_VAR = /\$\{\s*(?:note|primary|customer|firstName|lastName|groupLabel|
 // Genuine HTML-escapers: utils escHtml/escAttrJs (& < > " [+ \ ']), calendar _escHtml/_escAttrJs, the
 // per-file &<>-only aliases (_tEsc/_eTxn/esc/_esc — safe ONLY in text contexts), and known-safe wrappers
 // (cardNotePreview escapes internally; fmt/localDateStr format Dates, never HTML).
-const ESCAPER = /(escHtml|escAttrJs|escapeHtml|_tEsc|_eTxn|_esc|esc|cardNotePreview|fmt|localDateStr)\s*\(/;
+const ESCAPER = /(escHtml|escAttrJs|escapeHtml|_tEsc|_eTxn|_cEsc|_esc|esc|cardNotePreview|fmt|localDateStr)\s*\(/;
 
 test('no raw person-controlled fields interpolated into HTML without an escaper (F4)', () => {
   const offenders = [];

@@ -266,7 +266,7 @@ function listView() {
   const dms = dmConversations().map(c => {
     const u = unreadFor(dmKey(me, c.pid));
     return `<div class="chat-conv" onclick="chatOpen('dm:${c.pid}')">
-      <div class="chat-av" style="background:${avColor(c.pid)}">${initial(c.name)}</div>
+      <div class="chat-av" style="background:${avColor(c.pid)}">${_esc(initial(c.name))}</div>
       <div class="chat-cmid"><div class="chat-cname">${_esc(c.name)}</div><div class="chat-cprev">${_esc((c.lastMine ? 'You: ' : '') + c.lastText)}</div></div>
       <div class="chat-cright"><span class="chat-ctime">${timeStr(c.lastTs)}</span>${u ? `<span class="chat-unread">${u > 9 ? '9+' : u}</span>` : ''}</div>
     </div>`;
