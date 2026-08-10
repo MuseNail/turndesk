@@ -97,6 +97,11 @@ test('armed: a tech flipping payment_processor is FORBIDDEN', async () => {
   assert.equal(res.error, 'forbidden');
 });
 
+test('armed: a manager CAN flip payment_processor (matches the client admin+manager affordance, no silent fail)', async () => {
+  const res = await apply(makeDO(), 'config.set', { key: 'payment_processor', value: 'helcim', updatedAt: 1 }, mgr);
+  assert.notEqual(res.error, 'forbidden');
+});
+
 test('armed: a tech editing payroll_adj is FORBIDDEN (H6)', async () => {
   const d = makeDO();
   const res = await apply(d, 'config.set', { key: 'payroll_adj', value: { t1: 9999 }, updatedAt: 1 }, tech);

@@ -140,10 +140,12 @@ function rbacOn(env) {
 }
 // A NEW sensitive config key MUST be added to one of these sets — an un-listed key is writable
 // by ANY authenticated session (incl. a tech). fd_users is handled value-aware in _rbacDenyConfig.
-const RBAC_ADMIN_KEYS          = new Set(['payment_processor', 'role_permissions', 'review_url']);
+const RBAC_ADMIN_KEYS          = new Set(['role_permissions', 'review_url']);
 const RBAC_MANAGESERVICES_KEYS = new Set(['services', 'items', 'fees']);         // capability: manageServices (honors role_permissions)
 const RBAC_MANAGESTAFF_KEYS    = new Set(['staff', 'inactive_staff']);           // capability: manageStaff  (honors role_permissions)
-const RBAC_MANAGER_KEYS        = new Set(['square_config', 'business', 'payroll_checks', 'payroll_adj', 'payroll_locks', 'pay_period', 'commission_includes_refunds', 'bo_sync', 'helcim_device_code']);
+// payment_processor is manager+ (not admin-only) to MATCH the client affordance (helcim.js
+// helcimToggleProcessor allows admin+manager) — else a manager's processor switch fails silently.
+const RBAC_MANAGER_KEYS        = new Set(['payment_processor', 'square_config', 'business', 'payroll_checks', 'payroll_adj', 'payroll_locks', 'pay_period', 'commission_includes_refunds', 'bo_sync', 'helcim_device_code']);
 const RBAC_FRONTDESK_KEYS      = new Set(['cash_drawer', 'cash_drawer_history', 'turns_order', 'turns_break', 'turns_off', 'turns_skips', 'bonus_services', 'turn_config', 'edit_locks']);   // deny TECH (money / rotation-fairness)
 // Mirror of js/app/config.js DEFAULT_ROLE_PERMISSIONS — keep in sync (like SANDBOX_SLUGS). Lets
 // _serverCanDo honor the owner's customizable role_permissions instead of a hardcoded floor, so
