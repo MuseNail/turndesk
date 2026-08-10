@@ -120,6 +120,28 @@ function _mergeNewerAssignments(incoming, stored) {
   return merged;
 }
 
+// ── Server-side RBAC (Phase 2 Part 1) ───────────────────────────────────────
+// The write path authorizes on session VALIDITY only (appAuthOk); the role is discarded.
+// So a low-priv session (a tech on the staff app, or — pre-Phase-1 — an anonymous demo
+// login) could config.set fd_users to add an admin PIN, flip payment_processor, forge
+// records/gift cards, wipe the customer directory, or edit payroll. This gate enforces a
+// minimum role for the SENSITIVE ops/keys, in the DO (the one place a hacked browser can't
+// bypass). Armed only when BOTH AUTH_ENFORCED and RBAC_ENFORCED are "true" — opt-in for the
+// initial rollout, so an absent/typo'd secret leaves it DISARMED (fail-open, matching today)
+// and `wrangler secret put RBAC_ENFORCED=false` disables it live. Operational + dynamic
+// config keys (customer_notes, fd_clock_<id>, edit_locks, turns_*, …) stay open to any
+// authenticated session, including a tech — a denylist, not an allowlist, so a new dynamic
+// key isn't accidentally blocked.
+function rbacOn(env) {
+  return String(env && env.AUTH_ENFORCED).toLowerCase() === 'true' &&
+         String(env && env.RBAC_ENFORCED).toLowerCase() === 'true';
+}
+const RBAC_ADMIN_KEYS   = new Set(['payment_processor', 'role_permissions', 'review_url']);   // fd_users is value-aware (see _rbacDenyConfig)
+const RBAC_MANAGER_KEYS = new Set(['staff', 'inactive_staff', 'services', 'items', 'fees', 'square_config', 'business', 'payroll_checks', 'payroll_adj', 'payroll_locks', 'pay_period', 'commission_includes_refunds', 'bo_sync', 'helcim_device_code']);
+// Trusted in-DO callers (operator/provision) pass this so applyMutation's gate bypasses them —
+// they run behind OPERATOR_TOKEN/RESTORE_TOKEN at the Worker and carry no session of their own.
+const INTERNAL_ACTOR = Object.freeze({ internal: true });
+
 // Normalize a US phone to E.164 (+1XXXXXXXXXX) for httpSMS. Returns null if it isn't a
 // usable 10/11-digit US number (so we never send to a malformed recipient).
 function toE164(raw) {
@@ -650,6 +672,18 @@ export default {
       const readBlob  = async () => { try { const r = await stub.fetch('https://do/gcal/blob'); return r.ok ? await r.json() : {}; } catch { return {}; } };
       const writeBlob = async (b) => { await stub.fetch('https://do/gcal/blob', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); };
       const htmlMsg = (m, status = 200) => new Response(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;padding:2rem;text-align:center;color:#0f3d3d">${m}</body>`, { status, headers: { 'Content-Type': 'text/html' } });
+
+      // F13: connecting/minting the salon's Google Calendar+Tasks access token (full read/write,
+      // often a personal Google account, usable off-app) is manager/owner only — a tech must not
+      // mint it. /gcal/callback is exempt (Google's own redirect, no session — state-nonce checked);
+      // /gcal/status is a harmless "is it connected?" boolean. Behind the RBAC kill-switch. NOTE:
+      // the Google overlay is a per-device opt-in (calendar.js only calls /gcal/token when the
+      // device stored a token); if a live salon connected it on a front-desk login, this disables
+      // that device's overlay (the app-native calendar is unaffected) — flip RBAC_ENFORCED to undo.
+      if (rbacOn(env) && (path === '/gcal/connect' || path === '/gcal/token' || path === '/gcal/disconnect')) {
+        const who = await authIdentity(env, salonId, requestToken(request, url));
+        if (!who || (who.role !== 'admin' && who.role !== 'manager')) return json({ error: 'forbidden' }, 403);
+      }
 
       // One-time consent (authorization-code flow, offline access → refresh token).
       if (path === '/gcal/connect') {
@@ -1897,6 +1931,9 @@ export class TurnDeskDO {
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
       const pair             = new WebSocketPair();
       const [client, server] = Object.values(pair);
+      // Bind the session token to the socket (survives hibernation). webSocketMessage re-resolves
+      // it to the CURRENT role per frame, so a demotion/revocation applies without a reconnect.
+      try { server.serializeAttachment({ token: this._tokenFromRequest(request, url) }); } catch {}
       this.state.acceptWebSocket(server);   // hibernatable: the runtime holds the socket, not the isolate
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -2238,7 +2275,8 @@ export class TurnDeskDO {
     if (url.pathname === '/state/mutate' && request.method === 'POST') {
       let msg;
       try { msg = await request.json(); } catch { return new Response(JSON.stringify({ error: 'bad json' }), { status: 400 }); }
-      const res = await this.applyMutation(msg, null);
+      const actor = await this._resolveIdentity(this._tokenFromRequest(request, url));   // RBAC identity (HTTP fallback)
+      const res = await this.applyMutation(msg, null, actor);
       return new Response(JSON.stringify(res), {
         status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' },
       });
@@ -2256,7 +2294,7 @@ export class TurnDeskDO {
       const next = fd.some(u => u.id === 'fd-manager')
         ? fd.map(u => u.id === 'fd-manager' ? { ...u, pin, role: u.role || 'admin' } : u)
         : [{ id: 'fd-manager', name: 'Manager', pin, role: 'admin' }, ...fd];
-      await this.applyMutation({ op: 'config.set', payload: { key: 'fd_users', value: next, updatedAt: Date.now(), updatedBy: 'operator' } }, null);
+      await this.applyMutation({ op: 'config.set', payload: { key: 'fd_users', value: next, updatedAt: Date.now(), updatedBy: 'operator' } }, null, INTERNAL_ACTOR);
       return new Response(JSON.stringify({ ok: true, pin }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -2569,7 +2607,9 @@ export class TurnDeskDO {
 
     // New protocol: mutate (apply → ack sender → broadcast change to peers)
     if (msg.type === 'mutate') {
-      const res = await this.applyMutation(msg, ws);
+      const att = (typeof ws.deserializeAttachment === 'function') ? ws.deserializeAttachment() : null;
+      const actor = await this._resolveIdentity(att && att.token);   // RBAC identity, re-resolved per frame
+      const res = await this.applyMutation(msg, ws, actor);
       try { ws.send(JSON.stringify({ type: 'applied', mutationId: msg.mutationId, seq: res.seq, error: res.error })); } catch {}
       return;
     }
@@ -2597,8 +2637,73 @@ export class TurnDeskDO {
     return next;
   }
 
+  // RBAC gate for a mutation. Returns an error string to REFUSE, or null to allow. Only
+  // SENSITIVE ops/keys are gated; operational + dynamic keys (customer_notes, fd_clock_<id>,
+  // queue patches, chat, audit) stay open to any session — a tech on the staff app must keep
+  // working. Off/unset ⇒ null (fail open); INTERNAL ⇒ null (bypass).
+  async _rbacDeny(op, payload, actor) {
+    if (!rbacOn(this.env)) return null;
+    if (actor && actor.internal) return null;
+    const role   = actor && actor.role;
+    const isAdmin = role === 'admin';
+    const isMgr   = isAdmin || role === 'manager';
+    const isFd    = isMgr || role === 'frontdesk' || role === 'reviewer';   // authenticated, non-tech
+    switch (op) {
+      case 'record.delete':                                                 // deleteTransaction
+        return isMgr ? null : 'forbidden';
+      case 'record.save':                                                   // register / directory / calendar / queue writes
+      case 'giftcard.save': case 'giftcard.delete':
+      case 'customer.upsert': case 'customer.delete': case 'customer.bulkUpsert': case 'customer.bulkDelete':
+      case 'appt.upsert': case 'appt.delete':
+      case 'queue.upsert': case 'queue.remove':
+        return isFd ? null : 'forbidden';
+      case 'config.set':
+        return this._rbacDenyConfig(payload, isAdmin, isMgr);
+      default:
+        return null;   // queue.assignmentPatch / queue.entryPatch / chat.append / audit.log — any session
+    }
+  }
+
+  // config.set key gate. fd_users is VALUE-AWARE (blocks an escalation/PIN change, permits a
+  // cosmetic self-edit); the two key sets are a fixed sensitive denylist; anything else is open.
+  async _rbacDenyConfig(payload, isAdmin, isMgr) {
+    const key = payload && payload.key;
+    if (key === 'fd_users') {
+      const stored = (await this.state.storage.get('config:fd_users')) || [];
+      return (this._fdPrivilegedChange(payload.value, stored) && !isAdmin) ? 'forbidden' : null;
+    }
+    if (RBAC_ADMIN_KEYS.has(key))   return isAdmin ? null : 'forbidden';
+    if (RBAC_MANAGER_KEYS.has(key)) return isMgr   ? null : 'forbidden';
+    return null;
+  }
+
+  // True when a config.set fd_users write makes a PRIVILEGED change vs stored: adds/removes a
+  // user, or changes a PRESENT pin/role/hourlyRate on an existing user. An ABSENT field in the
+  // incoming entry counts as unchanged — so a cosmetic self-edit (theme/photo/name, which
+  // rewrites the whole array via persistTheme) and a redacted-cache write are never mis-flagged
+  // as escalation. Non-array incoming ⇒ privileged (fail safe).
+  _fdPrivilegedChange(incoming, stored) {
+    if (!Array.isArray(incoming)) return true;
+    const prev = new Map((Array.isArray(stored) ? stored : []).map(u => [String(u.id), u]));
+    const seen = new Set();
+    for (const u of incoming) {
+      const id = String(u.id);
+      seen.add(id);
+      const p = prev.get(id);
+      if (!p) return true;                                                        // added user
+      if (u.pin  != null && String(u.pin)  !== String(p.pin))  return true;       // changed a present PIN
+      if (u.role != null && u.role !== p.role)                 return true;       // changed a present role
+      if (u.hourlyRate != null && Number(u.hourlyRate) !== Number(p.hourlyRate || 0)) return true;
+    }
+    for (const id of prev.keys()) if (!seen.has(id)) return true;                 // removed user
+    return false;
+  }
+
   // Apply a mutation to storage, stamp a seq, dedupe by mutationId, broadcast.
-  async applyMutation(msg, fromWs) {
+  // `actor` is the resolved session identity ({kind,id,role}) for the RBAC gate, the frozen
+  // INTERNAL sentinel for trusted in-DO callers (operator/provision), or null/undefined for
+  // the pre-gate/legacy call shape (treated as unauthenticated when RBAC is armed).
+  async applyMutation(msg, fromWs, actor) {
     const { op, payload, mutationId } = msg || {};
     if (!op || !payload) return { error: 'missing op or payload' };
 
@@ -2607,6 +2712,11 @@ export class TurnDeskDO {
       const seen = await this.state.storage.get('mut:' + mutationId);
       if (seen) return { applied: true, seq: seen, dedup: true };
     }
+
+    // Server-side RBAC (Phase 2 Part 1): refuse a sensitive op/key from an insufficient role.
+    // Inert unless armed; INTERNAL bypasses. A refusal never persists or broadcasts.
+    const denied = await this._rbacDeny(op, payload, actor);
+    if (denied) return { error: denied };
 
     let stale = false;
     try {
@@ -2767,8 +2877,18 @@ export class TurnDeskDO {
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.
-          if (payload && payload.event && payload.event.id) {
-            await this.state.storage.put('audit:' + payload.event.id, payload.event);
+          const ev = payload && payload.event;
+          if (ev && ev.id) {
+            // Append-only (F15): never overwrite an existing event — else a session could re-send a
+            // known id with benign action/detail to erase the record of an incriminating action.
+            if (await this.state.storage.get('audit:' + ev.id)) break;
+            // Server-stamp attribution from the validated session so by/role/at can't be forged
+            // (F15). Only when armed with a real actor; otherwise keep the client's values
+            // (RBAC-off / pre-gate back-compat). action/detail/id/device stay client-authored.
+            const stamped = (rbacOn(this.env) && actor && !actor.internal && actor.id)
+              ? { ...ev, by: actor.name || actor.id, role: actor.role, at: new Date().toISOString() }
+              : ev;
+            await this.state.storage.put('audit:' + ev.id, stamped);
             if (Math.random() < 0.1) {
               const keys = [...(await this.state.storage.list({ prefix: 'audit:' })).keys()].sort();
               if (keys.length > 1000) for (const k of keys.slice(0, keys.length - 1000)) await this.state.storage.delete(k);
@@ -2873,8 +2993,11 @@ export class TurnDeskDO {
       await this.state.storage.delete(failKey);
       const au = { kind: 'appadmin', id: 'appadmin', name: 'App Admin', role: 'admin' };
       const tok = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
-      const exp = Date.now() + 30 * 24 * 3600 * 1000;
-      await this.state.storage.put('sess:' + tok, { ...au, created: Date.now(), expires: exp, device: String(body.device || '').slice(0, 40) });
+      // F35: stamp the current epoch (so rotating APP_ADMIN_PIN + bumping APP_ADMIN_PIN_EPOCH
+      // revokes outstanding master sessions) and a SHORTER 7-day TTL (vs 30d) to bound exposure.
+      const exp = Date.now() + 7 * 24 * 3600 * 1000;
+      const pinEpoch = String(this.env.APP_ADMIN_PIN_EPOCH || '0');
+      await this.state.storage.put('sess:' + tok, { ...au, pinEpoch, created: Date.now(), expires: exp, device: String(body.device || '').slice(0, 40) });
       return this._authJson({ token: tok, expires: exp, user: au });
     }
 
@@ -2944,33 +3067,55 @@ export class TurnDeskDO {
     return this._authJson({ ok: true });
   }
 
+  // The §13 session token carried by a request: `Authorization: Bearer <t>` or `?auth=<t>`
+  // (mirrors the Worker's appAuthOk / requestToken extraction).
+  _tokenFromRequest(request, url) {
+    const h = request.headers.get('Authorization') || '';
+    return h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+  }
+
+  // Resolve a session token to its identity, RE-DERIVING the effective role from CURRENT
+  // config (not the frozen sess.role) so a demotion / removal / deactivation applies on the
+  // next call — used by both authCheck and the RBAC actor resolution. Pure (no delete); the
+  // caller decides whether to clean up an invalidated session. Returns {kind,id,name,role} or
+  // null (missing / expired / revoked / rotated-appadmin).
+  async _resolveIdentity(token) {
+    if (!token) return null;
+    const sess = await this.state.storage.get('sess:' + token);
+    if (!sess || !(sess.expires > Date.now())) return null;
+    if (sess.kind === 'appadmin') {
+      const epoch = String(this.env.APP_ADMIN_PIN_EPOCH || '0');
+      if (String(sess.pinEpoch ?? '0') !== epoch) return null;   // master PIN rotated → old sessions revoked (F35)
+      return { kind: 'appadmin', id: sess.id, name: sess.name, role: 'admin' };
+    }
+    if (sess.kind === 'owner') {
+      const rec = sess.email ? await this.state.storage.get('owner:' + sess.email) : null;
+      if (!rec) return null;
+      return { kind: 'owner', id: sess.id, name: sess.name, email: sess.email, role: rec.role === 'manager' ? 'manager' : 'admin' };
+    }
+    if (sess.kind === 'fd') {
+      const fd = (await this.state.storage.get('config:fd_users')) || [];
+      const u = fd.find(x => x.id === sess.id);
+      if (!u) return null;                                        // removed → revoked
+      return { kind: 'fd', id: sess.id, name: sess.name, role: u.role || 'frontdesk' };   // CURRENT role
+    }
+    // tech
+    const staff    = (await this.state.storage.get('config:staff')) || [];
+    const inactive = new Set((await this.state.storage.get('config:inactive_staff')) || []);
+    if (!staff.some(s => s.id === sess.id) || inactive.has(sess.id)) return null;
+    return { kind: 'tech', id: sess.id, name: sess.name, role: 'tech' };
+  }
+
+  // Validate a session token and return its CURRENT identity. Delegates to _resolveIdentity
+  // (which re-derives the effective role from live config and enforces the appadmin pinEpoch),
+  // so removing/demoting/deactivating a user, or rotating the master PIN, revokes accordingly
+  // within the Worker's ~60s cache. An invalid token deletes any lingering session row.
   async authCheck(request) {
     let body = {}; try { body = await request.json(); } catch {}
     const token = String(body.token || '');
-    const sess  = token ? await this.state.storage.get('sess:' + token) : null;
-    if (!sess) return this._authJson({ ok: false });
-    if (sess.expires < Date.now()) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
-    // Removing a front-desk user / removing-or-deactivating a tech revokes their
-    // sessions automatically (within the Worker's ~60s cache) — no extra UI needed.
-    // The master 'appadmin' (APP_ADMIN_PIN) session has no staff/user row to revoke
-    // against — it's gated by the secret at mint time — so it skips this per-user check
-    // (it still expires, and unsetting the secret stops new ones). Without this, an
-    // appadmin session is deleted on its first /auth/check. Any lingering legacy
-    // 'fallback' session (from the retired 1234 path) now correctly fails this check.
-    if (sess.kind !== 'appadmin') {
-      if (sess.kind === 'owner') {
-        const rec = sess.email ? await this.state.storage.get('owner:' + sess.email) : null;
-        if (!rec) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
-      } else if (sess.kind === 'fd') {
-        const fd = (await this.state.storage.get('config:fd_users')) || [];
-        if (!fd.some(u => u.id === sess.id)) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
-      } else {
-        const staff    = (await this.state.storage.get('config:staff')) || [];
-        const inactive = new Set((await this.state.storage.get('config:inactive_staff')) || []);
-        if (!staff.some(s => s.id === sess.id) || inactive.has(sess.id)) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
-      }
-    }
-    return this._authJson({ ok: true, user: { kind: sess.kind, id: sess.id, name: sess.name, role: sess.role } });
+    const user  = await this._resolveIdentity(token);
+    if (!user) { if (token) await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
+    return this._authJson({ ok: true, user: { kind: user.kind, id: user.id, name: user.name, role: user.role } });
   }
 
   // Cross-salon email login (adaptive sign-in, Part B). Only the reserved
