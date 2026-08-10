@@ -165,3 +165,57 @@ test('AUTH_ENFORCED off entirely: gate is inert (existing tests construct env {}
   const res = await apply(d, 'config.set', { key: 'fd_users', value: next, updatedAt: 123 }, tech);
   assert.notEqual(res.error, 'forbidden');
 });
+
+// ── capability-mapped keys HONOR the owner's role_permissions (not a hardcoded floor) ──
+// services/items/fees → manageServices; staff → manageStaff; so an owner who grants a lower
+// role that capability isn't silently 403'd once RBAC arms.
+test('armed: a frontdesk editing services is FORBIDDEN by DEFAULT (no manageServices)', async () => {
+  const res = await apply(makeDO(), 'config.set', { key: 'services', value: [], updatedAt: 1 }, front);
+  assert.equal(res.error, 'forbidden');
+});
+
+test('armed: a frontdesk GRANTED manageServices CAN edit services (owner role_permissions honored)', async () => {
+  const d = makeDO();
+  await d.state.storage.put('config:role_permissions', { frontdesk: { manageServices: true } });
+  const res = await apply(d, 'config.set', { key: 'services', value: [{ id: 's1' }], updatedAt: 1 }, front);
+  assert.notEqual(res.error, 'forbidden', 'the owner-granted capability must not be silently capped');
+  assert.equal((await d.state.storage.get('config:services')).length, 1);
+});
+
+test('armed: a frontdesk GRANTED manageStaff CAN edit staff', async () => {
+  const d = makeDO();
+  await d.state.storage.put('config:role_permissions', { frontdesk: { manageStaff: true } });
+  const res = await apply(d, 'config.set', { key: 'staff', value: [{ id: 't1' }], updatedAt: 1 }, front);
+  assert.notEqual(res.error, 'forbidden');
+});
+
+test('armed: a frontdesk editing staff is FORBIDDEN by default (no manageStaff)', async () => {
+  assert.equal((await apply(makeDO(), 'config.set', { key: 'staff', value: [], updatedAt: 1 }, front)).error, 'forbidden');
+});
+
+// ── frontdesk+ tier: money/fairness-adjacent operational keys deny TECH ──────
+test('armed: a tech writing cash_drawer is FORBIDDEN', async () => {
+  assert.equal((await apply(makeDO(), 'config.set', { key: 'cash_drawer', value: { open: true }, updatedAt: 1 }, tech)).error, 'forbidden');
+});
+test('armed: a frontdesk writing cash_drawer is APPLIED (opens the register)', async () => {
+  const d = makeDO();
+  const res = await apply(d, 'config.set', { key: 'cash_drawer', value: { open: true }, updatedAt: 1 }, front);
+  assert.notEqual(res.error, 'forbidden');
+  assert.deepEqual(await d.state.storage.get('config:cash_drawer'), { open: true }, 'the write actually persisted');
+});
+test('armed: a tech writing turns_order is FORBIDDEN (rotation-fairness tamper)', async () => {
+  assert.equal((await apply(makeDO(), 'config.set', { key: 'turns_order', value: ['t9'], updatedAt: 1 }, tech)).error, 'forbidden');
+});
+test('armed: a frontdesk writing turns_order is APPLIED (manages rotation)', async () => {
+  assert.notEqual((await apply(makeDO(), 'config.set', { key: 'turns_order', value: ['t1'], updatedAt: 1 }, front)).error, 'forbidden');
+});
+test('armed: a tech writing bonus_services is FORBIDDEN', async () => {
+  assert.equal((await apply(makeDO(), 'config.set', { key: 'bonus_services', value: ['s1'], updatedAt: 1 }, tech)).error, 'forbidden');
+});
+
+// ── owner-kind actor flows through the gate as admin ────────────────────────
+test('armed: an owner-kind actor (role admin) passes a sensitive key', async () => {
+  const owner = { kind: 'owner', id: 'o@x.com', name: 'Owner', role: 'admin' };
+  const res = await apply(makeDO(), 'config.set', { key: 'payment_processor', value: 'helcim', updatedAt: 1 }, owner);
+  assert.notEqual(res.error, 'forbidden');
+});

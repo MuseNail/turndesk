@@ -127,20 +127,40 @@ function _mergeNewerAssignments(incoming, stored) {
 // records/gift cards, wipe the customer directory, or edit payroll. This gate enforces a
 // minimum role for the SENSITIVE ops/keys, in the DO (the one place a hacked browser can't
 // bypass). Armed only when BOTH AUTH_ENFORCED and RBAC_ENFORCED are "true" — opt-in for the
-// initial rollout, so an absent/typo'd secret leaves it DISARMED (fail-open, matching today)
-// and `wrangler secret put RBAC_ENFORCED=false` disables it live. Operational + dynamic
-// config keys (customer_notes, fd_clock_<id>, edit_locks, turns_*, …) stay open to any
-// authenticated session, including a tech — a denylist, not an allowlist, so a new dynamic
-// key isn't accidentally blocked.
+// initial rollout, so an absent/typo'd secret leaves it DISARMED (fail-open, matching today).
+// Disable it live during an incident with:  echo false | wrangler secret put RBAC_ENFORCED
+// (NOT `wrangler secret put RBAC_ENFORCED=false` — that sets the value from stdin/prompt, not
+// the arg). Operational + dynamic config keys (customer_notes, fd_clock_<id>, …) stay open to
+// any authenticated session, including a tech. This is a DENYLIST, not an allowlist: a dynamic
+// operational key isn't accidentally blocked, but the tradeoff is that a NEW SENSITIVE config
+// key is FAIL-OPEN until it's added to a set below.
 function rbacOn(env) {
   return String(env && env.AUTH_ENFORCED).toLowerCase() === 'true' &&
          String(env && env.RBAC_ENFORCED).toLowerCase() === 'true';
 }
-const RBAC_ADMIN_KEYS   = new Set(['payment_processor', 'role_permissions', 'review_url']);   // fd_users is value-aware (see _rbacDenyConfig)
-const RBAC_MANAGER_KEYS = new Set(['staff', 'inactive_staff', 'services', 'items', 'fees', 'square_config', 'business', 'payroll_checks', 'payroll_adj', 'payroll_locks', 'pay_period', 'commission_includes_refunds', 'bo_sync', 'helcim_device_code']);
+// A NEW sensitive config key MUST be added to one of these sets — an un-listed key is writable
+// by ANY authenticated session (incl. a tech). fd_users is handled value-aware in _rbacDenyConfig.
+const RBAC_ADMIN_KEYS          = new Set(['payment_processor', 'role_permissions', 'review_url']);
+const RBAC_MANAGESERVICES_KEYS = new Set(['services', 'items', 'fees']);         // capability: manageServices (honors role_permissions)
+const RBAC_MANAGESTAFF_KEYS    = new Set(['staff', 'inactive_staff']);           // capability: manageStaff  (honors role_permissions)
+const RBAC_MANAGER_KEYS        = new Set(['square_config', 'business', 'payroll_checks', 'payroll_adj', 'payroll_locks', 'pay_period', 'commission_includes_refunds', 'bo_sync', 'helcim_device_code']);
+const RBAC_FRONTDESK_KEYS      = new Set(['cash_drawer', 'cash_drawer_history', 'turns_order', 'turns_break', 'turns_off', 'turns_skips', 'bonus_services', 'turn_config', 'edit_locks']);   // deny TECH (money / rotation-fairness)
+// Mirror of js/app/config.js DEFAULT_ROLE_PERMISSIONS — keep in sync (like SANDBOX_SLUGS). Lets
+// _serverCanDo honor the owner's customizable role_permissions instead of a hardcoded floor, so
+// granting a lower role a capability (e.g. frontdesk manageServices) isn't silently 403'd once
+// armed. admin always passes; a role absent here (e.g. tech) has no capabilities.
+const SERVER_DEFAULT_ROLE_PERMISSIONS = {
+  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true,  manageStaff: true,  manageServices: true,  markPaidDirect: true,  viewClockedIn: true  },
+  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+  reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+};
 // Trusted in-DO callers (operator/provision) pass this so applyMutation's gate bypasses them —
 // they run behind OPERATOR_TOKEN/RESTORE_TOKEN at the Worker and carry no session of their own.
 const INTERNAL_ACTOR = Object.freeze({ internal: true });
+// The ONLY entry fields a queue.entryPatch may set. entryPatch is ungated (the staff app's
+// visit-note path), so this allowlist — not a role — is what stops a raw patch from tampering
+// with money-bearing fields (discount/fees/items/assignment cost) or injecting status:'paid'.
+const ENTRY_PATCH_ALLOWED = new Set(['txnNote']);
 
 // Normalize a US phone to E.164 (+1XXXXXXXXXX) for httpSMS. Returns null if it isn't a
 // usable 10/11-digit US number (so we never send to a malformed recipient).
@@ -2649,8 +2669,8 @@ export class TurnDeskDO {
     const isMgr   = isAdmin || role === 'manager';
     const isFd    = isMgr || role === 'frontdesk' || role === 'reviewer';   // authenticated, non-tech
     switch (op) {
-      case 'record.delete':                                                 // deleteTransaction
-        return isMgr ? null : 'forbidden';
+      case 'record.delete':                                                 // capability: deleteTransaction
+        return (await this._serverCanDo(role, 'deleteTransaction')) ? null : 'forbidden';
       case 'record.save':                                                   // register / directory / calendar / queue writes
       case 'giftcard.save': case 'giftcard.delete':
       case 'customer.upsert': case 'customer.delete': case 'customer.bulkUpsert': case 'customer.bulkDelete':
@@ -2658,30 +2678,46 @@ export class TurnDeskDO {
       case 'queue.upsert': case 'queue.remove':
         return isFd ? null : 'forbidden';
       case 'config.set':
-        return this._rbacDenyConfig(payload, isAdmin, isMgr);
+        return this._rbacDenyConfig(payload, role, isAdmin, isMgr, isFd);
       default:
         return null;   // queue.assignmentPatch / queue.entryPatch / chat.append / audit.log — any session
     }
   }
 
-  // config.set key gate. fd_users is VALUE-AWARE (blocks an escalation/PIN change, permits a
-  // cosmetic self-edit); the two key sets are a fixed sensitive denylist; anything else is open.
-  async _rbacDenyConfig(payload, isAdmin, isMgr) {
+  // Server-side canDo: admin passes everything; other roles use the SYNCED role_permissions
+  // merged over the built-in defaults (mirrors js/app/session.js canDo). This is how the server
+  // gate honors an owner who granted a lower role a capability, instead of a hardcoded floor.
+  async _serverCanDo(role, perm) {
+    if (role === 'admin') return true;
+    const rp = (await this.state.storage.get('config:role_permissions')) || {};
+    const merged = { ...(SERVER_DEFAULT_ROLE_PERMISSIONS[role] || {}), ...((rp && rp[role]) || {}) };
+    return !!merged[perm];
+  }
+
+  // config.set key gate. fd_users is VALUE-AWARE (blocks escalation/PIN, permits a cosmetic
+  // self-edit); services/items/fees and staff honor the capability via _serverCanDo; the manager
+  // + frontdesk sets are fixed floors (deny below manager / below frontdesk); anything else open.
+  async _rbacDenyConfig(payload, role, isAdmin, isMgr, isFd) {
     const key = payload && payload.key;
     if (key === 'fd_users') {
       const stored = (await this.state.storage.get('config:fd_users')) || [];
       return (this._fdPrivilegedChange(payload.value, stored) && !isAdmin) ? 'forbidden' : null;
     }
-    if (RBAC_ADMIN_KEYS.has(key))   return isAdmin ? null : 'forbidden';
-    if (RBAC_MANAGER_KEYS.has(key)) return isMgr   ? null : 'forbidden';
+    if (RBAC_ADMIN_KEYS.has(key))          return isAdmin ? null : 'forbidden';
+    if (RBAC_MANAGESERVICES_KEYS.has(key)) return (await this._serverCanDo(role, 'manageServices')) ? null : 'forbidden';
+    if (RBAC_MANAGESTAFF_KEYS.has(key))    return (await this._serverCanDo(role, 'manageStaff'))    ? null : 'forbidden';
+    if (RBAC_MANAGER_KEYS.has(key))        return isMgr ? null : 'forbidden';
+    if (RBAC_FRONTDESK_KEYS.has(key))      return isFd  ? null : 'forbidden';
     return null;
   }
 
   // True when a config.set fd_users write makes a PRIVILEGED change vs stored: adds/removes a
-  // user, or changes a PRESENT pin/role/hourlyRate on an existing user. An ABSENT field in the
-  // incoming entry counts as unchanged — so a cosmetic self-edit (theme/photo/name, which
-  // rewrites the whole array via persistTheme) and a redacted-cache write are never mis-flagged
-  // as escalation. Non-array incoming ⇒ privileged (fail safe).
+  // user, or changes a PRESENT pin/role/hourlyRate on an existing user. An ABSENT FIELD on an
+  // existing entry counts as unchanged — so a cosmetic self-edit (theme/photo/name, which
+  // rewrites the whole array via persistTheme) isn't mis-flagged as escalation. NOTE: this only
+  // covers absent FIELDS, not absent ENTRIES — a dropped user id still reads as a privileged
+  // removal, so Part-2 read-redaction must strip FIELDS (pin), never whole user entries, from
+  // fd_users, or a low-priv round-trip would be denied. Non-array incoming ⇒ privileged (fail safe).
   _fdPrivilegedChange(incoming, stored) {
     if (!Array.isArray(incoming)) return true;
     const prev = new Map((Array.isArray(stored) ? stored : []).map(u => [String(u.id), u]));
@@ -2782,8 +2818,13 @@ export class TurnDeskDO {
           if (typeof payload.updatedAt === 'number' && typeof e._patchedAt === 'number' &&
               payload.updatedBy && payload.updatedBy === e._patchedBy &&
               payload.updatedAt < e._patchedAt) { stale = true; break; }
+          // Field ALLOWLIST (Phase 2 Part 1): entryPatch is ungated (the staff app's visit-note
+          // path), so a raw patch must never set money-bearing fields (discount/fees/items/
+          // assignments[].cost — ticketTotal derives the charge from these) or inject status:'paid'.
+          // The only legit client patch today is { txnNote } (staff.js, calendar.js); a NEW
+          // entry field patched via entryPatch must be added here after a security review.
           const patch = payload.patch || {};
-          for (const k of Object.keys(patch)) e[k] = patch[k];
+          for (const k of Object.keys(patch)) if (ENTRY_PATCH_ALLOWED.has(k)) e[k] = patch[k];
           if (typeof payload.updatedAt === 'number') { e._patchedAt = payload.updatedAt; e._patchedBy = payload.updatedBy || null; }
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
@@ -2888,6 +2929,7 @@ export class TurnDeskDO {
             const stamped = (rbacOn(this.env) && actor && !actor.internal && actor.id)
               ? { ...ev, by: actor.name || actor.id, role: actor.role, at: new Date().toISOString() }
               : ev;
+            payload.event = stamped;   // broadcast the stamped event too, so the live feed on every peer matches the durable record (not the forgeable client value)
             await this.state.storage.put('audit:' + ev.id, stamped);
             if (Math.random() < 0.1) {
               const keys = [...(await this.state.storage.list({ prefix: 'audit:' })).keys()].sort();

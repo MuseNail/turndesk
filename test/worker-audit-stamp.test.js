@@ -55,3 +55,15 @@ test('armed: a fresh audit event from a real actor still stores (append works)',
   assert.equal(ev.by, 'Boss');
   assert.equal(ev.role, 'manager');
 });
+
+test('armed: the audit BROADCAST carries the server-stamped attribution, not the forged client value', async () => {
+  // Peers apply the broadcast `change` live; it must match the durable stamped record, or a
+  // malicious client could show a forged actor to every device until the next snapshot reload.
+  const sent = [];
+  const d = new TurnDeskDO({ storage: makeStorage(), getWebSockets: () => [{ readyState: 1, send: (s) => sent.push(s) }] }, ARMED);
+  await d.applyMutation({ op: 'audit.log', payload: { event: { id: 'evb', action: 'Refund', by: 'Owner', role: 'admin' } }, mutationId: 'mb' }, null, tech);
+  const change = sent.map((s) => JSON.parse(s)).find((f) => f.type === 'change' && f.op === 'audit.log');
+  assert.ok(change, 'a change was broadcast');
+  assert.equal(change.payload.event.by, 'Ann', 'broadcast uses the stamped by');
+  assert.equal(change.payload.event.role, 'tech', 'broadcast uses the stamped role');
+});

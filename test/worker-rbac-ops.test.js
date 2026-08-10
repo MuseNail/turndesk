@@ -36,6 +36,11 @@ test('armed: tech record.delete FORBIDDEN', async () => forbidden(await apply(ma
 test('armed: frontdesk record.delete FORBIDDEN (deleteTransaction is manager+)', async () => forbidden(await apply(makeDO(), 'record.delete', { id: 'r1' }, front)));
 test('armed: manager record.delete APPLIED', async () => allowed(await apply(makeDO(), 'record.delete', { id: 'r1' }, mgr)));
 test('armed: admin record.delete APPLIED', async () => allowed(await apply(makeDO(), 'record.delete', { id: 'r1' }, admin)));
+test('armed: a frontdesk GRANTED deleteTransaction CAN record.delete (owner role_permissions honored)', async () => {
+  const d = makeDO();
+  await d.state.storage.put('config:role_permissions', { frontdesk: { deleteTransaction: true } });
+  allowed(await apply(d, 'record.delete', { id: 'r1' }, front));
+});
 
 // ── record.save / gift cards → frontdesk+ (register), deny tech ──────────────
 test('armed: tech record.save FORBIDDEN (forge a commission ticket)', async () => forbidden(await apply(makeDO(), 'record.save', { record: { id: 'r1', updatedAt: 1 } }, tech)));
@@ -74,3 +79,19 @@ test('armed: tech audit.log APPLIED', async () => allowed(await apply(makeDO(), 
 // ── bypasses ────────────────────────────────────────────────────────────────
 test('INTERNAL bypasses a money-op gate', async () => allowed(await apply(makeDO(), 'record.delete', { id: 'r1' }, INTERNAL)));
 test('RBAC-off: tech record.delete APPLIED (back-compat)', async () => allowed(await apply(makeDO({ AUTH_ENFORCED: 'true' }), 'record.delete', { id: 'r1' }, tech)));
+
+// ── queue.entryPatch is neutered to a field allowlist (F7: no money/status tamper) ──
+// entryPatch stays ungated (the tech staff-app's visit-note path) but the handler must only
+// apply SAFE fields — a raw patch must not touch money-bearing fields (discount/fees/items/
+// assignment cost) an open ticket charges, nor inject status:'paid'.
+test('a queue.entryPatch can set txnNote but NOT money/status fields (allowlist, applies even when disarmed)', async () => {
+  const d = makeDO({});   // even with RBAC off — this is payload hardening, not a role gate
+  await d.state.storage.put('queue:e1', { id: 'e1', status: 'waiting', discount: 0, fees: [], assignments: [{ serviceId: 's1', techId: 't1', cost: 40 }] });
+  await apply(d, 'queue.entryPatch', { entryId: 'e1', patch: { txnNote: 'note', discount: 1000, status: 'paid', fees: [{ amount: 999 }] } }, tech);
+  const e = await d.state.storage.get('queue:e1');
+  assert.equal(e.txnNote, 'note', 'the allowed field applies');
+  assert.equal(e.discount, 0, 'discount tamper dropped');
+  assert.equal(e.status, 'waiting', 'status injection dropped');
+  assert.equal(e.fees.length, 0, 'fees tamper dropped');
+  assert.equal(e.assignments[0].cost, 40, 'assignment cost untouched');
+});
