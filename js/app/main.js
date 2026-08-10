@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.50', items: [
+    { icon: 'shield', t: 'Security & stability improvements', d: 'Behind-the-scenes security hardening across every screen — queue, turns, floor plan, checkout, reports, gift cards and receipts all display customer names and notes with extra safeguards. Nothing changes in how you use TurnDesk.' },
+  ] },
   { v: 'td-v0.42', items: [
     { icon: 'tune', t: 'Small display fixes for the iPad', d: 'Landscape-iPad polish: the status label on a busy Turns lane no longer gets clipped, the Calendar day/week grid fills its space without a stray sideways scroll, and the customer-suggestion list on the check-in screen now opens upward when a guest field sits low on the screen — so its last few suggestions are never hidden behind the check-in bar.' },
   ] },
