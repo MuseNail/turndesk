@@ -7,6 +7,20 @@ Reviewed at: client `td-v0.29` (`4378b9c`), Worker `27a163a9`.
 
 ---
 
+## ⭐ Follow-up (2026-09-03) — port BackOffice's localStorage-quota fix
+BackOffice hit (and fixed, LIVE 2026-09) a sign-in lockout when the shared `musenail.github.io`
+localStorage filled at ~10 MB — its `state_cache` snapshot mirror (7.4 MB) crowded out the token write.
+TurnDesk shares the same architecture and, until the `turndesk.net` domain migration completes, the same
+origin. **Port both parts when convenient** (lower urgency for TurnDesk once it's on its own domain, but good
+hardening + headroom for a large salon): **Option 1** — a `safeSetItem` that evicts regenerable `state_cache`
+mirrors and retries so the token write can never be blocked (never touching the outbox/dead-letter), plus an
+honest storage-full login message; **Option 2** — move the big snapshot mirror to IndexedDB (async,
+timeout-bounded, localStorage fallback, lazy migrate-then-delete). Reference implementation shipped in the
+BackOffice repo: `js/app/lib/idb-cache.js`, `js/app/lib/ls-quota.js`, `js/app/session.js` (`safeSetItem`), and
+`STORAGE-QUOTA-PLAN.md`. Relates to this review's shared-storage concerns.
+
+---
+
 ## Bottom line
 
 **The foundation is genuinely strong.** The parts that matter most for "can't be corrupted or lost" are well built:
