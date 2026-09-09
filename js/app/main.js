@@ -48,6 +48,7 @@ import * as diagnostics from './features/diagnostics.js';
 import * as landing from './features/landing.js';
 import * as billing from './features/billing.js';
 import * as support from './features/support.js';
+import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
 [utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support]
@@ -367,31 +368,36 @@ function checkSquarePending() {
 }
 
 // ── Store subscription → re-render the active panel on (remote) changes ───────
-// Big offline banner (#offline-banner). Only "internet is off" — NOT "sign in needed"
-// (authNeeded is a credential problem, not a network one; the pill handles that). Debounced
-// so it never flashes during the initial connect or a 1-second wifi blip, but hidden the
-// instant the connection returns.
-let _offlineBannerTimer = null;
-function updateOfflineBanner(state) {
-  const banner = document.getElementById('offline-banner');
-  if (!banner) return;
-  const offline = !state.connected && !state.authNeeded;
-  if (!offline) {
-    if (_offlineBannerTimer) { clearTimeout(_offlineBannerTimer); _offlineBannerTimer = null; }
-    banner.classList.add('hidden');
-    return;
-  }
-  if (banner.classList.contains('hidden') && !_offlineBannerTimer) {
-    _offlineBannerTimer = setTimeout(() => {
-      _offlineBannerTimer = null;
-      const s = store.getState();
-      if (!s.connected && !s.authNeeded) banner.classList.remove('hidden');   // still offline after the grace window
-    }, 3000);
+// ── Loud offline / unsynced banner (safeguard #2) ────────────────────────────
+// A full-width bar at the top of the dashboard, shown when offline / syncing a backlog / a write
+// failed / sign-in needed, so staff KNOW their work is saved and don't re-enter customers. Debounced
+// so a write burst or a brief wifi blip can't flicker it or jump the board (the small pill stays
+// instant). Reads the same state as updateSyncIndicator via the pure syncBannerModel.
+let _sbTimer = null;
+function renderSyncBanner(state) {
+  const model = syncBannerModel({
+    connected: state.connected, pendingCount: state.pendingCount,
+    failedCount: (sync.failedOps?.() || []).length, authNeeded: state.authNeeded,
+  }, 'desk');
+  clearTimeout(_sbTimer);
+  _sbTimer = setTimeout(() => applySyncBanner(model), model.kind === 'hidden' ? 400 : 800);
+}
+function applySyncBanner(model) {
+  const el = document.getElementById('sync-banner'); if (!el) return;
+  if (model.kind === 'hidden') { el.className = 'sync-banner hidden'; el.innerHTML = ''; return; }
+  el.className = `sync-banner sync-banner--${model.tone}${model.pulse ? ' sync-banner--pulse' : ''}`;
+  el.innerHTML = `<span class="sync-banner__icon material-symbols-outlined" aria-hidden="true">${syncBannerIcon(model.kind)}</span><div class="sync-banner__text"><div class="sync-banner__title">${utils.escHtml(model.title)}</div><div class="sync-banner__sub">${utils.escHtml(model.sub)}</div></div>`;
+  if (model.action) { const b = document.createElement('button'); b.className = 'sync-banner__btn'; b.textContent = model.actionLabel; b.onclick = () => syncBannerDo(model.action); el.appendChild(b); }
+}
+function syncBannerDo(action) {
+  if (action === 'retry' || action === 'pin') { window.forceSyncNow?.(); return; }
+  if (action === 'recovery') {
+    if (session.getActiveUser?.()?.role !== 'admin') { utils.showToast('A change needs recovery — ask an admin (Settings → Data Recovery).'); return; }
+    showDashPanel('settings'); setTimeout(() => settings.settingsOpenLeaf?.('settings-recovery-section'), 60);
   }
 }
 
 function updateSyncIndicator(state) {
-  updateOfflineBanner(state);
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
   const pill = dot.parentElement;
@@ -430,6 +436,7 @@ function _purgeStrayConfigX() {
 }
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
+  renderSyncBanner(state);   // loud banner on the same triggers (incl. connection) — debounced inside
   if (changed === 'connection') return;
   if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
@@ -651,6 +658,7 @@ function boot() {
   chat.onChatSync();   // baseline the chat unread badge from cache on load
   apptReminders.startApptReminders();   // appointment reminder banners (30s timer)
   updateSyncIndicator(store.getState());
+  renderSyncBanner(store.getState());
 
   // Sandbox salons (the public 'demo'): the Worker is the real boundary — it 403s every shared
   // account route (F6). This only hides the inline Ask-AI panel, which would otherwise render a raw

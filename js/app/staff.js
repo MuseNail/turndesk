@@ -13,7 +13,8 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin, scopedKey } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg, businessName } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg, businessName, escHtml } from './utils.js';
+import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
@@ -836,6 +837,29 @@ window.staffPinInput = () => {
 window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; _appts = null; _apptsAt = 0; render(); };
 window.staffLogout = window.staffSwitch;
 
+// ── Sync banner (tech app — informational; safeguard #2) ──────────────────────
+// Same pure model as the desk, but tech-local actions: retry = resync, sign-in = staffSwitch, and a
+// failed write is informational (no Data Recovery UI here). Debounced so a write burst / wifi blip can't
+// flicker it. Rendered from the subscribe callback (before the price-focus early-return) + at boot.
+let _sbTimer = null;
+function renderStaffSyncBanner() {
+  const st = store.getState();
+  const model = syncBannerModel({ connected: st.connected, pendingCount: st.pendingCount, failedCount: (sync.failedOps?.() || []).length, authNeeded: st.authNeeded }, 'tech');
+  clearTimeout(_sbTimer);
+  _sbTimer = setTimeout(() => applyStaffSyncBanner(model), model.kind === 'hidden' ? 400 : 800);
+}
+function applyStaffSyncBanner(model) {
+  const el = document.getElementById('sync-banner'); if (!el) return;
+  if (model.kind === 'hidden') { el.className = 'sync-banner hidden'; el.innerHTML = ''; return; }
+  el.className = `sync-banner sync-banner--${model.tone}${model.pulse ? ' sync-banner--pulse' : ''}`;
+  el.innerHTML = `<span class="sync-banner__icon material-symbols-outlined" aria-hidden="true">${syncBannerIcon(model.kind)}</span><div class="sync-banner__text"><div class="sync-banner__title">${escHtml(model.title)}</div><div class="sync-banner__sub">${escHtml(model.sub)}</div></div>`;
+  if (model.action) { const b = document.createElement('button'); b.className = 'sync-banner__btn'; b.textContent = model.actionLabel; b.onclick = () => staffSyncBannerDo(model.action); el.appendChild(b); }
+}
+function staffSyncBannerDo(action) {
+  if (action === 'retry') { sync.resync?.(); return; }
+  if (action === 'signin') { window.staffSwitch?.(); return; }
+}
+
 // ── Push notifications (assignment alerts) ────────
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
 const isStandalone  = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
@@ -929,8 +953,9 @@ function boot() {
   window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
   window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
   sync.start();
-  store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
+  store.subscribe(() => { chat.onChatSync(); renderStaffSyncBanner(); if (priceInputFocused()) return; render(); });   // banner BEFORE the price-focus return, so it updates even while a tech types a price
   render();   // instant render from cached state; subscribe re-renders on hydrate
+  renderStaffSyncBanner();   // baseline at boot
   chat.onChatSync();   // baseline the chat unread badge from cache on load
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/turndesk/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
