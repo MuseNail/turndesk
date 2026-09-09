@@ -1868,6 +1868,24 @@ export function computeBackupKeepSet(backups, nowMs) {
   return { keep, del };
 }
 
+// A waiver R2 dump (`backups/<slug>/waivers-<ts>.json`) is a JSON ARRAY of signed legal records —
+// NOT a state snapshot. It shares the backups/ namespace but must NEVER be offered as, or selected
+// for, a state restore (restoring one rebuilds from empty and wipes the salon), and must NOT compete
+// with state snapshots in the retention keep-set.
+export function isWaiverDump(key) { return (((key || '').split('/').pop()) || '').startsWith('waivers-'); }
+
+// Effective viewWaivers permission, server-enforced from a `sess:` record. Owner/admin always;
+// otherwise the stored config:role_permissions[role].viewWaivers, falling back to the client-side
+// DEFAULT_ROLE_PERMISSIONS default (manager true, everyone else false — keep in sync with config.js).
+function waiverViewAllowed(sess, rolePerms) {
+  if (!sess) return false;
+  if (sess.kind === 'owner' || sess.role === 'admin') return true;
+  const role = sess.role || '';
+  const stored = (rolePerms || {})[role];
+  if (stored && typeof stored.viewWaivers === 'boolean') return stored.viewWaivers;
+  return role === 'manager';
+}
+
 export class TurnDeskDO {
   constructor(state, env) {
     this.state = state;
@@ -2260,8 +2278,38 @@ export class TurnDeskDO {
       return new Response(JSON.stringify({ ok: true, pin }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // Signed waivers — on-demand only (out of buildSnapshot, never synced). GET lists every
+    // acceptance (admin audit view + JSON export). Each record carries its full signed text inline,
+    // so the export is a complete, portable legal archive. Gated server-side by the viewWaivers
+    // permission (client adminOnly alone is not enforcement) — the DO resolves the caller's session.
+    if (url.pathname === '/state/waivers' && request.method === 'GET') {
+      const h = request.headers.get('Authorization') || '';
+      const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+      const sess = token ? await this.state.storage.get('sess:' + token) : null;
+      const rolePerms = (await this.state.storage.get('config:role_permissions')) || {};
+      if (!waiverViewAllowed(sess, rolePerms)) return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+      const waivers = [...wmap.values()].sort((a, b) => (b.acceptedAt || 0) - (a.acceptedAt || 0));   // newest first
+      return new Response(JSON.stringify({ waivers, count: waivers.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Deliberate clear — the ONLY thing that removes waivers (restore/reset preserve them).
+    // Token-gated + { confirm:true }, mirroring /state/reset. The client gates this behind an
+    // explicit "I have exported" confirmation so records are never lost by accident.
+    if (url.pathname === '/state/waivers/clear' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (!body.confirm) return new Response(JSON.stringify({ error: 'clear requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (!this.env.RESTORE_TOKEN || !safeEqual(body.token, this.env.RESTORE_TOKEN)) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+      const keys = [...wmap.keys()];
+      for (let i = 0; i < keys.length; i += 128) await this.state.storage.delete(keys.slice(i, i + 128));
+      return new Response(JSON.stringify({ cleared: keys.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (url.pathname === '/state/backups') {
-      return new Response(JSON.stringify(await this.listBackups()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      // Recovery UI list: hide waiver dumps so one can never be OFFERED as a restore candidate.
+      const l = await this.listBackups();
+      const backups = (l.backups || []).filter(b => !isWaiverDump(b.key));
+      return new Response(JSON.stringify({ ...l, backups, count: backups.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (url.pathname === '/state/backup-now' && request.method === 'POST') {
       return new Response(JSON.stringify(await this.backupNow()), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -2792,6 +2840,20 @@ export class TurnDeskDO {
           await this.state.storage.put('config:chat_log', arr);
           break;
         }
+        case 'waiver.save': {
+          // Legal record → its own DO key `waiver:<id>`. NEVER in buildSnapshot and NEVER
+          // broadcast (it carries PII: signer name, e-signature, marketing/photo consents).
+          // Kept a mutate op (not a side route) so an OFFLINE kiosk still captures the
+          // acceptance via the outbox and replays it idempotently by mutationId. We return
+          // here — bypassing the broadcast tail below — so the PII never hits the wire.
+          const w = payload && payload.waiver;
+          if (!w || !w.id) return { error: 'bad waiver' };
+          await this.state.storage.put('waiver:' + w.id, w);
+          const seqW = await this.nextSeq();
+          if (mutationId) await this.state.storage.put('mut:' + mutationId, seqW);   // dedup: replays don't duplicate the row
+          await this.ensureBackupScheduled();
+          return { applied: true, seq: seqW };
+        }
         default:
           console.warn('[mutate] unknown op:', op);
           return { error: 'unknown op: ' + op };
@@ -3170,6 +3232,12 @@ export class TurnDeskDO {
         await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'state-' + ts + '.json', JSON.stringify(snap), {
           httpMetadata: { contentType: 'application/json' },
         });
+        // Signed waivers are NOT in the state snapshot (PII, out of buildSnapshot), so back them up
+        // separately as their own per-salon dump. Own try — never blocks the state backup.
+        try {
+          const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+          if (wmap.size) await this.env.PHOTOS_BUCKET.put(this._backupPrefix(slug) + 'waivers-' + ts + '.json', JSON.stringify([...wmap.values()]), { httpMetadata: { contentType: 'application/json' } });
+        } catch (e) { console.error('[waiver-dump] failed:', (e && e.message) || String(e)); }
         try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }   // tiered retention (own try — never blocks the backup)
       }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
@@ -3224,9 +3292,15 @@ export class TurnDeskDO {
     const slug = await this._getSlug();
     if (!slug) return { total: 0, keep: 0, pruned: 0, wouldPrune: 0, live, skipped: 'no-slug' };   // NEVER let a slug-less DO prune the shared backups/ root (cross-tenant safety)
     const { backups } = await this.listBackups();
-    const { keep, del } = computeBackupKeepSet(backups, Date.now());
+    // Partition waiver dumps OUT of the state keep-set: they're a legal archive, not state snapshots,
+    // and must never compete with state snapshots for retention slots. Each dump is a full cumulative
+    // array, so keeping the newest 30 is a generous safety margin.
+    const stateBackups = backups.filter(b => !isWaiverDump(b.key));
+    const waiverDumps  = backups.filter(b => isWaiverDump(b.key)).sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
+    const { keep, del } = computeBackupKeepSet(stateBackups, Date.now());
+    const waiverDel = waiverDumps.slice(30).map(b => b.key);
     const prefix = this._backupPrefix(slug);
-    const safeDel = del.filter(k => typeof k === 'string' && k.startsWith(prefix));   // only THIS salon's own prefix, never another's
+    const safeDel = [...del, ...waiverDel].filter(k => typeof k === 'string' && k.startsWith(prefix));   // only THIS salon's own prefix, never another's
     const batch = safeDel.slice(0, 1000);   // R2 array-delete cap; steady state ~0-1, one-time cleanup ~470
     console.log(`[retention] salon=${prefix} total=${backups.length} keep=${keep.size} prune=${safeDel.length}${batch.length < safeDel.length ? ` (capped ${batch.length}/run)` : ''} mode=${live ? 'LIVE' : 'log-only'}`);
     if (live && batch.length) await this.env.PHOTOS_BUCKET.delete(batch);
@@ -3264,8 +3338,11 @@ export class TurnDeskDO {
     if (!this.env.PHOTOS_BUCKET) return { error: 'no backup storage configured' };
     const slug = await this._getSlug();
     let useKey = key;
-    if (!useKey) { const l = await this.listBackups(); useKey = l.backups[0]?.key; }
+    if (!useKey) { const l = await this.listBackups(); useKey = (l.backups || []).find(b => !isWaiverDump(b.key))?.key; }   // auto-pick the newest STATE snapshot, never a waiver dump
     if (!useKey) return { error: 'no backup found' };
+    // A waiver dump is a JSON array of legal records, not a state snapshot — restoring one would
+    // rebuild the salon from empty and wipe it. Refuse it outright (belt to the shape guard below).
+    if (isWaiverDump(useKey)) return { error: 'that backup is a waiver archive, not a state snapshot' };
     // A caller-supplied key must live under THIS salon's own backup prefix — never restore
     // another salon's snapshot into this DO. (Skipped when the DO hasn't learned its slug —
     // a single-tenant/legacy instance with no other tenant to cross into.)
@@ -3273,14 +3350,17 @@ export class TurnDeskDO {
     const obj = await this.env.PHOTOS_BUCKET.get(useKey);
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
-    const st = snap.state || {};
+    // Shape guard: a real state backup is an object with a `.state` object. A waiver dump (array) or
+    // any other shape would leave `st = {}` → deleteAll rebuilds from empty = salon WIPED. Refuse it.
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap) || !snap.state || typeof snap.state !== 'object') return { error: 'not a state backup (wrong shape)' };
+    const st = snap.state;
     await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
     // Preserve the durable keys that are intentionally NOT in the snapshot (a password hash / OAuth
     // token must never ride the broadcast channel to clients) — deleteAll() would otherwise erase
     // them for good: owner/manager LOGIN credentials (else the owner is locked out of their own salon
     // after a restore), the Google Calendar refresh token, and staff push subscriptions.
     const preserved = new Map();
-    for (const prefix of ['owner:', 'push:']) {
+    for (const prefix of ['owner:', 'push:', 'waiver:']) {   // waiver: = signed legal records (out of the snapshot → deleteAll would destroy them permanently)
       for (const [k, v] of await this.state.storage.list({ prefix })) preserved.set(k, v);
     }
     const gcalBlob = await this.state.storage.get('gcal:blob');
@@ -3313,8 +3393,19 @@ export class TurnDeskDO {
   async factoryReset() {
     const slug = await this._getSlug();
     const safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
+    // Preserve durable keys that are intentionally NOT in the snapshot (same set restoreFromBackup
+    // preserves): owner/manager LOGIN credentials (else a reset locks the owner out of their own
+    // salon), staff push subscriptions, the Google Calendar refresh token, AND signed waivers
+    // (legal records — a reset must NEVER destroy them; they have no snapshot copy to recover from).
+    const preserved = new Map();
+    for (const prefix of ['owner:', 'push:', 'waiver:']) {
+      for (const [k, v] of await this.state.storage.list({ prefix })) preserved.set(k, v);
+    }
+    const gcalBlob = await this.state.storage.get('gcal:blob');
+    if (gcalBlob !== undefined) preserved.set('gcal:blob', gcalBlob);
     await this.state.storage.deleteAll();
     if (slug) await this.state.storage.put('meta:slug', slug);   // deleteAll wiped it; keep our identity
+    for (const [k, v] of preserved) await this.state.storage.put(k, v);   // owner login + gcal token + push subs + signed waivers survive the reset
     await this.state.storage.put('meta:seq', 1);
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
