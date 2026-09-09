@@ -8,6 +8,7 @@ import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS, DUP_PAID_WINDOW_MS } from '../config.js';
 import { findDuplicateCheckins } from './dup-guard.js';
+import { staffOnBreakNow } from './breaks.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
@@ -1185,7 +1186,7 @@ export function renderGroupAssignContent() {
       if (assigned) opts = [...checkedIn, assigned];
     }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
@@ -1443,7 +1444,7 @@ function _renderAssignOneList() {
     let opts = checkedIn;
     if (sel && !checkedIn.some(s => s.id === sel)) { const assigned = staffById(sel); if (assigned) opts = [...checkedIn, assigned]; }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');

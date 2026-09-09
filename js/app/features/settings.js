@@ -27,6 +27,7 @@ const _PERM_LABELS = {
   manageStaff: 'Manage Staff', manageServices: 'Manage Services & Catalog',
   markPaidDirect: 'Mark Paid without charging (payment taken outside the app)',
   viewClockedIn: 'See Who’s Clocked In',
+  manageCalendar: 'Block Off Break Time',
 };
 // Merged per role+key over the defaults, mirroring canDo() — the toggles must show
 // what is actually enforced, even for keys added after the map was last saved.

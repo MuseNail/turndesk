@@ -34,11 +34,11 @@ export const VAPID_PUBLIC_KEY = 'BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30V
 
 // Seeded into config.role_permissions on first run; also the fallback in canDo().
 export const DEFAULT_ROLE_PERMISSIONS = {
-  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true,  manageStaff: true,  manageServices: true,  markPaidDirect: true,  viewClockedIn: true  },
-  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true,  manageStaff: true,  manageServices: true,  markPaidDirect: true,  viewClockedIn: true,  manageCalendar: true  },
+  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false, manageCalendar: false },
   // Same limits as front desk, but keeps report/payroll access — for staff who
   // review numbers without operating the register.
-  reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+  reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false, manageCalendar: false },
 };
 
 export const GROUP_COLORS = [
