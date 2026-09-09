@@ -19,6 +19,7 @@ const PRECACHE_URLS = [
   '/turndesk/js/app/staff.js',
   '/turndesk/js/app/reports-app.js',
   '/turndesk/js/app/store.js',
+  '/turndesk/js/app/idbcache.js',
   '/turndesk/js/app/sync.js',
   '/turndesk/js/app/config.js',
   '/turndesk/js/app/apiorigin.js',
