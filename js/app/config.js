@@ -46,6 +46,10 @@ export const GROUP_COLORS = [
   '#2a7a4f','#7a1a5c','#4f4f1a','#1a3a7a','#7a4f1a',
 ];
 
+// Duplicate check-in guard: warn if a phone was PAID within this window (the customer just checked
+// out) — an open ticket always warns regardless of age.
+export const DUP_PAID_WINDOW_MS = 30 * 60 * 1000;
+
 // Stable per-CUSTOMER calendar colors (utils.js customerColor hashes a customer key
 // into this palette). 16 distinct dark hues tuned to read well as a light tint
 // (color+'1f' fill) with a solid border. DELIBERATELY avoids the calendar's status

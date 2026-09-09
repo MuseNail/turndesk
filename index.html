@@ -1864,6 +1864,8 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      MANUAL ADD MODAL (Front Desk)
 ═══════════════════════════════════════════════ -->
+<!-- Duplicate check-in guard — sits ABOVE manual-modal (z-[60]); content injected by showDupGuardModal -->
+<div id="dup-guard-modal" class="fixed inset-0 z-[60] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.5)"></div>
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">
   <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:90vh">
   <div class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
