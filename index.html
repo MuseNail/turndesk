@@ -367,7 +367,9 @@ tailwind.config = {
   <!-- Sticky CTA -->
   <footer class="fixed bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none">
     <div class="w-full max-w-md pointer-events-auto">
-      <button onclick="submitCheckin()"
+      <!-- Inline service-waiver acknowledgment — filled by renderCheckinWaiver (only when a waiver is active) -->
+      <div id="checkin-waiver-inline"></div>
+      <button onclick="submitCheckin()" id="checkin-submit-btn"
         class="w-full bg-primary hover:bg-primary-dim text-on-primary py-5 rounded-xl font-headline font-bold text-lg tracking-tight shadow-2xl shadow-primary/30 transition-all duration-300 active:scale-95 flex items-center justify-center gap-3">
         <span>Check In</span>
         <span class="material-symbols-outlined">arrow_forward</span>
@@ -1188,6 +1190,10 @@ tailwind.config = {
         <!-- Leaf: Receipt & Reviews (admin only) — re-routable review-QR link -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="receipt-section" class="hidden px-5 py-4"></div>
+        </div>
+        <!-- Leaf: Check-in Waiver (admin only) — filled by renderWaiverSettings -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="waiver-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Turn Thresholds -->

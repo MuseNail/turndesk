@@ -5,6 +5,7 @@ import { showToast, newEntryId } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { upsertPartyCustomers } from './square-customers.js';
+import { renderCheckinWaiver, checkinWaiverAccepted, acceptWaiverInline } from './waiver.js';
 
 const cfg = () => getState().config;
 const isServiceVisibleOnCheckin = id => !cfg().hidden_services.includes(id);
@@ -23,9 +24,30 @@ export function renderGuestsContainer() {
   guestCount = 0;
   addGuestCard();
   renderAddGuestButton();
+  // One delegated listener re-evaluates the Check In button as names are typed (attach once —
+  // the container element persists across re-renders).
+  if (!container._waiverWired) { container.addEventListener('input', updateCheckinSubmitState); container._waiverWired = true; }
+  renderCheckinWaiver();   // inline waiver acknowledgment on the screen (only when active)
+  updateCheckinSubmitState();
   // Land the cursor in the primary guest's phone field so check-in can start
   // typing immediately (on touch this also opens the on-screen number pad).
   setTimeout(() => document.getElementById('phone-1')?.focus(), 150);
+}
+
+// The Check In button stays disabled until the primary has a first name, and — WHEN the waiver is
+// active (the inline box was rendered) — a last initial + the acknowledgment box. When no waiver is
+// configured this keeps the original first-name-only requirement (no regression for those salons).
+export function updateCheckinSubmitState() {
+  const btn = document.getElementById('checkin-submit-btn');
+  if (!btn) return;
+  const first = (document.getElementById('first-1')?.value || '').trim();
+  const last  = (document.getElementById('last-1')?.value || '').trim();
+  const waiverOn = !!document.getElementById('ci-waiver-accept');   // present only when waiverActive
+  const boxOk = checkinWaiverAccepted();
+  const ok = !!first && (!waiverOn || (!!last && boxOk));
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '.5';
+  btn.style.pointerEvents = ok ? '' : 'none';
 }
 
 export function renderAddGuestButton() {
@@ -228,6 +250,11 @@ export function submitCheckin(skipApptGuard) {
   if (_submitting) return;                 // ignore a bounced/double tap while the first submit is in flight
   _submitting = true;
   setTimeout(() => { _submitting = false; }, 1500);   // self-release so the lock can never wedge the kiosk
+
+  // Service waiver: persist the acceptance + stamp each entry with the waiver link BEFORE the queue
+  // write. Safety net — the Check In button is already disabled until the box is checked (returns
+  // true immediately when no waiver is active). Release the lock on the rare unchecked-box path.
+  if (!acceptWaiverInline(newEntries, { method: 'self-kiosk' })) { _submitting = false; showToast('Please accept the service waiver to check in.'); return; }
 
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`;

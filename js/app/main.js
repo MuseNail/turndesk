@@ -48,10 +48,11 @@ import * as diagnostics from './features/diagnostics.js';
 import * as landing from './features/landing.js';
 import * as billing from './features/billing.js';
 import * as support from './features/support.js';
+import * as waiver from './features/waiver.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;

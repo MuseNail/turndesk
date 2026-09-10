@@ -28,6 +28,7 @@ const _PERM_LABELS = {
   markPaidDirect: 'Mark Paid without charging (payment taken outside the app)',
   viewClockedIn: 'See Who’s Clocked In',
   manageCalendar: 'Block Off Break Time',
+  viewWaivers: 'View Signed Waivers',
 };
 // Merged per role+key over the defaults, mirroring canDo() — the toggles must show
 // what is actually enforced, even for keys added after the map was last saved.
@@ -279,6 +280,7 @@ const SETTINGS_NAV = [
     { label:'Business Profile', sub:'Name, address & phone — on the app & receipts', content:'bizprofile-section', render:'renderBusinessProfile', adminOnly:true, icon:'store' },
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
+    { label:'Check-in Waiver', sub:'Require a signed service waiver at check-in', content:'waiver-section', render:'renderWaiverSettings', adminOnly:true, icon:'gavel' },
     // Exists ONLY while the operator's selfserve billing flag is on (Phase 1 default: off) —
     // the getter re-evaluates on every nav render, so there's never a dead entry.
     { label:'Billing', sub:'Your TurnDesk plan, payment method & history', content:'billing-section', render:'renderBillingSettings', adminOnly:true, icon:'credit_score', get hidden() { return !(window.billingVisible && window.billingVisible()); } },

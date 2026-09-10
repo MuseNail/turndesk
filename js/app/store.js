@@ -269,6 +269,12 @@ export function applyChange(op, payload, seq) {
       if (log.length > 300) log.splice(0, log.length - 300);
       break;
     }
+    case 'waiver.save':
+      // Deliberate no-op locally: a signed waiver is a legal record persisted ONLY server-side
+      // (DO key waiver:<id>, out of the snapshot). It never enters in-memory state or the cache —
+      // the op still rides the outbox so an offline kiosk replays it. Handled here so it isn't a
+      // noisy "unknown op" warning on every acceptance.
+      return;
     default: console.warn('[store] unknown op', op); return;
   }
   if (typeof seq === 'number' && seq > state.seq) state.seq = seq;

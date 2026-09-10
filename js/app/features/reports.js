@@ -47,6 +47,7 @@ export function saveRecord(entry) {
     ...(entry.quickSale ? { quickSale: true } : {}),   // no-service retail / gift-card sale — excluded from Guests Served
     ...(entry.soldBy ? { soldBy: entry.soldBy } : {}),  // front-desk staff who rang it up
     ...(entry.giftcardSales?.length ? { giftcardSales: entry.giftcardSales } : {}),   // gift cards sold on this ticket (liability, not income); ledger entry created on paid
+    ...(entry.waiverId ? { waiverId: entry.waiverId, waiverVersion: entry.waiverVersion || '', waiverAt: entry.waiverAt || null } : {}),   // per-visit waiver link → shown in the customer's visit history
   };
   dispatch('record.save', { record });
 }
@@ -153,10 +154,14 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
     const techs = [...new Set((r.assignments || []).filter(a => a.techId).map(a => staffById(a.techId)?.name).filter(Boolean))].join(', ');
     const note = (r.txnNote || r.discountNote || '').trim();
     const amt = isRefund ? `-$${Math.abs(r.totalCost || 0).toFixed(2)}` : `$${(r.totalCost || 0).toFixed(2)}`;
+    const waiverBadge = r.waiverId
+      ? `<button onclick="openSignedWaiver('${String(r.waiverId).replace(/[^\w-]/g, '')}')" class="text-[10px] font-body font-semibold text-primary mt-1 inline-flex items-center gap-1 hover:underline"><span class="material-symbols-outlined" style="font-size:13px">verified</span>Waiver v${String(r.waiverVersion || '').replace(/[^\w.]/g, '')} signed · view</button>`
+      : '';
     return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
       <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>
       <div class="text-[11px] font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
       ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${escHtml(note)}”</div>` : ''}
+      ${waiverBadge}
     </div>`;
   }).join('');
 }
