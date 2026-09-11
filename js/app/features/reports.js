@@ -641,7 +641,7 @@ export function runReport() {
   set('rpt-gross-income', `$${grossIncome.toFixed(2)}`);
   set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
-  const drawerEl = document.getElementById('rpt-drawer'); if (drawerEl) drawerEl.innerHTML = drawerReportHtml();
+  const drawerEl = document.getElementById('rpt-drawer'); if (drawerEl) drawerEl.innerHTML = drawerReportHtml({ collapse: true });
   const gcBreakdown = document.getElementById('rpt-giftcards-breakdown');
   if (gcBreakdown) {
     const row = (label, value, sub, onclick) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between${onclick?' cursor-pointer hover:bg-surface-container transition-colors':''}"${onclick?` onclick="${onclick}"`:''}><div><div class="font-headline font-semibold text-on-surface text-sm">${label}</div><div class="text-xs font-body text-on-surface-variant">${sub}</div></div><div class="flex items-center gap-3"><div class="font-headline font-bold text-on-surface">${value}</div>${onclick?'<span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">chevron_right</span>':''}</div></div>`;

@@ -368,10 +368,14 @@ function cardHtml(entry, assignments) {
   const live = assignments.some(a => a.status === 'inservice');
   const ring = live ? 'border-primary' : 'border-surface-container-high';
   const notesHtml = noteRowHtml(entry, 'cust') + noteRowHtml(entry, 'visit');
+  // Station-first hierarchy (owner): the station is the hero, the service second, the customer
+  // name last (small, at the bottom). A line with no station yet shows the service as its hero.
   return `<div class="bg-surface-container-lowest rounded-2xl border-2 ${ring} p-4 mb-3 shadow-sm">
-    <div class="font-headline font-extrabold text-2xl text-on-surface ${notesHtml ? 'mb-2' : 'mb-3'} leading-tight">${esc(entry.name || 'Guest')}</div>
-    ${notesHtml}
-    <div class="space-y-4 ${notesHtml ? 'mt-3' : ''}">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
+    <div class="space-y-4">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
+    <div class="mt-3 pt-3 border-t border-surface-container-high">
+      <div class="font-body text-on-surface-variant leading-tight" style="font-size:15px">${esc(entry.name || 'Guest')}</div>
+      ${notesHtml ? `<div class="mt-2">${notesHtml}</div>` : ''}
+    </div>
   </div>`;
 }
 
@@ -418,13 +422,16 @@ function lineHtml(entry, a) {
   const reopen   = (status === 'complete' && !awaiting) ? btn('Reopen', 'staffReopen', false) : '';
   const savePrice = awaiting ? `<button onclick="staffSavePrice('${entry.id}','${esc(a.serviceId)}')" class="flex-1 py-4 rounded-xl font-headline font-bold text-lg text-white transition-all active:scale-95" style="background:#6b4fb0">Save price</button>` : '';
   const stn = stationLbl(a.station);
+  // Station is the hero (big chair + number). With no station, the service takes the hero slot.
+  const stationHero = stn
+    ? `<span class="flex-shrink-0 inline-flex items-center gap-2 bg-primary text-on-primary rounded-xl px-3 py-1.5"><span class="material-symbols-outlined" style="font-size:24px">chair</span><span class="font-headline font-extrabold leading-none" style="font-size:28px">${esc(stn)}</span></span>`
+    : '';
   return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
-    <div class="flex items-center justify-between mb-3 gap-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="font-headline font-bold text-xl text-on-surface truncate">${esc(label)}</span>
-        ${stn ? `<span class="flex-shrink-0 inline-flex items-center gap-1 text-sm font-headline font-bold text-primary bg-primary/10 rounded-lg px-2 py-0.5"><span class="material-symbols-outlined" style="font-size:15px">chair</span>${esc(stn)}</span>` : ''}
-      </div>${statusChip(eff)}
+    <div class="flex items-center justify-between gap-2 ${stn ? 'mb-2' : 'mb-3'}">
+      ${stationHero || `<span class="font-headline font-extrabold text-2xl text-on-surface truncate min-w-0">${esc(label)}</span>`}
+      ${statusChip(eff)}
     </div>
+    ${stn ? `<div class="font-headline font-bold text-xl text-on-surface truncate mb-3">${esc(label)}</div>` : ''}
     ${awaiting ? `<div class="flex items-center gap-2 mb-3 rounded-xl px-3 py-2 text-sm font-body" style="background:rgba(107,79,176,.1);color:#534ab7"><span class="material-symbols-outlined" style="font-size:18px">info</span>Front desk marked this done — add the price.</div>` : ''}
     <div class="flex items-center gap-2 mb-3">
       <span class="text-on-surface-variant font-headline text-2xl">$</span>

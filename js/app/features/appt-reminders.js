@@ -58,7 +58,7 @@ export function checkApptReminders() {
 function showApptBanner(a, L) {
   const host = document.getElementById('appt-reminder-banners'); if (!host) return;
   const el = document.createElement('div');
-  el.style.cssText = 'pointer-events:auto;display:flex;align-items:center;gap:12px;background:#1a5252;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.28);max-width:96vw;font-family:Inter,sans-serif';
+  el.style.cssText = 'pointer-events:auto;display:flex;align-items:center;gap:12px;background:#1a5252;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.28);width:340px;max-width:96vw;box-sizing:border-box;font-family:Inter,sans-serif';
   el.innerHTML = `<span class="material-symbols-outlined" style="font-size:22px;flex-shrink:0">notifications_active</span>`
     + `<div style="min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(a.name)} — appointment in ${_leadLabel(L)}</div>`
     + `<div style="font-size:12px;opacity:.85">Starts ${_fmtTime(a.startMs)}</div>`

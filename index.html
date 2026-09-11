@@ -2325,15 +2325,21 @@ tailwind.config = {
      SQUARE PAYMENT CONFIRM MODAL
 ═══════════════════════════════════════════════ -->
 <div id="square-confirm-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:80">
-  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
     <div class="px-5 py-4 border-b border-surface-container-high flex items-center justify-between flex-shrink-0">
       <h2 class="text-lg font-headline font-bold text-on-surface">Confirm Payment</h2>
       <button onclick="closeSquareConfirm()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
     </div>
-    <div class="flex-1 min-h-0 overflow-y-auto">
-      <p id="sq-pay-sub" class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to the terminal to take payment.</p>
-      <div id="square-confirm-body" class="px-5 py-3 space-y-2"></div>
-      <div id="square-gc-section" class="px-5"></div>
+    <div class="flex-1 min-h-0 overflow-y-auto px-5 pt-3">
+      <p id="sq-pay-sub" class="text-xs font-body text-on-surface-variant">Review the ticket, then continue to the terminal to take payment.</p>
+      <!-- Two columns on a wide screen (front-desk iPad): charges + customer note on the left, tenders + totals on the right. Stacks on a phone. -->
+      <div class="grid grid-cols-1 md:grid-cols-2 md:gap-x-6 mt-2">
+        <div>
+          <div id="square-confirm-body" class="py-2 space-y-2"></div>
+          <div id="sq-customer-note" class="hidden mb-3"></div>
+        </div>
+        <div id="square-gc-section" class="py-2 md:border-l md:border-surface-container-high md:pl-6"></div>
+      </div>
     </div>
     <div class="px-5 py-4 border-t border-surface-container-high flex flex-col gap-3 flex-shrink-0">
       <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="sq-charge-only w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>

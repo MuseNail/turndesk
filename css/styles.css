@@ -635,7 +635,9 @@
   .chat-msg.me { align-items:flex-end; }
   .chat-meta { font-size:10px; color:var(--on-surface-variant,#46555a); margin:0 7px 2px; }
   .chat-bub { max-width:82%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.4;
-    white-space:pre-wrap; word-break:break-word; }
+    white-space:pre-wrap; word-break:break-word;
+    /* The app body is select-none (touch UI); re-enable selection on message text so it's copyable. */
+    -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; cursor:text; }
   .chat-bub.other { background:#d6dde0; color:#0e1a1a; }
   .chat-bub.mine { background:var(--primary,#1a5252); color:#fff; }
   .chat-tag { background:#ede7f6; color:#42306b; font-weight:700; border-radius:5px; padding:0 3px; }

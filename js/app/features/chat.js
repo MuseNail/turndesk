@@ -15,13 +15,14 @@
 // Worker's /push/notify fan-out (recipients subscribe by pid in the staff app).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
+import { scopedKey } from '../apptoken.js';   // per-salon device-local key (no cross-salon read-state bleed on a shared device)
 import { getActiveUser } from '../session.js';
 import { showToast } from '../utils.js';
 import { PUSH_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
 const CHAT_CAP = 300;
-const SEEN_KEY = 'turndesk_chat_seen';   // device-local { channelKey: lastSeenMs }
+const SEEN_KEY = scopedKey('turndesk_chat_seen');   // device-local { channelKey: lastSeenMs }, PER-SALON
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 // The dashboard defaults "me" to the active front-desk user. The staff app calls
@@ -78,9 +79,33 @@ function withMentions(text) {
   return out;
 }
 
-// ── Unread (device-local, per channel) ────────────────────────────────────────
-function seenMap() { try { const v = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; } }
-function markSeen(ch) { try { const m = seenMap(); m[ch] = Date.now(); localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } catch (e) {} }
+// ── Unread (per-user, SYNCED per channel) ─────────────────────────────────────
+// Read/unread markers are PER-USER + SYNCED (config key `chat_seen_<pid>`) so clearing a
+// notification on one device clears it on all of that person's signed-in devices. A device-local
+// mirror (SEEN_KEY) is kept for instant/offline reads; the two are merged with most-recent-seen wins.
+const seenKeyFor = pid => 'chat_seen_' + pid;
+function localSeen() { try { const v = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch { return {}; } }
+function seenMap() {
+  const out = { ...localSeen() };
+  const pid = myPid();
+  const synced = pid ? (cfg()[seenKeyFor(pid)] || {}) : {};
+  for (const k in synced) out[k] = Math.max(out[k] || 0, synced[k] || 0);   // either device clearing it wins
+  return out;
+}
+function markSeen(ch) {
+  // Mark seen UP TO the latest message in the channel (not wall-clock), so re-marking when nothing
+  // new arrived is a no-op — avoids re-dispatching on every unrelated config sync while chat is open.
+  const msgs = msgsFor(ch);
+  if (!msgs.length) return;   // nothing to mark seen → skip (avoids a pointless per-sync write on an empty thread)
+  const now = msgs.reduce((mx, m) => Math.max(mx, m.ts || 0), 0);
+  const pid = myPid();
+  const cur = pid ? { ...(cfg()[seenKeyFor(pid)] || {}) } : null;
+  if (cur && (cur[ch] || 0) >= now) return;   // already caught up → nothing to write
+  try { const m = localSeen(); if ((m[ch] || 0) < now) { m[ch] = now; localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } } catch (e) {}   // instant + offline mirror
+  if (!pid) return;
+  cur[ch] = now;
+  dispatch('config.set', { key: seenKeyFor(pid), value: cur });   // sync to this user's other devices
+}
 function unreadFor(ch) { const s = seenMap()[ch] || 0, me = myPid(); return msgsFor(ch).filter(m => m.ts > s && m.uid !== me).length; }
 function totalUnread() {
   const me = myPid();
