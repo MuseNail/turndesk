@@ -1195,6 +1195,10 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="waiver-section" class="hidden px-5 py-4"></div>
         </div>
+        <!-- Leaf: Check-in Kiosk & Bypass (admin only) — filled by renderKioskBypassSettings -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="kiosk-bypass-section" class="hidden px-5 py-4"></div>
+        </div>
 
         <!-- Leaf: Turn Thresholds -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
@@ -1865,11 +1869,13 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      MANUAL ADD MODAL (Front Desk)
 ═══════════════════════════════════════════════ -->
+<!-- Front-desk → kiosk waiver handoff — shown on the DESIGNATED kiosk device; content injected by showKioskHandoff -->
+<div id="kiosk-handoff-modal" class="fixed inset-0 z-[70] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.55)"></div>
 <!-- Duplicate check-in guard — sits ABOVE manual-modal (z-[60]); content injected by showDupGuardModal -->
 <div id="dup-guard-modal" class="fixed inset-0 z-[60] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.5)"></div>
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">
   <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:90vh">
-  <div class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
+  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-headline font-bold text-on-surface">Add Guest</h2>
       <div class="flex items-center gap-3">
@@ -1911,8 +1917,14 @@ tailwind.config = {
       </button>
     </div>
 
-    <button onclick="submitManualAdd()" class="w-full mt-5 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
+    <!-- Bypass / no-kiosk warning (shown by refreshManualAddChrome when a check-in will be added without a signed waiver) -->
+    <div id="manual-bypass-banner" class="hidden mt-4 px-3 py-2 rounded-lg text-sm font-body" style="background:#fef3c7;color:#7c4a03"></div>
+    <button id="manual-primary-btn" onclick="submitManualAdd()" class="w-full mt-5 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
       Add to Queue
+    </button>
+    <!-- Explicit "skip waiver" escape hatch — shown by refreshManualAddChrome only when a kiosk would otherwise be used -->
+    <button id="manual-skip-btn" onclick="submitManualAddSkip()" class="hidden w-full mt-2 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body text-sm hover:bg-surface-container transition-colors">
+      Skip the waiver for this check-in
     </button>
   </div>
   <!-- Customer note — side panel beside the check-in (does not cover it; auto-saves; closes with the check-in) -->

@@ -38,6 +38,7 @@ const PRECACHE_URLS = [
   '/turndesk/js/app/features/square-pos.js',
   '/turndesk/js/app/features/staff.js',
   '/turndesk/js/app/features/checkin.js',
+  '/turndesk/js/app/features/checkin-handoff.js',
   '/turndesk/js/app/features/dup-guard.js',
   '/turndesk/js/app/features/sync-banner.js',
   '/turndesk/js/app/features/breaks.js',

@@ -139,6 +139,9 @@ function goTo(screenId, param) {
       : 'Walk-In Check-In';
   }
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); maybeShowWhatsNew(); }
+  // Leaving the check-in screen: a pushed kiosk handoff that was deferred while a self-service
+  // check-in was in progress can show now (renderKioskHandoff early-returns unless this is the kiosk).
+  if (prevScreen === 'screen-checkin' && screenId !== 'screen-checkin') checkin.renderKioskHandoff?.();
 }
 
 // ── "What's new" — one-time popup after a device loads a new version ──────────
@@ -444,6 +447,9 @@ function onStateChange(state, changed) {
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); auth.renderSigninScreen(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab
+    checkin.renderKioskHandoff?.();      // kiosk side: a pushed handoff (kiosk_device_id designated) → show/hide the confirm window
+    queue.onDeskHandoffState?.();        // desk side: resolve this desk's "waiting at the kiosk" overlay
+    queue.refreshManualAddChrome?.();    // primary-button label / skip button / bypass banner track config
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
     // Customers tab.) square-customers.js rebuilds its directory caches on every store change.
@@ -547,6 +553,7 @@ function runDayRolloverIfNeeded() {
     window.logAudit?.('Day rollover', `Cleared ${stale.length} finished ticket(s) from a prior day`);
   }
   if (stale.length || didRollover) { queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge(); }
+  settings.checkinBypassDailyReminder?.();   // once-a-day nudge while waiver bypass mode is left ON
 }
 // Arm a one-shot timer to the next local midnight (+30s); it re-arms itself after firing.
 // Hydrate + visibilitychange are the real safety net (cover device sleep / clock changes);
@@ -575,7 +582,10 @@ function wireKeyboard() {
       const dg = document.getElementById('dup-guard-modal');
       if (dg && !dg.classList.contains('hidden')) { e.preventDefault(); return; }   // duplicate warning open — Enter must not re-submit behind it
       const mm = document.getElementById('manual-modal');
-      if (mm && !mm.classList.contains('hidden')) { const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; } }
+      if (mm && !mm.classList.contains('hidden')) {
+        if (document.getElementById('manual-waiting-overlay')) { e.preventDefault(); return; }   // waiting on the kiosk — Enter must not re-send
+        const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; }
+      }
     }
     if (e.key === 'Escape') {
       for (const [id, fn] of MODAL_CLOSERS) { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) { fn(); return; } }

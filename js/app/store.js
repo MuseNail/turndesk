@@ -28,6 +28,7 @@ function emptyConfig() {
     cash_drawer_history: [],   // closed drawer shifts (rolling cap), each with its reconciliation
     edit_locks: {},            // cross-device Assign&Price hard lock { [lockKey]: {device,name,at} }; see queue.js
     last_rollover_date: '',    // SHARED day-rollover marker (localDateStr). Gates the once-per-day housekeeping globally so a device first opened mid-day can't re-clear the roster — see main.js runDayRolloverIfNeeded
+    kiosk_handoff: null,       // front-desk → kiosk waiver handoff signal (pending record OR tombstone); null = idle. See features/checkin-handoff.js. Cleared to a TOMBSTONE, never null (the hydrate overlay skips null)
   };
 }
 

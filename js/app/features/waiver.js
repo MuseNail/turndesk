@@ -92,8 +92,10 @@ export function waiverGate(entries, onCleared, opts = {}) {
   return true;
 }
 
-// Designated-kiosk check — mirrors the time-clock device lock. (Used by port #6.)
-export function isKioskDevice() {
+// Is THIS device the salon's designated check-in kiosk (the synced handoff target)? Mirrors the
+// time-clock device lock. NOTE: distinct from auth.js's local `isKioskDevice` (a per-device screen
+// MODE flag) — named differently on purpose so the window-glue doesn't shadow it.
+export function isDesignatedKiosk() {
   const id = (cfg().kiosk_device_id || '').trim();
   return !!id && id === DEVICE_ID;
 }
