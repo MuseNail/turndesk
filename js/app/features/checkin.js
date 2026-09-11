@@ -369,7 +369,7 @@ export function kioskEditHandoffName(idx, which, value) {
   let first = parts[0] || '', last = parts.slice(1).join(' ');
   if (which === 'first') first = value.trim(); else last = value.trim();
   e.name = first + (last ? ' ' + last : '');
-  if (entries.length > 1) { const pn = entries[0].name; entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${pn} — ${g.name}`; }); }
+  if (entries.length > 1) { const pn = entries[0].name; entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${pn} — ${g.name}`; }); }   // xss-ok: groupLabel BUILD; rendered escaped at the queue/turns cards
   const box = document.getElementById('kiosk-hoff-accept'); if (box) { box.checked = false; _syncKioskConfirmBtn(); }   // changed name → re-sign
   document.getElementById('kiosk-hoff-hint')?.classList.remove('hidden');   // explain why Confirm greyed out
   clearTimeout(_kioskNameTimer);
@@ -397,7 +397,7 @@ export function kioskHandoffConfirm() {
   window.acceptWaiverForHandoff?.(entries, { method: 'front-desk-kiosk', byUser: h.byUser || null, id: handoffWaiverId(h.nonce) });
   entries.forEach(e => dispatch('queue.upsert', { entry: e }));
   upsertPartyCustomers(entries);
-  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} checked in (kiosk)`);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} checked in (kiosk)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js)
   dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(h.nonce, 'confirmed', Date.now()) });
   hideKioskHandoff();
   const cn = document.getElementById('confirm-name'); if (cn) cn.textContent = entries.map(e => e.name).join(' & ');

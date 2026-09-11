@@ -678,7 +678,7 @@ function finalizeManualBypass(entries, method, byUser) {
   window.acceptWaiverForHandoff?.(entries, { bypassed: true, method, byUser });   // save+stamp a bypassed record (audited in waiver.js)
   entries.forEach(e => upsert(e));
   upsertPartyCustomers(entries);
-  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual, waiver ${method === 'front-desk-takeover' ? 'taken over' : 'bypassed'})`);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual, waiver ${method === 'front-desk-takeover' ? 'taken over' : 'bypassed'})`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js)
   afterManualFinalize(entries);
 }
 function afterManualFinalize(entries) {
@@ -752,7 +752,7 @@ export function deskEditHandoffName(idx, which, value) {
   e.name = first + (last ? ' ' + last : '');
   if (_deskWaiting.entries.length > 1) {   // re-derive the primary's group label so the queue card reads correctly
     const primaryName = _deskWaiting.entries[0].name;
-    _deskWaiting.entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${primaryName} — ${g.name}`; });
+    _deskWaiting.entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${primaryName} — ${g.name}`; });   // xss-ok: groupLabel BUILD; rendered escaped at the queue/turns cards
   }
   clearTimeout(_deskNameTimer);
   _deskNameTimer = setTimeout(() => {
@@ -813,7 +813,7 @@ export function onDeskHandoffState() {
     const r = handoffResult(cur), entries = _deskWaiting.entries;
     _deskWaiting = null; clearTimeout(_deskWaitTimer);
     document.getElementById('manual-waiting-overlay')?.remove();
-    if (r === 'confirmed') { closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }
+    if (r === 'confirmed') { closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }   // xss-ok: showToast → textContent
     else if (r === 'cancelled') showToast('Customer cancelled at the kiosk — check the details and resend');
     else if (r === 'expired') showToast('Kiosk timed out — try again');
     return;
