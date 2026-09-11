@@ -90,13 +90,6 @@ tailwind.config = {
 </head>
 <body class="bg-surface text-on-surface select-none">
 
-<!-- Impossible-to-miss offline banner — shown by updateSyncIndicator on a sustained outage
-     (debounced so it never flashes on the initial connect or a 1-second blip). -->
-<div id="offline-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#c0392b;color:#fff;text-align:center;font-weight:700;font-size:14px;line-height:1.35;padding:10px 16px;box-shadow:0 2px 10px rgba(0,0,0,.28)">
-  <span class="material-symbols-outlined" style="font-size:19px;vertical-align:-4px;margin-right:6px">wifi_off</span>
-  Offline — your changes are saved and will sync the moment you reconnect.
-</div>
-
 <!-- ═══════════════════════════════════════════════
      SCREEN 1: WELCOME (Customer-Facing)
 ═══════════════════════════════════════════════ -->
@@ -374,7 +367,9 @@ tailwind.config = {
   <!-- Sticky CTA -->
   <footer class="fixed bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none">
     <div class="w-full max-w-md pointer-events-auto">
-      <button onclick="submitCheckin()"
+      <!-- Inline service-waiver acknowledgment — filled by renderCheckinWaiver (only when a waiver is active) -->
+      <div id="checkin-waiver-inline"></div>
+      <button onclick="submitCheckin()" id="checkin-submit-btn"
         class="w-full bg-primary hover:bg-primary-dim text-on-primary py-5 rounded-xl font-headline font-bold text-lg tracking-tight shadow-2xl shadow-primary/30 transition-all duration-300 active:scale-95 flex items-center justify-center gap-3">
         <span>Check In</span>
         <span class="material-symbols-outlined">arrow_forward</span>
@@ -407,6 +402,8 @@ tailwind.config = {
      SCREEN 4: DASHBOARD
 ═══════════════════════════════════════════════ -->
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
+  <!-- Loud offline / unsynced banner (safeguard #2) — filled by renderSyncBanner; .hidden when synced -->
+  <div id="sync-banner" class="sync-banner hidden" role="status" aria-live="polite"></div>
       <!-- Quiet TurnDesk credit — this screen is otherwise the salon's own branded dashboard
            (their logo in the header above), so this stays caption-sized and out of the way.
            Fixed + a child of this screen only, so it's hidden whenever #screen-desk isn't
@@ -1194,6 +1191,14 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="receipt-section" class="hidden px-5 py-4"></div>
         </div>
+        <!-- Leaf: Check-in Waiver (admin only) — filled by renderWaiverSettings -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="waiver-section" class="hidden px-5 py-4"></div>
+        </div>
+        <!-- Leaf: Check-in Kiosk & Bypass (admin only) — filled by renderKioskBypassSettings -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="kiosk-bypass-section" class="hidden px-5 py-4"></div>
+        </div>
 
         <!-- Leaf: Turn Thresholds -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
@@ -1864,9 +1869,13 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      MANUAL ADD MODAL (Front Desk)
 ═══════════════════════════════════════════════ -->
+<!-- Front-desk → kiosk waiver handoff — shown on the DESIGNATED kiosk device; content injected by showKioskHandoff -->
+<div id="kiosk-handoff-modal" class="fixed inset-0 z-[70] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.55)"></div>
+<!-- Duplicate check-in guard — sits ABOVE manual-modal (z-[60]); content injected by showDupGuardModal -->
+<div id="dup-guard-modal" class="fixed inset-0 z-[60] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.5)"></div>
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">
   <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:90vh">
-  <div class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
+  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-headline font-bold text-on-surface">Add Guest</h2>
       <div class="flex items-center gap-3">
@@ -1908,8 +1917,14 @@ tailwind.config = {
       </button>
     </div>
 
-    <button onclick="submitManualAdd()" class="w-full mt-5 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
+    <!-- Bypass / no-kiosk warning (shown by refreshManualAddChrome when a check-in will be added without a signed waiver) -->
+    <div id="manual-bypass-banner" class="hidden mt-4 px-3 py-2 rounded-lg text-sm font-body" style="background:#fef3c7;color:#7c4a03"></div>
+    <button id="manual-primary-btn" onclick="submitManualAdd()" class="w-full mt-5 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
       Add to Queue
+    </button>
+    <!-- Explicit "skip waiver" escape hatch — shown by refreshManualAddChrome only when a kiosk would otherwise be used -->
+    <button id="manual-skip-btn" onclick="submitManualAddSkip()" class="hidden w-full mt-2 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body text-sm hover:bg-surface-container transition-colors">
+      Skip the waiver for this check-in
     </button>
   </div>
   <!-- Customer note — side panel beside the check-in (does not cover it; auto-saves; closes with the check-in) -->
@@ -2310,15 +2325,21 @@ tailwind.config = {
      SQUARE PAYMENT CONFIRM MODAL
 ═══════════════════════════════════════════════ -->
 <div id="square-confirm-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:80">
-  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
     <div class="px-5 py-4 border-b border-surface-container-high flex items-center justify-between flex-shrink-0">
       <h2 class="text-lg font-headline font-bold text-on-surface">Confirm Payment</h2>
       <button onclick="closeSquareConfirm()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
     </div>
-    <div class="flex-1 min-h-0 overflow-y-auto">
-      <p id="sq-pay-sub" class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to the terminal to take payment.</p>
-      <div id="square-confirm-body" class="px-5 py-3 space-y-2"></div>
-      <div id="square-gc-section" class="px-5"></div>
+    <div class="flex-1 min-h-0 overflow-y-auto px-5 pt-3">
+      <p id="sq-pay-sub" class="text-xs font-body text-on-surface-variant">Review the ticket, then continue to the terminal to take payment.</p>
+      <!-- Two columns on a wide screen (front-desk iPad): charges + customer note on the left, tenders + totals on the right. Stacks on a phone. -->
+      <div class="grid grid-cols-1 md:grid-cols-2 md:gap-x-6 mt-2">
+        <div>
+          <div id="square-confirm-body" class="py-2 space-y-2"></div>
+          <div id="sq-customer-note" class="hidden mb-3"></div>
+        </div>
+        <div id="square-gc-section" class="py-2 md:border-l md:border-surface-container-high md:pl-6"></div>
+      </div>
     </div>
     <div class="px-5 py-4 border-t border-surface-container-high flex flex-col gap-3 flex-shrink-0">
       <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="sq-charge-only w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>

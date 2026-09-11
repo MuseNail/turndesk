@@ -5,7 +5,7 @@ import { canDo, getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal, escHtml } from '../utils.js';
 import { isAwaitingPrice } from './status.js';
 import { SQUARE_PROXY } from '../config.js';
-import { squareUpsertCustomer } from './square-customers.js';
+import { squareUpsertCustomer, customerNote } from './square-customers.js';
 import { chargeOnHelcim, helcimActive, helcimCustomerCode, manualMode } from './helcim.js';
 import { drawerTipPayoutCents } from './cashdrawer.js';
 
@@ -192,6 +192,13 @@ export function openSquarePOS(entryId) {
   party.forEach(e => { e.totalCost = ticketTotal(e); dispatch('queue.upsert', { entry: e }); });
   const body = document.getElementById('square-confirm-body');
   if (body) body.innerHTML = party.map(payCustomerBlock).join('');
+  // Show the primary customer's note here (front desk asked to see it at pay time; kiosk never shows notes).
+  const noteEl = document.getElementById('sq-customer-note');
+  if (noteEl) {
+    const note = customerNote(party[0]?.phone || '');
+    if (note) { noteEl.innerHTML = `<div class="rounded-xl px-4 py-3" style="background:#fbeef4"><div class="text-[11px] font-body font-semibold uppercase tracking-widest" style="color:#993556">Customer note</div><div class="text-sm font-body text-on-surface-variant mt-1" style="white-space:pre-wrap">${escHtml(note)}</div></div>`; noteEl.classList.remove('hidden'); }
+    else { noteEl.innerHTML = ''; noteEl.classList.add('hidden'); }
+  }
   const totalEl = document.getElementById('square-confirm-total');
   if (totalEl) totalEl.textContent = `$${(cents / 100).toFixed(2)}`;
   // Names for the Square note/Description. For a multi-person party, prefix with "Party of N — "
@@ -783,7 +790,8 @@ function renderPayGc() {
     return `<div class="flex items-center justify-between gap-2 mb-2"><label onclick="payToggleFee('${fee.id}')" class="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">${box}<span class="text-sm font-body font-semibold text-on-surface truncate">${fee.label}</span></label>${amtField}</div>`;
   }).join('');
   const feeSection = (cfg().fees || []).length ? `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Fees</div>${feeRowsHtml}` : '';
-  const breakdown = `<div id="sq-pay-breakdown" class="mt-3 pt-2 border-t border-surface-container-high text-sm font-body space-y-1">${_breakdownRows()}</div>`;
+  const breakdown = `<div id="sq-pay-breakdown" class="mt-3 pt-2 border-t border-surface-container-high text-sm font-body space-y-1">${_breakdownRows()}</div>`
+    + `<div id="sq-pay-warn" class="hidden mt-2 rounded-lg px-3 py-2 text-xs font-body" style="background:#fdf0d0;color:#7c4a03"></div>`;
   host.innerHTML = `${feeSection}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}${tipDrawerRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
   sqUpdatePayBreakdown();
 }
@@ -830,6 +838,18 @@ export function sqUpdatePayBreakdown() {
   // link charges the BILL only (no gift reduction), so a gift + deep link would charge the full
   // bill to the card AND still draw the gift down on return. Those splits go through the Terminal.
   if (pb) { const off = _payCash > 0 || _payTip > 0 || _payZelle > 0 || _payGiftDollars() > 0.001; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash / Zelle / tip / gift cards are handled by the Terminal flow' : ''; }
+  // "Doesn't add up" check (owner) — Zelle-focused: if a Zelle amount is entered but doesn't match
+  // what's left to cover, flag it (likely a missed tip or a typo). Soft + non-blocking.
+  const warn = document.getElementById('sq-pay-warn');
+  if (warn) {
+    const dueForZelle = Math.max(0, _payTotalDollars() + _payTip - _payGiftDollars() - _payCashAppliedDollars());
+    let msg = '';
+    if (_payZelle > 0.005) {
+      if (_payZelle < dueForZelle - 0.005) msg = `⚠ Zelle $${_payZelle.toFixed(2)} doesn't cover the $${dueForZelle.toFixed(2)} left — $${termCharge.toFixed(2)} would go on the card. Did you miss the tip or mistype?`;
+      else if (_payZelle > dueForZelle + 0.005) msg = `⚠ Zelle $${_payZelle.toFixed(2)} is $${(_payZelle - dueForZelle).toFixed(2)} more than the $${dueForZelle.toFixed(2)} left — Zelle can't give change. Check the amount.`;
+    }
+    warn.textContent = msg; warn.classList.toggle('hidden', !msg);
+  }
 }
 function _gcPickerRows(room) {
   const q = (document.getElementById('sq-gc-search')?.value || '').toLowerCase();

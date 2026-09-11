@@ -1,7 +1,7 @@
 // ── Service Worker (v4.85 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'turndesk-v0.50';
+const CACHE_NAME = 'turndesk-v0.51';
 
 const PRECACHE_URLS = [
   '/turndesk/',
@@ -19,6 +19,8 @@ const PRECACHE_URLS = [
   '/turndesk/js/app/staff.js',
   '/turndesk/js/app/reports-app.js',
   '/turndesk/js/app/store.js',
+  '/turndesk/js/app/idbcache.js',
+  '/turndesk/js/app/waiver-util.js',
   '/turndesk/js/app/sync.js',
   '/turndesk/js/app/config.js',
   '/turndesk/js/app/apiorigin.js',
@@ -36,6 +38,11 @@ const PRECACHE_URLS = [
   '/turndesk/js/app/features/square-pos.js',
   '/turndesk/js/app/features/staff.js',
   '/turndesk/js/app/features/checkin.js',
+  '/turndesk/js/app/features/checkin-handoff.js',
+  '/turndesk/js/app/features/dup-guard.js',
+  '/turndesk/js/app/features/sync-banner.js',
+  '/turndesk/js/app/features/breaks.js',
+  '/turndesk/js/app/features/waiver.js',
   '/turndesk/js/app/features/status.js',
   '/turndesk/js/app/features/queue.js',
   '/turndesk/js/app/features/turns.js',

@@ -1,10 +1,14 @@
 // ── Check-in kiosk: guest card builder + submission ─────────────────────────
 import { getState } from '../store.js';
-import { dispatch } from '../sync.js';
-import { showToast, newEntryId } from '../utils.js';
+import { dispatch, DEVICE_ID } from '../sync.js';
+import { showToast, newEntryId, escHtml } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
+import { scopedKey } from '../apptoken.js';   // per-salon key for the consumed-nonce (shared-device isolation)
 import { ui } from '../session.js';
 import { upsertPartyCustomers } from './square-customers.js';
+import { renderCheckinWaiver, checkinWaiverAccepted, acceptWaiverInline, isDesignatedKiosk } from './waiver.js';
+import { WAIVER_ACK_SINGLE, WAIVER_ACK_MULTI } from '../waiver-util.js';
+import { handoffIsTombstone, handoffFresh, handoffTombstone, buildHandoff, handoffMasked, handoffMultiGuest, handoffPrimaryName, handoffWaiverId } from './checkin-handoff.js';
 
 const cfg = () => getState().config;
 const isServiceVisibleOnCheckin = id => !cfg().hidden_services.includes(id);
@@ -23,9 +27,30 @@ export function renderGuestsContainer() {
   guestCount = 0;
   addGuestCard();
   renderAddGuestButton();
+  // One delegated listener re-evaluates the Check In button as names are typed (attach once —
+  // the container element persists across re-renders).
+  if (!container._waiverWired) { container.addEventListener('input', updateCheckinSubmitState); container._waiverWired = true; }
+  renderCheckinWaiver();   // inline waiver acknowledgment on the screen (only when active)
+  updateCheckinSubmitState();
   // Land the cursor in the primary guest's phone field so check-in can start
   // typing immediately (on touch this also opens the on-screen number pad).
   setTimeout(() => document.getElementById('phone-1')?.focus(), 150);
+}
+
+// The Check In button stays disabled until the primary has a first name, and — WHEN the waiver is
+// active (the inline box was rendered) — a last initial + the acknowledgment box. When no waiver is
+// configured this keeps the original first-name-only requirement (no regression for those salons).
+export function updateCheckinSubmitState() {
+  const btn = document.getElementById('checkin-submit-btn');
+  if (!btn) return;
+  const first = (document.getElementById('first-1')?.value || '').trim();
+  const last  = (document.getElementById('last-1')?.value || '').trim();
+  const waiverOn = !!document.getElementById('ci-waiver-accept');   // present only when waiverActive
+  const boxOk = checkinWaiverAccepted();
+  const ok = !!first && (!waiverOn || (!!last && boxOk));
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '.5';
+  btn.style.pointerEvents = ok ? '' : 'none';
 }
 
 export function renderAddGuestButton() {
@@ -229,6 +254,11 @@ export function submitCheckin(skipApptGuard) {
   _submitting = true;
   setTimeout(() => { _submitting = false; }, 1500);   // self-release so the lock can never wedge the kiosk
 
+  // Service waiver: persist the acceptance + stamp each entry with the waiver link BEFORE the queue
+  // write. Safety net — the Check In button is already disabled until the box is checked (returns
+  // true immediately when no waiver is active). Release the lock on the rare unchecked-box path.
+  if (!acceptWaiverInline(newEntries, { method: 'self-kiosk' })) { _submitting = false; showToast('Please accept the service waiver to check in.'); return; }
+
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`;
     const groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length];
@@ -248,4 +278,138 @@ export function submitCheckin(skipApptGuard) {
   }, 5000);
 
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
+}
+
+// ── Front-desk → kiosk handoff (kiosk side) ───────────────────────────────────
+// The front desk sends a FINISHED party as a synced signal; this device (the designated kiosk)
+// shows the customer their name(s) + masked last-4 phone + ONE acknowledgment box. The customer
+// signs → the queue entries are created + the waiver saved (never before). Deterministic ids +
+// a persisted consumed-nonce make Confirm idempotent across reloads/double-taps.
+let _kioskShownSig = null;      // "<names>#<nonce>" currently rendered (avoid needless re-render that resets the box)
+let _kioskSubmitting = false;
+let _kioskNameTimer = null;
+const KIOSK_NONCE_KEY = scopedKey('turndesk_kiosk_last_nonce');   // per-salon so a shared device can't cross salons
+function kioskConsumedNonce() { try { return localStorage.getItem(KIOSK_NONCE_KEY) || ''; } catch { return ''; } }
+function setKioskConsumedNonce(n) { try { localStorage.setItem(KIOSK_NONCE_KEY, n); } catch {} }
+
+// Called from onStateChange (config changes) + hydrate. Shows/updates/hides the kiosk window.
+export function renderKioskHandoff() {
+  if (!isDesignatedKiosk()) { hideKioskHandoff(); return; }
+  const h = cfg().kiosk_handoff;
+  // A pending handoff targeted here that has aged past its TTL: write an expired tombstone so its
+  // PII (name+phone) doesn't linger in the durable/broadcast/R2-backed config if the desk device died.
+  if (h && !handoffIsTombstone(h) && h.targetDevice === DEVICE_ID && !handoffFresh(h, Date.now()) && h.nonce !== kioskConsumedNonce()) {
+    dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(h.nonce, 'expired', Date.now()) });
+    hideKioskHandoff(); return;
+  }
+  if (!handoffFresh(h, Date.now()) || h.targetDevice !== DEVICE_ID || h.nonce === kioskConsumedNonce()) { hideKioskHandoff(); return; }
+  if (document.getElementById('screen-checkin')?.classList.contains('active')) return;   // don't clobber a self-service check-in in progress
+  if (String(document.activeElement?.id || '').startsWith('kiosk-hoff-name-')) return;   // don't re-render (resets the box) while typing a name
+  const sig = (h.entries || []).map(e => e.name).join('|') + '#' + h.nonce;
+  if (sig === _kioskShownSig && !document.getElementById('kiosk-handoff-modal')?.classList.contains('hidden')) return;   // unchanged → keep box state
+  _kioskShownSig = sig;
+  showKioskHandoff(h);   // any name change re-renders → box resets (re-gate)
+}
+function hideKioskHandoff() {
+  const m = document.getElementById('kiosk-handoff-modal');
+  if (m) { m.classList.add('hidden'); m.style.display = ''; }
+  _kioskShownSig = null;
+}
+function _syncKioskConfirmBtn() {
+  const box = document.getElementById('kiosk-hoff-accept');
+  const btn = document.getElementById('kiosk-hoff-confirm');
+  if (!btn) return;
+  const ok = !!box?.checked;
+  btn.disabled = !ok; btn.style.opacity = ok ? '1' : '.45'; btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+  if (ok) document.getElementById('kiosk-hoff-hint')?.classList.add('hidden');
+}
+function showKioskHandoff(h) {
+  const host = document.getElementById('kiosk-handoff-modal'); if (!host) return;
+  const guests = h.entries || [];
+  const multi = handoffMultiGuest(h);
+  const rows = guests.map((e, i) => {
+    const parts = String(e.name || '').trim().split(/\s+/);
+    const first = parts[0] || '', last = parts.slice(1).join(' ');
+    return `<div class="mb-3 p-4 rounded-2xl border border-surface-container-high bg-surface-container-lowest">
+      <div class="flex gap-3 mb-2">
+        <input id="kiosk-hoff-name-first-${i}" value="${escHtml(first)}" oninput="kioskEditHandoffName(${i},'first',this.value)" placeholder="First name" class="flex-1 bg-surface-container rounded-xl border border-surface-container-high px-4 py-3 text-lg font-body text-on-surface focus:outline-none focus:border-primary">
+        <input id="kiosk-hoff-name-last-${i}" value="${escHtml(last)}" oninput="kioskEditHandoffName(${i},'last',this.value)" placeholder="Last name" class="flex-1 bg-surface-container rounded-xl border border-surface-container-high px-4 py-3 text-lg font-body text-on-surface focus:outline-none focus:border-primary">
+      </div>
+      <div class="text-sm font-body text-on-surface-variant">Phone ending ${escHtml(handoffMasked(e) || '—')}</div>
+    </div>`;
+  }).join('');
+  const link = `<a href="#" onclick="showWaiverDoc();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>`;
+  const ackText = `I have read and agree to the ${link}. ${multi ? WAIVER_ACK_MULTI : WAIVER_ACK_SINGLE}`;
+  host.innerHTML = `
+    <div class="bg-surface-container-lowest rounded-3xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[92vh] overflow-y-auto no-scroll">
+      <div class="text-center mb-5">
+        <div class="text-2xl font-headline font-bold text-on-surface">Welcome, ${escHtml(handoffPrimaryName(h))}</div>
+        <div class="text-sm font-body text-on-surface-variant mt-1">Please check your ${multi ? 'names' : 'name'} and phone, then sign to finish checking in.</div>
+      </div>
+      ${rows}
+      <label class="flex gap-3 items-start p-4 rounded-2xl mt-2" style="border:2px solid var(--primary,#1a5252);background:var(--primary-container,#e1f5ee);cursor:pointer">
+        <input type="checkbox" id="kiosk-hoff-accept" onchange="_kioskHoffBox()" style="width:24px;height:24px;flex-shrink:0;margin-top:2px;accent-color:var(--primary,#1a5252)">
+        <span style="font-size:13.5px;line-height:1.5;color:var(--on-primary-container,#0a2e2e)">${ackText}<span style="display:block;margin-top:6px;font-weight:700">Signing as: ${escHtml(handoffPrimaryName(h))}</span></span>
+      </label>
+      <div id="kiosk-hoff-hint" class="hidden text-center text-sm font-body mt-3" style="color:#7c4a03">Name changed — please re-check the box to sign.</div>
+      <button id="kiosk-hoff-confirm" disabled onclick="kioskHandoffConfirm()" class="w-full mt-5 bg-primary text-on-primary py-4 rounded-2xl font-headline font-bold text-lg tracking-tight transition-all active:scale-95" style="opacity:.45;cursor:not-allowed">Confirm check-in</button>
+      <button onclick="kioskHandoffCancel()" class="w-full mt-3 text-on-surface-variant py-3 rounded-xl font-body text-sm hover:text-on-surface">This isn't me / cancel</button>
+    </div>`;
+  host.classList.remove('hidden'); host.style.display = 'flex';
+  _syncKioskConfirmBtn();
+}
+export function _kioskHoffBox() { _syncKioskConfirmBtn(); }
+
+export function kioskEditHandoffName(idx, which, value) {
+  const h = cfg().kiosk_handoff;
+  if (!handoffFresh(h, Date.now()) || h.targetDevice !== DEVICE_ID) return;
+  const entries = (h.entries || []).map(e => ({ ...e }));
+  const e = entries[idx]; if (!e) return;
+  const parts = String(e.name || '').trim().split(/\s+/);
+  let first = parts[0] || '', last = parts.slice(1).join(' ');
+  if (which === 'first') first = value.trim(); else last = value.trim();
+  e.name = first + (last ? ' ' + last : '');
+  if (entries.length > 1) { const pn = entries[0].name; entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${pn} — ${g.name}`; }); }   // xss-ok: groupLabel BUILD; rendered escaped at the queue/turns cards
+  const box = document.getElementById('kiosk-hoff-accept'); if (box) { box.checked = false; _syncKioskConfirmBtn(); }   // changed name → re-sign
+  document.getElementById('kiosk-hoff-hint')?.classList.remove('hidden');   // explain why Confirm greyed out
+  clearTimeout(_kioskNameTimer);
+  _kioskNameTimer = setTimeout(() => {
+    // Never resurrect a handoff that was confirmed / cancelled / replaced while this edit was pending
+    // (else a fresh-ts pending value would overwrite the tombstone and re-broadcast the party's PII).
+    const cur = cfg().kiosk_handoff;
+    if (h.nonce === kioskConsumedNonce() || handoffIsTombstone(cur) || !cur || cur.nonce !== h.nonce) return;
+    const h2 = buildHandoff(entries, DEVICE_ID, h.byUser || null, h.byDevice, h.nonce, Date.now());
+    dispatch('config.set', { key: 'kiosk_handoff', value: h2 });   // sync the desk; fresh ts beats the per-key stale guard
+  }, 400);
+}
+
+export function kioskHandoffConfirm() {
+  clearTimeout(_kioskNameTimer);   // cancel any pending name-edit re-broadcast so it can't overwrite the tombstone
+  const h = cfg().kiosk_handoff;
+  if (_kioskSubmitting) return;
+  if (!handoffFresh(h, Date.now()) || h.targetDevice !== DEVICE_ID) { hideKioskHandoff(); showToast('This check-in expired — please see the front desk.'); return; }
+  if (h.nonce === kioskConsumedNonce()) { hideKioskHandoff(); return; }
+  if (!document.getElementById('kiosk-hoff-accept')?.checked) { showToast('Please check the box to continue.'); return; }
+  _kioskSubmitting = true; setTimeout(() => { _kioskSubmitting = false; }, 1500);
+  setKioskConsumedNonce(h.nonce);   // persist BEFORE dispatch so a reload can't re-show/re-queue this party
+  const entries = (h.entries || []).map(e => ({ ...e }));
+  // Deterministic waiver id (wv-<nonce>) → an outbox replay overwrites the same key, never duplicates.
+  window.acceptWaiverForHandoff?.(entries, { method: 'front-desk-kiosk', byUser: h.byUser || null, id: handoffWaiverId(h.nonce) });
+  entries.forEach(e => dispatch('queue.upsert', { entry: e }));
+  upsertPartyCustomers(entries);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} checked in (kiosk)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js)
+  dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(h.nonce, 'confirmed', Date.now()) });
+  hideKioskHandoff();
+  const cn = document.getElementById('confirm-name'); if (cn) cn.textContent = entries.map(e => e.name).join(' & ');
+  window.goTo?.('screen-confirm');
+  clearTimeout(window._confirmResetTimer);
+  window._confirmResetTimer = setTimeout(() => { if (document.getElementById('screen-confirm')?.classList.contains('active')) window.goTo?.('screen-welcome'); }, 5000);
+  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
+}
+
+export function kioskHandoffCancel() {
+  clearTimeout(_kioskNameTimer);   // cancel any pending name-edit re-broadcast so it can't undo this cancel
+  const h = cfg().kiosk_handoff;
+  if (h && !h.done) dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(h.nonce, 'cancelled', Date.now()) });
+  hideKioskHandoff();
 }

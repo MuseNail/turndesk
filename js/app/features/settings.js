@@ -1,6 +1,6 @@
 // ── Settings panel ──────────────────────────────────────────────────────────
 import { getState } from '../store.js';
-import { dispatch } from '../sync.js';
+import { dispatch, DEVICE_ID } from '../sync.js';
 import { getAppToken, getSessionUser } from '../apptoken.js';
 import { showToast, setSwitchVisual, escHtml } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
@@ -27,6 +27,8 @@ const _PERM_LABELS = {
   manageStaff: 'Manage Staff', manageServices: 'Manage Services & Catalog',
   markPaidDirect: 'Mark Paid without charging (payment taken outside the app)',
   viewClockedIn: 'See Who’s Clocked In',
+  manageCalendar: 'Block Off Break Time',
+  viewWaivers: 'View Signed Waivers',
 };
 // Merged per role+key over the defaults, mirroring canDo() — the toggles must show
 // what is actually enforced, even for keys added after the map was last saved.
@@ -55,6 +57,95 @@ export function toggleRolePermission(role, perm, btn) {
   dispatch('config.set', { key: 'role_permissions', value: rp });
   if (btn) setSwitchVisual(btn, rp[role][perm]); else renderRolePermissions();
   showToast('Permission updated ✓');
+}
+
+// ── Check-in kiosk designation + waiver bypass ────────────────────────────────
+// The "Check-in Kiosk & Bypass" settings leaf. The kiosk designation clones the time-clock
+// station lock: the device writes its own DEVICE_ID to the synced `kiosk_device_id`, and the
+// front desk (any device) can then Send a check-in to it for signing (see queue.js/checkin.js).
+export function renderKioskBypassSettings() {
+  const host = document.getElementById('kiosk-bypass-section');
+  if (!host) return;
+  const lbl = 'text-sm font-body font-semibold text-on-surface block mb-1';
+  host.innerHTML = `
+    <div>
+      <label class="${lbl}">Check-in Kiosk</label>
+      <p class="text-xs font-body text-on-surface-variant mb-2">The front desk can <strong>send a check-in to this device</strong> so the customer reviews their details and signs the waiver themselves. Set this on the customer-facing kiosk device.</p>
+      <div id="kiosk-device-status"></div>
+    </div>
+    <div class="mt-5 pt-4 border-t border-surface-container-high">
+      <label class="${lbl}">Waiver Bypass Mode</label>
+      <p class="text-xs font-body text-on-surface-variant mb-2">Temporarily <strong>skip waiver signing for every check-in</strong> (special circumstances). Leaves an audit trail; reminds you daily while it's on.</p>
+      <div id="checkin-bypass-status"></div>
+    </div>`;
+  renderKioskDeviceSetting();
+  renderCheckinBypassSetting();
+}
+
+export function kioskDeviceId() { return (cfg().kiosk_device_id || '').trim(); }
+export function setThisKioskDevice() {
+  if (getActiveUser()?.role !== 'admin') { showToast('Only an admin can set the check-in kiosk.'); return; }
+  if (!DEVICE_ID) { showToast('This device has no id yet — reload and try again.'); return; }
+  dispatch('config.set', { key: 'kiosk_device_id', value: DEVICE_ID });
+  showToast('This device is now the check-in kiosk ✓');
+  renderKioskDeviceSetting();
+}
+export function clearKioskDevice() {
+  if (getActiveUser()?.role !== 'admin') { showToast('Only an admin can change the check-in kiosk.'); return; }
+  dispatch('config.set', { key: 'kiosk_device_id', value: '' });
+  showToast('Check-in kiosk cleared');
+  renderKioskDeviceSetting();
+}
+export function renderKioskDeviceSetting() {
+  const el = document.getElementById('kiosk-device-status'); if (!el) return;
+  const setId = kioskDeviceId(), thisId = DEVICE_ID, isThis = !!setId && setId === thisId, isSet = !!setId;
+  let row;
+  if (isThis) {
+    row = `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style="background:rgba(42,122,79,.12)"><span class="text-sm font-body" style="color:#1b5e20"><strong>This device</strong> is the check-in kiosk ✓</span><button onclick="clearKioskDevice()" class="text-xs font-body text-error underline flex-shrink-0">Remove</button></div>`;
+  } else if (isSet) {
+    row = `<div class="flex items-center justify-between gap-2 flex-wrap px-3 py-2 rounded-lg" style="background:#fef3c7"><span class="text-sm font-body" style="color:#7c4a03">⚠️ A kiosk is saved, but it’s <strong>not this device</strong>. If this should be the kiosk, make it the kiosk again.</span><button onclick="setThisKioskDevice()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the kiosk</button></div>`;
+  } else {
+    row = `<div class="flex items-center justify-between gap-2 flex-wrap"><span class="text-sm font-body text-on-surface-variant">No kiosk set — the front desk will hand its own device to the customer or skip the waiver.</span><button onclick="setThisKioskDevice()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the kiosk</button></div>`;
+  }
+  const ids = `<div class="text-[11px] font-body text-on-surface-variant mt-2" style="font-family:ui-monospace,Menlo,Consolas,monospace"><strong>This device:</strong> ${escHtml(thisId || '—')} &nbsp;·&nbsp; <strong>Saved kiosk:</strong> ${isSet ? escHtml(setId) + (isThis ? '' : ' (not this device)') : '— none —'}</div>`;
+  el.innerHTML = row + ids;
+}
+
+export function renderCheckinBypassSetting() {
+  const el = document.getElementById('checkin-bypass-status'); if (!el) return;
+  const on = !!cfg().checkin_bypass_mode;
+  el.innerHTML = `
+    <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style="background:${on ? '#fef3c7' : 'transparent'}">
+      <span class="text-sm font-body" style="${on ? 'color:#7c4a03' : ''}">${on ? '⚠️ <strong>Bypass mode is ON</strong> — waivers are NOT being signed at check-in.' : 'Off — waivers are captured normally.'}</span>
+      <label class="mswitch" style="cursor:pointer"><input type="checkbox" id="checkin-bypass-toggle" ${on ? 'checked' : ''} onchange="toggleCheckinBypassMode(this.checked)"></label>
+    </div>`;
+}
+export function toggleCheckinBypassMode(on) {
+  if (on && !window.confirm('Turn ON bypass mode?\n\nThis SKIPS waiver signing for ALL check-ins on every device until you turn it back off. Use only for a special circumstance.')) { renderCheckinBypassSetting(); return; }
+  if (!on && !window.confirm('Turn OFF bypass mode and resume waiver signing at check-in?')) { renderCheckinBypassSetting(); return; }
+  dispatch('config.set', { key: 'checkin_bypass_mode', value: !!on });
+  window.logAudit?.('Bypass mode', `${on ? 'ENABLED' : 'disabled'} by ${getActiveUser()?.name || 'staff'}`);
+  try { localStorage.removeItem('turndesk_bypass_reminded'); } catch {}   // reset the once-a-day reminder gate
+  showToast(on ? 'Bypass mode ON — waivers skipped' : 'Bypass mode off');
+  renderCheckinBypassSetting();
+}
+// Owner asked for a daily reminder while bypass mode is on (instead of auto-off). Called from the
+// day-rollover housekeeping; once per day per device, deferred so it doesn't block boot.
+export function checkinBypassDailyReminder() {
+  if (!cfg()?.checkin_bypass_mode) return;
+  const today = (window.todayStr?.() || new Date().toISOString().slice(0, 10));
+  let last = ''; try { last = localStorage.getItem('turndesk_bypass_reminded') || ''; } catch {}
+  if (last === today) return;
+  try { localStorage.setItem('turndesk_bypass_reminded', today); } catch {}
+  setTimeout(() => {
+    if (!cfg()?.checkin_bypass_mode) return;   // may have been turned off between scheduling and firing
+    const turnOff = window.confirm('Reminder: check-in BYPASS MODE is still ON — customers are not signing the waiver.\n\nOK = turn it OFF now.   Cancel = keep it on for today.');
+    if (!turnOff) return;
+    dispatch('config.set', { key: 'checkin_bypass_mode', value: false });
+    window.logAudit?.('Bypass mode', `disabled via daily reminder by ${getActiveUser()?.name || 'staff'}`);
+    showToast('Bypass mode turned off');
+    renderCheckinBypassSetting();
+  }, 900);
 }
 
 // Re-render role-gated panels on login/logout/role change.
@@ -278,6 +369,8 @@ const SETTINGS_NAV = [
     { label:'Business Profile', sub:'Name, address & phone — on the app & receipts', content:'bizprofile-section', render:'renderBusinessProfile', adminOnly:true, icon:'store' },
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
+    { label:'Check-in Waiver', sub:'Require a signed service waiver at check-in', content:'waiver-section', render:'renderWaiverSettings', adminOnly:true, icon:'gavel' },
+    { label:'Check-in Kiosk & Bypass', sub:'Designate the signing kiosk + temporary bypass', content:'kiosk-bypass-section', render:'renderKioskBypassSettings', adminOnly:true, icon:'tablet' },
     // Exists ONLY while the operator's selfserve billing flag is on (Phase 1 default: off) —
     // the getter re-evaluates on every nav render, so there's never a dead entry.
     { label:'Billing', sub:'Your TurnDesk plan, payment method & history', content:'billing-section', render:'renderBillingSettings', adminOnly:true, icon:'credit_score', get hidden() { return !(window.billingVisible && window.billingVisible()); } },

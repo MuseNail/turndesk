@@ -131,6 +131,24 @@
   .update-pulse { color:#1a5252 !important; font-weight:700; animation:updatePulse 2s ease-in-out infinite; }
   @keyframes updatePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
 
+  /* Safeguard #2: loud offline / unsynced banner (front desk + tech app). Shown by renderSyncBanner
+     when offline / syncing a backlog / a write failed / sign-in needed; .hidden when synced. Reuses the
+     app's status hex so it can't disagree with the header pill. */
+  .sync-banner { display:flex; align-items:center; gap:10px; width:100%; padding:10px 16px; box-sizing:border-box; }
+  .sync-banner.hidden { display:none; }   /* two classes → beats .sync-banner{display:flex} */
+  .sync-banner--amber { background:#f5c870; color:#3a2800; }
+  .sync-banner--red   { background:#c62828; color:#ffffff; }   /* saturated + AA-legible white (≈5.9:1): a FAILED write must read at least as loud as offline */
+  .sync-banner--red .sync-banner__sub { opacity:1; }           /* keep the danger sub at full contrast */
+  .sync-banner--blue  { background:#e6f1fb; color:#0c447c; }
+  .sync-banner__icon  { font-family:'Material Symbols Outlined'; font-size:22px; flex-shrink:0; line-height:1; }
+  .sync-banner__text  { flex:1; min-width:0; }
+  .sync-banner__title { font-weight:700; font-size:14.5px; line-height:1.25; }
+  .sync-banner__sub   { font-size:12.5px; line-height:1.3; opacity:.9; }
+  .sync-banner__btn   { flex-shrink:0; display:inline-flex; align-items:center; min-height:44px; background:transparent; border:1px solid currentColor; color:inherit; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .sync-banner--pulse { animation:syncBannerPulse 2.2s ease-in-out infinite; }
+  @keyframes syncBannerPulse { 0%,100% { opacity:1; } 50% { opacity:0.82; } }
+  @media (prefers-reduced-motion: reduce) { .sync-banner--pulse { animation:none; } }
+
   /* Turns board "Large" text (C8) — per-device toggle (Settings → Workflow → Turns Board
      Display). Bumps the bubble + side-list type and widens the slots so the text fits. */
   #panel-turns.turns-large .text-\[9px\]  { font-size: 11px !important; }
@@ -617,7 +635,9 @@
   .chat-msg.me { align-items:flex-end; }
   .chat-meta { font-size:10px; color:var(--on-surface-variant,#46555a); margin:0 7px 2px; }
   .chat-bub { max-width:82%; padding:8px 12px; border-radius:14px; font-size:13px; line-height:1.4;
-    white-space:pre-wrap; word-break:break-word; }
+    white-space:pre-wrap; word-break:break-word;
+    /* The app body is select-none (touch UI); re-enable selection on message text so it's copyable. */
+    -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; cursor:text; }
   .chat-bub.other { background:#d6dde0; color:#0e1a1a; }
   .chat-bub.mine { background:var(--primary,#1a5252); color:#fff; }
   .chat-tag { background:#ede7f6; color:#42306b; font-weight:700; border-radius:5px; padding:0 3px; }

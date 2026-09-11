@@ -397,5 +397,20 @@ export function drawerReportHtml(opts = {}) {
   } else {
     cur = `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-3 text-sm font-body text-on-surface-variant text-center">No drawer open right now.</div>`;
   }
-  return cur + drawerHistoryRowsHtml(opts);
+  return cur + (opts.collapse ? drawerHistoryCollapsible(opts) : drawerHistoryRowsHtml(opts));
+}
+
+// Reports context: the closed-shift list grows without bound and buries the rest of Reports, so
+// hide it behind a "Past shifts (N)" dropdown, closed by default.
+function drawerHistoryCollapsible(opts) {
+  const n = (cfg().cash_drawer_history || []).length;
+  if (!n) return drawerHistoryRowsHtml(opts);   // nothing to collapse → show the empty note
+  return `<button onclick="cdToggleReportHistory()" class="w-full flex items-center justify-between bg-surface-container-lowest border border-surface-container-high rounded-xl px-4 py-3 text-sm font-headline font-semibold text-on-surface hover:bg-surface-container transition-colors">
+      <span>Past shifts (${n})</span><span class="material-symbols-outlined" id="cd-rpt-hist-chev" style="font-size:20px">expand_more</span></button>
+    <div id="cd-rpt-hist" class="hidden mt-2">${drawerHistoryRowsHtml(opts)}</div>`;
+}
+export function cdToggleReportHistory() {
+  const el = document.getElementById('cd-rpt-hist'); if (!el) return;
+  const open = !el.classList.toggle('hidden');
+  const chev = document.getElementById('cd-rpt-hist-chev'); if (chev) chev.textContent = open ? 'expand_less' : 'expand_more';
 }

@@ -4,6 +4,8 @@
 // didn't notice it live, and lets a device opt in to a push the moment something breaks.
 import { REPORT_PROXY, PUSH_PROXY, VAPID_PUBLIC_KEY } from '../config.js';
 import { showToast } from '../utils.js';
+import { getState, cacheByteSize } from '../store.js';
+import { idbAvailable } from '../idbcache.js';
 
 const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const _ago = ms => {
@@ -69,10 +71,91 @@ export function toggleDiagStack(fp) {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+// ── On-device storage gauge ───────────────────────────────────────────────────
+// The device mirrors the whole app state to a local cache (IndexedDB, localStorage fallback) for
+// instant/offline reload. This pure helper reports where we are against the ceiling, what's using the
+// space, and — from the oldest record's age (records dominate growth) — a rough runway projection.
+export function computeStorageStats(state, cacheBytes, nowMs, ceilingBytes) {
+  // Sizes are JSON UTF-16 code-unit counts used as a byte proxy — the same unit on both sides, so the
+  // ratio is meaningful even if it isn't exact bytes. SLICE_KEYS mirror what store.js saveCache()
+  // persists, so the breakdown attributes real cache pressure and stays reconcilable with the headline.
+  const B = o => { try { return JSON.stringify(o).length; } catch { return 0; } };
+  const SLICE_KEYS = ['records', 'customers', 'config', 'configMeta', 'giftcards', 'queue', 'deletions', 'customerDeletions', 'appointments', 'apptDeletions'];
+  const slices = [];
+  for (const k of SLICE_KEYS) {
+    const v = state && state[k];
+    if (v == null) continue;
+    slices.push({ key: k, count: Array.isArray(v) ? v.length : null, bytes: B(v) });
+  }
+  slices.sort((a, b) => b.bytes - a.bytes);
+  // Runway: age from the oldest record (records carry checkinTime; ignore future-dated ones), then a
+  // CONSERVATIVE all-in growth rate = whole-cache / age. Using the full cache (not just records)
+  // slightly over-counts fixed config, which biases the estimate SAFE — a warning gauge must never
+  // over-state headroom. Needs a real span (≥2 records, ≥0.5 mo) to mean anything.
+  const recs = (state && state.records) || [];
+  let oldest = Infinity, n = 0;
+  for (const r of recs) { const t = +new Date(r && r.checkinTime); if (Number.isFinite(t) && t > 0 && t <= nowMs) { n++; if (t < oldest) oldest = t; } }
+  let ageMonths = null, growthPerMonth = null, monthsToCeiling = null;
+  if (n >= 2 && oldest < Infinity) {
+    ageMonths = (nowMs - oldest) / (1000 * 60 * 60 * 24 * 30.44);
+    if (ageMonths >= 0.5 && cacheBytes > 0) {
+      growthPerMonth = cacheBytes / ageMonths;
+      if (growthPerMonth > 0 && ceilingBytes > 0) monthsToCeiling = Math.max(0, (ceilingBytes - cacheBytes) / growthPerMonth);
+    }
+  }
+  return { cacheBytes, ceilingBytes, pctUsed: ceilingBytes > 0 ? cacheBytes / ceilingBytes : 0, slices, ageMonths, growthPerMonth, monthsToCeiling };
+}
+
+const _fmtMB = bytes => (bytes / 1048576).toFixed(2) + ' MB';
+// localStorage fallback cap (~5 MB). When the cache is in IndexedDB the real ceiling is the browser's
+// storage quota (navigator.storage.estimate().quota).
+const _STORAGE_CEILING = 5 * 1024 * 1024;
+
+async function _storageCard() {
+  const idb = idbAvailable();
+  let ceiling = _STORAGE_CEILING, usage = null, persisted = null, quotaKnown = !idb;   // localStorage: 5 MB IS the real cap
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage) {
+      if (idb && navigator.storage.estimate) { const est = await navigator.storage.estimate(); if (est && est.quota) { ceiling = est.quota; quotaKnown = true; } usage = (est && typeof est.usage === 'number') ? est.usage : null; }
+      if (navigator.storage.persisted) persisted = await navigator.storage.persisted().catch(() => null);
+    }
+  } catch (e) {}
+  const cacheBytes = cacheByteSize();
+  // In IDB with no reported quota, don't measure against the 5 MB localStorage cap (would false-alarm)
+  // — pass 0 so no bar-% / runway warning is computed; the display shows "IndexedDB" instead.
+  const st = computeStorageStats(getState(), cacheBytes, Date.now(), quotaKnown ? ceiling : 0);
+  const pct = Math.min(100, Math.round(st.pctUsed * 100));
+  const barColor = st.pctUsed >= 0.9 ? '#fa746f' : st.pctUsed >= 0.7 ? '#d4860a' : '#2a7a4f';
+  const m = st.monthsToCeiling;
+  const runway = !quotaKnown ? 'Plenty of room (IndexedDB).'
+    : m == null ? 'Not enough history yet to project a runway.'
+    : m >= 60 ? 'Years of headroom at the current pace.'
+    : `~${m < 1 ? '<1 month' : Math.round(m) + ' month' + (Math.round(m) === 1 ? '' : 's')} of headroom at the current pace${st.growthPerMonth ? ` (+${_fmtMB(st.growthPerMonth)}/mo)` : ''}.`;
+  const rows = st.slices.filter(s => s.bytes > 2).slice(0, 6).map(s =>
+    `<div class="flex justify-between text-[11px] font-body"><span class="text-on-surface-variant">${_esc(s.key)}${s.count != null ? ` · ${s.count}` : ''}</span><span class="text-on-surface">${_fmtMB(s.bytes)}</span></div>`).join('');
+  const warn = m != null && m < 6
+    ? `<div class="text-[11px] font-body mt-2" style="color:${m < 3 ? '#fa746f' : '#d4860a'}">⚠️ Approaching the on-device cache limit — time to plan the storage upgrade.</div>` : '';
+  return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-4 border border-surface-container-high">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <div class="font-headline font-semibold text-on-surface text-sm">On-device storage</div>
+      <div class="text-[11px] text-outline">${_fmtMB(st.cacheBytes)} / ${quotaKnown ? _fmtMB(ceiling) : 'IndexedDB'}</div>
+    </div>
+    <div class="h-2 rounded-full bg-surface-container-high overflow-hidden mb-2"><div style="width:${pct}%;background:${barColor};height:100%"></div></div>
+    <div class="text-[11px] font-body text-on-surface-variant mb-2">${runway}</div>
+    <div class="space-y-0.5">${rows}</div>
+    ${warn}
+    <div class="text-[10px] font-body text-outline mt-2">Backend: ${idb ? 'IndexedDB' : 'localStorage'}${persisted === true ? ' · persistent' : persisted === false ? ' · best-effort (install to Home Screen for durability)' : ''}${usage != null ? ` · ${_fmtMB(usage)} of ${_fmtMB(ceiling)} origin used` : ''}</div>
+  </div>`;
+}
+
 export async function renderDiagnostics() {
   const el = document.getElementById('diagnostics-content');
   if (!el) return;
   el.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-3 opacity-70">Loading…</div>';
+
+  // Storage gauge — computed from device state, so it renders even when the error-log fetch below
+  // fails (offline is exactly when the cache picture matters).
+  let sc = ''; try { sc = await _storageCard(); } catch (e) { /* gauge must never break the error log below */ }
 
   let errors = [];
   try {
@@ -80,7 +163,7 @@ export async function renderDiagnostics() {
     if (!r.ok) throw new Error(String(r.status));
     errors = (await r.json()).errors || [];
   } catch (e) {
-    el.innerHTML = '<div class="text-sm font-body text-error py-3">Couldn’t load the error log (offline, or the server is unreachable). Try again in a moment.</div>';
+    el.innerHTML = sc + '<div class="text-sm font-body text-error py-3">Couldn’t load the error log (offline, or the server is unreachable). Try again in a moment.</div>';
     return;
   }
 
@@ -104,7 +187,7 @@ export async function renderDiagnostics() {
   </div>`;
 
   if (!errors.length) {
-    el.innerHTML = alertCard + header + '<div class="text-sm font-body text-on-surface-variant py-3 opacity-70">No errors logged. 🎉 If something misbehaves, it will show up here (and push you if alerts are on).</div>';
+    el.innerHTML = sc + alertCard + header + '<div class="text-sm font-body text-on-surface-variant py-3 opacity-70">No errors logged. 🎉 If something misbehaves, it will show up here (and push you if alerts are on).</div>';
     return;
   }
 
@@ -129,5 +212,5 @@ export async function renderDiagnostics() {
     </div>`;
   }).join('');
 
-  el.innerHTML = alertCard + header + list;
+  el.innerHTML = sc + alertCard + header + list;
 }

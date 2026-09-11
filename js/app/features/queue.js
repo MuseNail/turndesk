@@ -6,7 +6,11 @@
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
-import { GROUP_COLORS } from '../config.js';
+import { GROUP_COLORS, DUP_PAID_WINDOW_MS } from '../config.js';
+import { findDuplicateCheckins } from './dup-guard.js';
+import { staffOnBreakNow } from './breaks.js';
+import { waiverActive } from '../waiver-util.js';
+import { handoffNonce, handoffEntryId, buildHandoff, handoffTombstone, handoffIsTombstone, handoffResult, handoffPrimaryName, handoffMultiGuest, HANDOFF_TTL_MS } from './checkin-handoff.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
@@ -568,6 +572,7 @@ export function showManualAdd() {
   const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
   const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  refreshManualAddChrome();   // set the primary-button label / skip button / bypass banner from config
   setTimeout(() => document.getElementById('manual-phone-1')?.focus(), 100);
 }
 // Appointment check-ins can pre-assign a technician. Show the picker only when the
@@ -586,12 +591,19 @@ export function addManualGuest() { manualGuestCount++; renderManualGuestCard(man
 export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); }
 export function closeManualAdd() {
   closeCustomerNote();   // flush + hide the customer-note side panel
+  // Tear down a live "waiting at the kiosk" overlay + stop watching, so Esc/X mid-wait can't orphan a
+  // stale scrim over a freshly-reopened form. We do NOT tombstone here — closing the desk form just
+  // stops the desk watching; the kiosk stays live (customer can still sign) and self-expires on TTL.
+  document.getElementById('manual-waiting-overlay')?.remove();
+  _deskWaiting = null; clearTimeout(_deskWaitTimer);
   const m = document.getElementById('manual-modal'); m.classList.add('hidden'); m.style.display = '';
   manualGuestCount = 0;
   const c = document.getElementById('manual-guests-container'); if (c) c.innerHTML = '';
 }
 
-export function submitManualAdd(skipApptGuard) {
+// Collect + validate + group-tag the manual-add party from the DOM. Returns the finished entry
+// objects (full queue-entry shape, group-tagged for party>1) or null on a validation miss.
+function collectManualEntries() {
   const newEntries = [];
   const isAppointment = document.getElementById('manual-is-appointment')?.checked || false;
   const apptTechId = isAppointment ? (document.getElementById('manual-appt-tech')?.value || '') : '';
@@ -602,7 +614,7 @@ export function submitManualAdd(skipApptGuard) {
     let phone, first, last;
     if (sameContact) { first = document.getElementById(`manual-firstonly-${i}`)?.value.trim() || ''; phone = document.getElementById('manual-phone-1')?.value.trim() || ''; last = ''; }
     else { phone = document.getElementById(`manual-phone-${i}`)?.value.trim() || ''; first = document.getElementById(`manual-first-${i}`)?.value.trim() || ''; last = document.getElementById(`manual-last-${i}`)?.value.trim() || ''; }
-    if (!first) { showToast('Please enter a first name for each guest.'); return; }
+    if (!first) { showToast('Please enter a first name for each guest.'); return null; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
     const visitNote = document.getElementById(`manual-visit-note-${i}`)?.value.trim() || '';
     const entry = { id: newEntryId(), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
@@ -612,19 +624,306 @@ export function submitManualAdd(skipApptGuard) {
     if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
     newEntries.push(entry);
   }
-  if (newEntries.length === 0) return;
-  // Appointment guard: same prompt as the kiosk — offer to check in FROM today's appointment.
-  if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitManualAdd(true))) return;
+  if (newEntries.length === 0) return null;
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`, groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length], primaryName = newEntries[0].name;
     newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });   // xss-ok: groupLabel BUILD; rendered escaped at queue 326/1189/1754 + turns 543
   }
-  newEntries.forEach(e => upsert(e));
-  upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
-  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
+  return newEntries;
+}
+
+export function submitManualAdd(skipApptGuard) {
+  const entries = collectManualEntries();
+  if (!entries) return;
+  // proceed = duplicate guard → routing. Wrapping the SAME callback passed to the appointment guard
+  // (which calls it directly on "Check In Separately") ensures that path is guarded + routed too.
+  const proceed = () => checkDuplicatesThenRoute(entries, () => routeManualCheckin(entries));
+  if (skipApptGuard !== true && window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), proceed)) return;
+  proceed();
+}
+// Deliberate escape hatch: skip the waiver for THIS check-in (records a bypassed waiver).
+export function submitManualAddSkip() {
+  const entries = collectManualEntries();
+  if (!entries) return;
+  const proceed = () => checkDuplicatesThenRoute(entries, () => finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null));
+  if (window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), proceed)) return;
+  proceed();
+}
+
+// Decide what a manual check-in does, in priority order. Waiver-inactive keeps today's exact
+// behavior; bypass/no-kiosk record a bypassed waiver (owner-chosen); a designated kiosk gets the
+// handoff (the customer signs there).
+function routeManualCheckin(entries) {
+  const c = cfg();
+  const byUser = getActiveUser()?.name || null;
+  if (!waiverActive(c)) { finalizeManualCheckin(entries); return; }                       // (0) nothing to sign → plain queue
+  if (c.checkin_bypass_mode) { finalizeManualBypass(entries, 'front-desk-bypass', byUser); return; }  // (1) bypass mode
+  const kioskId = (c.kiosk_device_id || '').trim();
+  if (kioskId) { sendManualToKiosk(entries, kioskId, byUser); return; }                    // (2/3) designated kiosk (this device or another)
+  finalizeManualBypass(entries, 'front-desk-bypass', byUser);                              // (4) no kiosk → owner chose skip
+}
+
+// Self-releasing guard so a bounced double-tap on the desk finalize paths (which can also write a
+// waiver record) can't create the party + waiver twice before closeManualAdd clears the form.
+let _manualFinalizing = false;
+function finalizeManualCheckin(entries) {
+  if (_manualFinalizing) return; _manualFinalizing = true; setTimeout(() => { _manualFinalizing = false; }, 1500);
+  entries.forEach(e => upsert(e));
+  upsertPartyCustomers(entries);   // one Square profile per distinct phone (no shared-phone flip-flop)
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
+  afterManualFinalize(entries);
+}
+function finalizeManualBypass(entries, method, byUser) {
+  if (_manualFinalizing) return; _manualFinalizing = true; setTimeout(() => { _manualFinalizing = false; }, 1500);
+  window.acceptWaiverForHandoff?.(entries, { bypassed: true, method, byUser });   // save+stamp a bypassed record (audited in waiver.js)
+  entries.forEach(e => upsert(e));
+  upsertPartyCustomers(entries);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual, waiver ${method === 'front-desk-takeover' ? 'taken over' : 'bypassed'})`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js)
+  afterManualFinalize(entries);
+}
+function afterManualFinalize(entries) {
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();
-  showToast(`${newEntries.map(e => e.name).join(' & ')} added to queue`);   // xss-ok: showToast → textContent
+  showToast(`${entries.map(e => e.name).join(' & ')} added to queue`);   // xss-ok: showToast → textContent
+}
+
+// ── Front-desk → kiosk handoff (desk side) ────────────────────────────────────
+// The desk ships FINISHED entries with deterministic ids (idempotent finalize) as a synced config
+// signal, then waits. It never queues the party itself unless it takes over.
+let _deskWaiting = null;         // { nonce, entries } while THIS desk is waiting on the kiosk
+let _deskWaitTimer = null;
+function sendManualToKiosk(entries, kioskId, byUser) {
+  const nonce = handoffNonce(Date.now(), Math.random().toString(36).slice(2, 8));
+  entries.forEach((e, i) => { e.id = handoffEntryId(nonce, i); });   // deterministic → a re-Confirm/replay collapses onto the same rows
+  const h = buildHandoff(entries, kioskId, byUser, DEVICE_ID, nonce, Date.now());
+  dispatch('config.set', { key: 'kiosk_handoff', value: h });
+  if (kioskId === DEVICE_ID) { closeManualAdd(); return; }   // single device: the kiosk ack opens here via onStateChange; no waiting scrim
+  _deskWaiting = { nonce, entries };
+  showManualWaitingView(h);
+  clearTimeout(_deskWaitTimer);
+  _deskWaitTimer = setTimeout(() => {   // desk-side TTL: if the customer never acts, expire it ourselves
+    if (_deskWaiting && _deskWaiting.nonce === nonce) {
+      dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'expired', Date.now()) });
+    }
+  }, HANDOFF_TTL_MS);
+}
+function showManualWaitingView(h) {
+  document.getElementById('manual-waiting-overlay')?.remove();
+  const el = document.createElement('div');
+  el.id = 'manual-waiting-overlay';
+  el.className = 'absolute inset-0 z-10 flex items-center justify-center rounded-2xl';
+  el.style.cssText = 'position:absolute;inset:0;background:var(--surface-container-lowest,#fff);border-radius:1rem;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto';
+  el.innerHTML = renderWaitingBody(h);
+  const card = document.getElementById('manual-card');   // explicit id — the note panel shares the same class
+  if (card) { card.style.position = 'relative'; card.appendChild(el); }
+}
+function renderWaitingBody(h) {
+  const guests = h.entries || [];
+  const rows = guests.map((e, i) => {
+    const parts = String(e.name || '').trim().split(/\s+/);
+    const first = parts[0] || '', last = parts.slice(1).join(' ');
+    return `<div class="mb-3 p-3 rounded-xl border border-surface-container-high">
+      <div class="flex gap-2 mb-2">
+        <input value="${escHtml(first)}" oninput="deskEditHandoffName(${i},'first',this.value)" placeholder="First" class="flex-1 bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
+        <input value="${escHtml(last)}" oninput="deskEditHandoffName(${i},'last',this.value)" placeholder="Last" class="flex-1 bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
+      </div>
+      <div class="text-xs font-body text-on-surface-variant">${escHtml(e.phone || '—')}${(e.services||[]).length?` · ${e.services.length} service${e.services.length>1?'s':''}`:''}${e.txnNote?` · ${escHtml(e.txnNote)}`:''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="w-full max-w-md text-center">
+    <div class="text-3xl mb-2">📲</div>
+    <div class="text-lg font-headline font-bold text-on-surface mb-1">Waiting for ${escHtml(handoffPrimaryName(h))} at the kiosk</div>
+    <div class="text-sm font-body text-on-surface-variant mb-4">${handoffMultiGuest(h) ? 'The primary reviews the details and signs for the group.' : 'The customer reviews their details and signs the waiver.'} You can fix a name here; a wrong phone number means you'll need to cancel and start over.</div>
+    <div class="text-left">${rows}</div>
+    <div class="flex gap-3 mt-4">
+      <button onclick="deskCancelHandoff()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="deskTakeoverHandoff()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-headline font-bold hover:bg-primary-dim transition-colors active:scale-95">Take over here</button>
+    </div>
+    <div class="text-[11px] font-body text-on-surface-variant mt-2">“Take over” checks them in now without a customer signature (recorded as bypassed).</div>
+  </div>`;
+}
+let _deskNameTimer = null;
+export function deskEditHandoffName(idx, which, value) {
+  if (!_deskWaiting) return;
+  const e = _deskWaiting.entries[idx]; if (!e) return;
+  const parts = String(e.name || '').trim().split(/\s+/);
+  let first = parts[0] || '', last = parts.slice(1).join(' ');
+  if (which === 'first') first = value.trim(); else last = value.trim();
+  e.name = first + (last ? ' ' + last : '');
+  if (_deskWaiting.entries.length > 1) {   // re-derive the primary's group label so the queue card reads correctly
+    const primaryName = _deskWaiting.entries[0].name;
+    _deskWaiting.entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${primaryName} — ${g.name}`; });   // xss-ok: groupLabel BUILD; rendered escaped at the queue/turns cards
+  }
+  clearTimeout(_deskNameTimer);
+  _deskNameTimer = setTimeout(() => {
+    if (!_deskWaiting) return;
+    // Never resurrect a handoff the kiosk already settled while this edit was pending (mirrors the
+    // kiosk-side guard): if it's now a tombstone or the nonce changed, a fresh-ts pending would
+    // clobber the confirmed/cancelled tombstone and re-broadcast the party's PII.
+    const cur = cfg().kiosk_handoff;
+    if (handoffIsTombstone(cur) || !cur || cur.nonce !== _deskWaiting.nonce) return;
+    const h = buildHandoff(_deskWaiting.entries, (cfg().kiosk_device_id || '').trim(), getActiveUser()?.name || null, DEVICE_ID, _deskWaiting.nonce, Date.now());
+    dispatch('config.set', { key: 'kiosk_handoff', value: h });   // fresh ts → survives the per-key stale guard; kiosk re-gates its box
+  }, 400);
+}
+// Did the kiosk already confirm this nonce? Check both the tombstone AND the actual queue row
+// (deterministic id) — either signal may land first across the network, closing the sub-second race.
+function _kioskAlreadyConfirmed(nonce) {
+  const cur = cfg().kiosk_handoff;
+  if (handoffIsTombstone(cur) && cur.done === nonce && handoffResult(cur) === 'confirmed') return true;
+  return getState().queue.some(e => e.id === handoffEntryId(nonce, 0));
+}
+export function deskCancelHandoff() {
+  if (!_deskWaiting) return;
+  const nonce = _deskWaiting.nonce;
+  if (_kioskAlreadyConfirmed(nonce)) {   // don't tell staff it cancelled — the customer is already queued
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.();
+    showToast('Already checked in at the kiosk'); return;
+  }
+  _deskWaiting = null; clearTimeout(_deskWaitTimer);
+  dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'cancelled', Date.now()) });
+  document.getElementById('manual-waiting-overlay')?.remove();
+  showToast('Kiosk check-in cancelled');
+}
+export function deskTakeoverHandoff() {
+  if (!_deskWaiting) return;
+  const { nonce, entries } = _deskWaiting;
+  if (_kioskAlreadyConfirmed(nonce)) {   // kiosk beat us — don't double-create or overwrite the signed waiver
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.();
+    showToast('Already checked in at the kiosk'); return;
+  }
+  _deskWaiting = null; clearTimeout(_deskWaitTimer);
+  dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'takeover', Date.now()) });
+  document.getElementById('manual-waiting-overlay')?.remove();
+  // The queue row is idempotent (deterministic id), so the true sub-second take-over-vs-confirm race
+  // yields ONE party. The bypassed waiver keeps a RANDOM id on purpose: if the kiosk also just signed
+  // (wv-<nonce>), we keep both records rather than let this bypassed one overwrite the signed one.
+  finalizeManualBypass(entries, 'front-desk-takeover', getActiveUser()?.name || null);
+}
+// Called from onStateChange on every config change — resolve this desk's waiting view when the
+// kiosk (or another desk / a timeout) settles the handoff.
+export function onDeskHandoffState() {
+  if (!_deskWaiting) return;
+  const cur = cfg().kiosk_handoff;
+  if (handoffIsTombstone(cur) && cur.done === _deskWaiting.nonce) {
+    const r = handoffResult(cur), entries = _deskWaiting.entries;
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    if (r === 'confirmed') { closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }   // xss-ok: showToast → textContent
+    else if (r === 'cancelled') showToast('Customer cancelled at the kiosk — check the details and resend');
+    else if (r === 'expired') showToast('Kiosk timed out — try again');
+    return;
+  }
+  // Same-nonce pending update (the kiosk edited a name) → keep our copy in sync + refresh the view,
+  // unless the operator is mid-edit in it.
+  if (cur && !cur.done && cur.nonce === _deskWaiting.nonce && Array.isArray(cur.entries)) {
+    const overlay = document.getElementById('manual-waiting-overlay');
+    const editingHere = document.activeElement?.tagName === 'INPUT' && overlay?.contains(document.activeElement);
+    if (overlay && !editingHere) { _deskWaiting.entries = cur.entries; overlay.innerHTML = renderWaitingBody(cur); }
+    return;
+  }
+  // Another desk's Send replaced our pending handoff (nonce changed, still pending).
+  if (cur && !cur.done && cur.nonce && cur.nonce !== _deskWaiting.nonce) {
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    showToast('Another check-in took the kiosk — please resend');
+  }
+}
+
+// Set the manual-add primary-button label + skip button + bypass banner from config. Called on
+// config change (onStateChange) and when the manual modal opens.
+export function refreshManualAddChrome() {
+  const c = cfg();
+  const btn = document.getElementById('manual-primary-btn');
+  const skip = document.getElementById('manual-skip-btn');
+  const banner = document.getElementById('manual-bypass-banner');
+  const active = waiverActive(c);
+  const bypass = !!c.checkin_bypass_mode;
+  const kioskSet = !!(c.kiosk_device_id || '').trim();
+  if (banner) {
+    if (active && bypass) { banner.innerHTML = '⚠️ Bypass mode is on — this check-in will be added <strong>without</strong> a signed waiver.'; banner.classList.remove('hidden'); }
+    else if (active && !kioskSet) { banner.innerHTML = '⚠️ No check-in kiosk is set — this check-in will be added <strong>without</strong> a signed waiver. Set a kiosk in Settings to have customers sign.'; banner.classList.remove('hidden'); }
+    else banner.classList.add('hidden');
+  }
+  if (btn) btn.textContent = (!active || bypass || !kioskSet) ? 'Add to Queue' : 'Send to kiosk';
+  if (skip) skip.classList.toggle('hidden', !(active && !bypass && kioskSet));   // "skip waiver" only matters when a kiosk would otherwise be used
+}
+
+// ── Duplicate check-in guard (desk side) ──────────────────────────────────────
+// Warn before adding a customer whose phone is already on today's board (open) or was paid in the
+// last DUP_PAID_WINDOW_MS. Soft + non-blocking. Reads the live queue only (works offline).
+let _dupProceed = null;
+function checkDuplicatesThenRoute(entries, proceedFn) {
+  const qList = getState().queue || [];
+  const now = Date.now();
+  const ids = entries.map(e => String(e.id));
+  const seen = new Set(), openM = [], paidM = [];
+  for (const e of entries) {
+    const key = notePhoneKey(e.phone || '');
+    if (!key) continue;   // blank/short phone → skip (no false positives on phone-less walk-ins)
+    const { open, recentlyPaid } = findDuplicateCheckins({ phoneKey: key, queue: qList, nowMs: now, paidWindowMs: DUP_PAID_WINDOW_MS, excludeIds: ids, normalize: notePhoneKey });
+    open.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); openM.push(m); } });
+    recentlyPaid.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); paidM.push(m); } });
+  }
+  if (!openM.length && !paidM.length) { proceedFn(); return; }
+  _dupProceed = proceedFn;
+  showDupGuardModal(openM, paidM);
+}
+
+const _dupPill = status => { const p = serviceLineStyle(status).pill; return `<span style="background:${p.bg};color:${p.fg};border-radius:12px;padding:2px 9px;font-size:11px;font-weight:600">${escHtml(p.label)}</span>`; };
+const _dupMins = t => { const at = typeof t === 'number' ? t : Date.parse(t); if (Number.isNaN(at)) return 'recently'; const m = Math.max(0, Math.round((Date.now() - at) / 60000)); return m < 1 ? 'just now' : `${m} min ago`; };
+const _dupTechs = ids => (ids || []).map(id => (cfg().staff || []).find(s => s.id === id)?.name).filter(Boolean).join(', ');
+
+function showDupGuardModal(openM, paidM) {
+  const host = document.getElementById('dup-guard-modal');
+  if (!host) { _dupProceed?.(); _dupProceed = null; return; }   // fail-open: never block a check-in on a missing modal
+  const sect = label => `<div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mt-2 mb-1">${label}</div>`;
+  const openRows = !openM.length ? '' : sect('On the board now') + openM.map(m => `
+    <button onclick="dupGuardGoTo('${escAttrJs(String(m.id))}')" class="w-full text-left mb-2 p-3 rounded-xl border border-surface-container-high hover:bg-surface-container transition-colors">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-body font-semibold text-on-surface">${escHtml(m.name || '—')}</span>
+        <span class="text-xs font-body text-primary font-semibold flex items-center gap-0.5">Tap to open <span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span></span>
+      </div>
+      <div class="text-xs font-body text-on-surface-variant mt-1 flex items-center gap-1.5 flex-wrap">${_dupPill(m.status)} <span>${_dupMins(m.checkinTime)}${_dupTechs(m.techIds) ? ` · ${escHtml(_dupTechs(m.techIds))}` : ''}</span></div>
+    </button>`).join('');
+  const paidRows = !paidM.length ? '' : sect('Just checked out') + paidM.map(m => `
+    <div class="mb-2 p-3 rounded-xl border border-surface-container-high" style="opacity:.9">
+      <div class="font-body font-semibold text-on-surface">${escHtml(m.name || '—')}</div>
+      <div class="text-xs font-body text-on-surface-variant mt-1">Paid ${_dupMins(m.paidAt)}${_dupTechs(m.techIds) ? ` · ${escHtml(_dupTechs(m.techIds))}` : ''}</div>
+    </div>`).join('');
+  host.innerHTML = `
+    <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-md shadow-2xl fade-up max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background:#fef3c7;color:#854f0b"><span class="material-symbols-outlined" style="font-size:19px">warning</span></span>
+        <h2 class="text-lg font-headline font-bold text-on-surface">Someone with this phone is already on the board</h2>
+      </div>
+      <p class="text-sm font-body text-on-surface-variant mb-2 ml-10">Add them again only if this is a separate visit.</p>
+      ${openRows}${paidRows}
+      <div class="flex gap-2 mt-3">
+        <button onclick="dupGuardCancel()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold hover:bg-surface-container transition-colors">Cancel</button>
+        <button onclick="dupGuardAddAnyway()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold hover:bg-surface-container transition-colors">Add anyway</button>
+      </div>
+    </div>`;
+  host.classList.remove('hidden'); host.style.display = 'flex';
+  host.onclick = e => { if (e.target === host) dupGuardCancel(); };   // backdrop tap = cancel (matches apptGuard)
+}
+function closeDupGuard() { const m = document.getElementById('dup-guard-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; m.innerHTML = ''; } }
+export function dupGuardAddAnyway() { const p = _dupProceed; _dupProceed = null; closeDupGuard(); p?.(); }
+export function dupGuardCancel() { _dupProceed = null; closeDupGuard(); }   // leave the builder open
+export function dupGuardGoTo(id) {
+  _dupProceed = null; closeDupGuard(); closeManualAdd();
+  window.showDashPanel?.('queue');   // switches to + re-renders the queue panel
+  setTimeout(() => {
+    const row = document.querySelector(`.queue-row[data-id="${(window.CSS && CSS.escape) ? CSS.escape(String(id)) : String(id)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.style.transition = 'box-shadow .3s'; row.style.boxShadow = '0 0 0 3px var(--primary,#1a5252)';
+    setTimeout(() => { row.style.boxShadow = ''; }, 2200);
+  }, 80);
 }
 
 // ── Edit Check-In ─────────────────────────────────
@@ -1104,7 +1403,7 @@ export function renderGroupAssignContent() {
       if (assigned) opts = [...checkedIn, assigned];
     }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
@@ -1362,7 +1661,7 @@ function _renderAssignOneList() {
     let opts = checkedIn;
     if (sel && !checkedIn.some(s => s.id === sel)) { const assigned = staffById(sel); if (assigned) opts = [...checkedIn, assigned]; }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');

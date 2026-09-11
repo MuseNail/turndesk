@@ -5,7 +5,8 @@
 // persistent outbox, so the front desk keeps working through wifi drops; the
 // outbox replays on reconnect and the DO dedupes by mutationId.
 
-import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache } from './store.js';
+import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache, flushCache, markServerHydrated } from './store.js';
+import { requestPersistence } from './idbcache.js';
 import { withAuth, salonSlug, scopedKey } from './apptoken.js';
 import { apiOrigin } from './apiorigin.js';
 
@@ -93,15 +94,20 @@ export function isForeignWrite(msg, currentSalon) {
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
-export function start() {
-  loadCache();                                   // instant render from last snapshot
-  connect();
+export async function start() {
+  connect();                                     // start the DO connection IMMEDIATELY — never gated on the local cache read
   setTimeout(() => { if (!_connected) httpSnapshot(); }, 2500); // WS slow/blocked → HTTP hydrate
+  requestPersistence();                          // best-effort: make the IDB cache non-evictable (fire-and-forget)
+  // Hydrate from the local cache for boot's first render. Bounded — idbcache._open() times out, so a
+  // wedged IndexedDB (iOS Safari) can never hang the boot; the DO snapshot hydrates regardless, and
+  // the seq-guard + _serverHydrated in loadCache stop a stale cache from clobbering a fresher snapshot.
+  await loadCache();
   // Re-establish + catch up the moment the device wakes or the network returns. An iPad that
   // slept or had a wifi blip otherwise keeps a dead socket and stops seeing other devices'
-  // changes until a manual refresh — this is what makes updates appear without one.
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (!document.hidden) resync(); });
-  if (typeof window !== 'undefined') { window.addEventListener('online', resync); window.addEventListener('focus', resync); }
+  // changes until a manual refresh — this is what makes updates appear without one. flushCache on
+  // hide/pagehide so the last optimistic write isn't lost in the async-commit window.
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden) flushCache(); else resync(); });
+  if (typeof window !== 'undefined') { window.addEventListener('online', resync); window.addEventListener('focus', resync); window.addEventListener('pagehide', flushCache); }
 }
 
 // Force the connection healthy and pull a fresh snapshot to catch any broadcasts missed while
@@ -176,7 +182,7 @@ function send(obj) {
 
 function handle(msg) {
   if (msg.type === 'pong') return;
-  if (msg.type === 'snapshot') { hydrate({ state: msg.state, seq: msg.seq }); reapplyOutbox(); replayOutbox(); return; }
+  if (msg.type === 'snapshot') { hydrate({ state: msg.state, seq: msg.seq }); markServerHydrated(); reapplyOutbox(); replayOutbox(); return; }
   if (msg.type === 'applied') {
     if (msg.error) { console.warn('[sync] mutation rejected:', msg.error, msg.mutationId); deadLetter(msg.mutationId, msg.error); return; }
     ackOutbox(msg.mutationId);
@@ -265,9 +271,10 @@ async function httpSnapshot() {
     if (!res.ok) return;
     setAuthNeeded(false);   // a 200 means the session is valid again
     hydrate(await res.json());
+    markServerHydrated();
     reapplyOutbox();
     replayOutbox();
-  } catch (e) { /* offline — the localStorage cache already rendered */ }
+  } catch (e) { /* offline — the IndexedDB/localStorage cache already rendered */ }
 }
 
 async function httpMutate(msg) {

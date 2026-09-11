@@ -1,6 +1,6 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
 import { apiOrigin } from './apiorigin.js';
-export const APP_VERSION = 'td-v0.50';
+export const APP_VERSION = 'td-v0.51';
 export const APP_NAME    = 'turndesk';
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 
@@ -34,17 +34,21 @@ export const VAPID_PUBLIC_KEY = 'BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30V
 
 // Seeded into config.role_permissions on first run; also the fallback in canDo().
 export const DEFAULT_ROLE_PERMISSIONS = {
-  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true,  manageStaff: true,  manageServices: true,  markPaidDirect: true,  viewClockedIn: true  },
-  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true,  manageStaff: true,  manageServices: true,  markPaidDirect: true,  viewClockedIn: true,  manageCalendar: true,  viewWaivers: true  },
+  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false, manageCalendar: false, viewWaivers: false },
   // Same limits as front desk, but keeps report/payroll access — for staff who
   // review numbers without operating the register.
-  reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
+  reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false, manageCalendar: false, viewWaivers: false },
 };
 
 export const GROUP_COLORS = [
   '#1a5252','#785a1a','#5c3d8f','#1a5c7a','#7a2a1a',
   '#2a7a4f','#7a1a5c','#4f4f1a','#1a3a7a','#7a4f1a',
 ];
+
+// Duplicate check-in guard: warn if a phone was PAID within this window (the customer just checked
+// out) — an open ticket always warns regardless of age.
+export const DUP_PAID_WINDOW_MS = 30 * 60 * 1000;
 
 // Stable per-CUSTOMER calendar colors (utils.js customerColor hashes a customer key
 // into this palette). 16 distinct dark hues tuned to read well as a light tint

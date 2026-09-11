@@ -5,6 +5,8 @@ import { PUSH_PROXY } from '../config.js';
 import { withAuth } from '../apptoken.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
+import { breakInstancesForDay, ruleOccurrence } from './breaks.js';
+import { canDo } from '../session.js';
 
 // Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
 // blank/placeholder → neutral gray. One source of truth for both grid views.
@@ -36,6 +38,12 @@ const _escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').repl
 
 let _calGapiLoaded = false, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
+// Break time-blocks (per-tech; synced config lists). cfg().breaks = one-offs, cfg().break_rules =
+// recurring rules. _break* hold the modal's current edit target/mode. App/DO-only — NOT synced to
+// Google Calendar. Create/edit gated on canDo('manageCalendar'); anyone can SEE the greyed bands.
+const calBreaks = () => getState().config.breaks || [];
+const calBreakRules = () => getState().config.break_rules || [];
+let _breakMode = 'create', _breakOnceId = null, _breakRuleId = null, _breakRuleDate = '', _breakStaffId = '';
 // Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
 // the Turns "upcoming" strip + appointment reminders always reflect TODAY even when the Calendar
 // tab is parked on another date. (Before, both read _calEvents, which holds whatever day you're
@@ -632,6 +640,21 @@ export function calRenderGrid() {
     events.forEach(a => { if (!a.start) return; bookings.set(a.id, [a]); });   // one appt = one booking
     const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
     const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Break time-blocks for this tech's column: greyed striped bands (below appt bubbles; tap to
+    // edit/delete). Only real tech columns — the Unassigned column has no tech to block.
+    if (cal.id) {
+      const dayStartB = new Date(_calDate); dayStartB.setHours(0,0,0,0);
+      const dstrB = localDateStr(_calDate), wdayB = _calDate.getDay();
+      breakInstancesForDay(calBreaks(), calBreakRules(), cal.id, dstrB, wdayB, +dayStartB).forEach(b => {
+        let topMin = b.startMin - START_HOUR*60, durMin = Math.max(b.durMin, 15);
+        if (topMin >= (END_HOUR-START_HOUR)*60 || topMin + durMin <= 0) return;   // outside the visible hours
+        if (topMin < 0) { durMin += topMin; topMin = 0; }   // clamp a break starting before the grid's first hour
+        const click = b.kind === 'rule' ? `calRuleOccClick('${_e(b.ruleId)}','${b.dayStr}')` : `calBreakClick('${_e(b.id)}')`;
+        const repIcon = b.kind === 'rule' ? `<span class="material-symbols-outlined" style="font-size:10px;flex-shrink:0;color:var(--on-surface-variant,#556270)">repeat</span>` : '';
+        // Theme-aware muted striped band (dims in dark mode via surface tokens; hex fallbacks for safety).
+        body += `<div onclick="${click}" title="Blocked — tap to edit" style="position:absolute;left:2px;right:2px;top:${(topMin/SLOT_MINS)*SLOT_H}px;height:${Math.max((durMin/SLOT_MINS)*SLOT_H,18)}px;background:repeating-linear-gradient(45deg,var(--surface-container-high,#e5e7eb),var(--surface-container-high,#e5e7eb) 5px,var(--surface-container-highest,#d6dadd) 5px,var(--surface-container-highest,#d6dadd) 10px);border:1px dashed var(--outline-variant,#9aa3ab);border-radius:6px;z-index:1;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:2px;box-sizing:border-box"><span class="material-symbols-outlined" style="font-size:11px;flex-shrink:0;color:var(--on-surface-variant,#556270)">block</span><span style="font-size:10px;font-family:var(--font-body);font-weight:700;color:var(--on-surface-variant,#556270);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b.label)}</span>${repIcon}</div>`;
+      });
+    }
     // Lay out bookings: position + height, then assign side-by-side lanes so that
     // different customers booked at the same time sit next to each other instead of
     // stacking on top of each other (req: cleanly see concurrent appointments).
@@ -1041,7 +1064,183 @@ function calReorderEnd(e) {
 }
 
 // ── Event click + quick check-in ─────────────────
-export function calSlotClick(colId, hour, minute) { showNewApptModal(colId, hour, minute, _calCalendars.find(c => c.id === colId)?.name); }
+// Tapping an empty slot: on a real tech's column, offer New appointment OR Block time (break) — but
+// only for a user who can block time; the Unassigned column (id '') and users without
+// canDo('manageCalendar') go straight to a new appointment (keeping the one-tap booking flow).
+export function calSlotClick(colId, hour, minute) {
+  const techName = _calCalendars.find(c => c.id === colId)?.name;
+  if (!colId || !canDo('manageCalendar')) { showNewApptModal(colId, hour, minute, techName); return; }
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Escaper for a value placed in a single-quoted JS string inside a double-quoted onclick attribute.
+  const _je = s => (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  const t2 = n => String(n).padStart(2, '0');
+  const modal = document.createElement('div');
+  modal.id = 'cal-slot-chooser';
+  modal.className = 'fixed inset-0 z-[86] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-xs shadow-2xl">
+    <div class="text-center mb-1"><div class="font-headline font-bold text-on-surface text-base">${esc(techName || 'Tech')}</div>
+      <div class="text-xs font-body text-on-surface-variant">${_calDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${((hour%12)||12)}:${t2(minute)} ${hour>=12?'PM':'AM'}</div></div>
+    <div class="space-y-2 mt-3">
+      <button onclick="document.getElementById('cal-slot-chooser')?.remove(); showNewApptModal('${_je(colId)}',${hour},${minute},'${_je(techName)}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-primary/40 hover:bg-primary/5 transition-colors text-left"><span class="material-symbols-outlined text-primary" style="font-size:22px">event</span><div><div class="font-headline font-semibold text-sm text-on-surface">New appointment</div><div class="text-[11px] font-body text-on-surface-variant">Book a customer</div></div></button>
+      <button onclick="document.getElementById('cal-slot-chooser')?.remove(); showBreakModal('${_je(colId)}',${hour},${minute})" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-surface-container-high hover:bg-surface-container transition-colors text-left"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">block</span><div><div class="font-headline font-semibold text-sm text-on-surface">Block time</div><div class="text-[11px] font-body text-on-surface-variant">Break / lunch — marks the tech unavailable</div></div></button>
+    </div>
+    <button onclick="document.getElementById('cal-slot-chooser')?.remove()" class="w-full mt-3 py-2 rounded-xl text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+function newBreakId() { return 'brk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
+const _WDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];   // Sun..Sat
+const _wdayBg = on => on ? 'var(--primary,#1a5252)' : 'transparent';
+const _wdayFg = on => on ? '#fff' : 'var(--on-surface,#0e1a1a)';
+// Create a one-off OR a repeating block (repeat toggle in the form).
+export function showBreakModal(staffId, hour, minute) {
+  if (!canDo('manageCalendar')) return;
+  _breakMode = 'create'; _breakOnceId = null; _breakRuleId = null; _breakRuleDate = ''; _breakStaffId = staffId;
+  _renderBreakForm({ startH: hour, startM: minute, durMin: 30, label: 'Break', repeat: false, weekdays: [_calDate.getDay()], until: '' });
+}
+// Edit a one-off block.
+export function calBreakClick(id) {
+  if (!canDo('manageCalendar')) return;
+  const b = calBreaks().find(x => x.id === id); if (!b) return;
+  const s = new Date(b.start), e = new Date(b.end);
+  _breakMode = 'edit-once'; _breakOnceId = b.id; _breakRuleId = null; _breakRuleDate = ''; _breakStaffId = b.staffId;
+  _renderBreakForm({ startH: s.getHours(), startM: s.getMinutes(), durMin: Math.max(15, Math.round((e - s) / 60000)), label: b.label || 'Break', repeat: false, weekdays: [], until: '' });
+}
+// Edit ONE occurrence of a repeating block (Save/Delete then ask This-day / All-days).
+export function calRuleOccClick(ruleId, dayStr) {
+  if (!canDo('manageCalendar')) return;
+  const r = calBreakRules().find(x => x.id === ruleId); if (!r) return;
+  const wday = new Date(dayStr + 'T00:00:00').getDay();
+  const occ = ruleOccurrence(r, dayStr, wday) || { startMin: r.startMin, durMin: r.durMin, label: r.label };
+  _breakMode = 'edit-rule'; _breakRuleId = r.id; _breakRuleDate = dayStr; _breakOnceId = null; _breakStaffId = r.staffId;
+  _renderBreakForm({ startH: Math.floor(occ.startMin / 60), startM: occ.startMin % 60, durMin: occ.durMin, label: occ.label || 'Break', repeat: true, weekdays: r.weekdays || [], until: r.until || '' });
+}
+function _renderBreakForm({ startH, startM, durMin, label, repeat, weekdays, until }) {
+  const techName = _calCalendars.find(c => c.id === _breakStaffId)?.name || 'Tech';
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const t2 = n => String(n).padStart(2, '0');
+  const durs = [15, 30, 45, 60, 90, 120];
+  const wset = new Set(weekdays || []);
+  const dayBtns = _WDAY_LETTERS.map((L, n) => `<button type="button" data-wday="${n}" data-on="${wset.has(n) ? '1' : '0'}" title="${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][n]}" onclick="calBreakToggleWday(this)" style="width:36px;height:36px;border-radius:50%;border:1px solid var(--surface-container-high,#d1d5db);font-size:13px;font-weight:700;font-family:var(--font-body);cursor:pointer;background:${_wdayBg(wset.has(n))};color:${_wdayFg(wset.has(n))}">${L}</button>`).join('');
+  const title = _breakMode === 'create' ? 'Block time' : _breakMode === 'edit-once' ? 'Edit block' : 'Edit repeating block';
+  const showRepeat = _breakMode !== 'edit-once';   // a one-off has no repeat controls
+  const isRule = _breakMode === 'edit-rule';
+  const modal = document.createElement('div');
+  modal.id = 'break-modal';
+  modal.className = 'fixed inset-0 z-[88] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeBreakModal(); };
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="closeBreakModal()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
+    <div class="text-xs font-body text-on-surface-variant mb-3">${esc(techName)} · ${_calDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
+        <input id="break-start" type="time" value="${t2(startH)}:${t2(startM)}" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface"></div>
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Length</label>
+        <select id="break-dur" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface">${durs.map(d => `<option value="${d}" ${d === durMin ? 'selected' : ''}>${d < 60 ? d + ' min' : (d / 60) + (d === 60 ? ' hr' : ' hrs')}</option>`).join('')}</select></div>
+    </div>
+    <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Label (optional)</label>
+    <input id="break-label" type="text" value="${esc(label)}" placeholder="e.g. Lunch" maxlength="24" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface mb-3">
+    ${showRepeat ? `
+      ${isRule ? `<div class="flex items-center gap-1.5 mb-2 text-sm font-body font-semibold text-on-surface"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">repeat</span> Repeats</div>`
+        : `<label class="flex items-center gap-2 mb-2 cursor-pointer"><input type="checkbox" id="break-repeat" ${repeat ? 'checked' : ''} onchange="document.getElementById('break-repeat-controls').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:var(--primary,#1a5252)"><span class="text-sm font-body font-semibold text-on-surface">Repeat</span></label>`}
+      <div id="break-repeat-controls" style="display:${repeat ? '' : 'none'}" class="mb-3">
+        <div class="flex items-center gap-1.5 mb-2 flex-wrap">${dayBtns}</div>
+        <div class="flex gap-2 mb-3"><button type="button" onclick="calBreakQuickDays('all')" class="text-[11px] font-body font-semibold text-primary px-2.5 py-1 rounded-full border border-primary/40 hover:bg-primary/5 transition-colors">Every day</button><button type="button" onclick="calBreakQuickDays('week')" class="text-[11px] font-body font-semibold text-primary px-2.5 py-1 rounded-full border border-primary/40 hover:bg-primary/5 transition-colors">Weekdays</button></div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Ends (optional)</label>
+        <input id="break-until" type="date" value="${esc(until)}" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface">
+        <div class="text-[10px] font-body text-on-surface-variant mt-1">Leave blank to repeat until you remove it.</div>
+      </div>` : ''}
+    <div class="flex gap-2 mt-4">
+      ${_breakMode !== 'create' ? `<button onclick="deleteBreak()" class="px-4 py-2.5 rounded-xl border-2 border-error text-error font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Delete</button>` : ''}
+      <button onclick="closeBreakModal()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="saveBreak()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm hover:bg-primary-dim transition-colors">${_breakMode === 'create' ? 'Block' : 'Save'}</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+}
+export function calBreakToggleWday(btn) { const on = btn.dataset.on !== '1'; btn.dataset.on = on ? '1' : '0'; btn.style.background = _wdayBg(on); btn.style.color = _wdayFg(on); }
+export function calBreakQuickDays(kind) {
+  document.querySelectorAll('#break-modal [data-wday]').forEach(b => { const n = +b.dataset.wday, on = kind === 'all' ? true : (n >= 1 && n <= 5); b.dataset.on = on ? '1' : '0'; b.style.background = _wdayBg(on); b.style.color = _wdayFg(on); });
+}
+export function closeBreakModal() { document.getElementById('break-scope-prompt')?.remove(); document.getElementById('break-modal')?.remove(); _breakMode = 'create'; _breakOnceId = null; _breakRuleId = null; _breakRuleDate = ''; _breakStaffId = ''; }
+function _readBreakForm() {
+  const st = document.getElementById('break-start')?.value || '';
+  const [h, m] = st.split(':').map(Number);
+  const durMin = parseInt(document.getElementById('break-dur')?.value) || 30;
+  const label = (document.getElementById('break-label')?.value || '').trim() || 'Break';
+  const repeat = _breakMode === 'edit-rule' || !!document.getElementById('break-repeat')?.checked;
+  const weekdays = [...document.querySelectorAll('#break-modal [data-wday]')].filter(b => b.dataset.on === '1').map(b => +b.dataset.wday).sort();
+  const until = document.getElementById('break-until')?.value || '';
+  return { h, m: m || 0, durMin, label, repeat, weekdays, until };
+}
+function _reRenderCal() { if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true); }
+export function saveBreak() {
+  if (!canDo('manageCalendar')) return;
+  const f = _readBreakForm();
+  if (!isFinite(f.h)) { showToast('Pick a start time'); return; }
+  if (_breakMode === 'edit-rule') { _breakScopePrompt('save'); return; }
+  if (_breakMode === 'create' && f.repeat) {
+    if (!f.weekdays.length) { showToast('Pick at least one repeat day'); return; }
+    const rule = { id: newBreakId(), staffId: _breakStaffId, startMin: f.h * 60 + f.m, durMin: f.durMin, label: f.label, weekdays: f.weekdays, from: localDateStr(_calDate), until: f.until, skips: [], overrides: {} };
+    dispatch('config.set', { key: 'break_rules', value: [...calBreakRules(), rule] });
+    closeBreakModal(); showToast('Repeating block added ✓');
+  } else {
+    const wasEdit = _breakMode === 'edit-once';
+    const start = new Date(_calDate); start.setHours(f.h, f.m, 0, 0);
+    const brk = { id: _breakOnceId || newBreakId(), staffId: _breakStaffId, start: start.toISOString(), end: new Date(start.getTime() + f.durMin * 60000).toISOString(), label: f.label };
+    dispatch('config.set', { key: 'breaks', value: [...calBreaks().filter(b => b.id !== brk.id), brk] });
+    closeBreakModal(); showToast(wasEdit ? 'Block updated ✓' : 'Time blocked ✓');
+  }
+  _reRenderCal();
+}
+export function deleteBreak() {
+  if (!canDo('manageCalendar')) return;
+  if (_breakMode === 'edit-rule') { _breakScopePrompt('delete'); return; }
+  if (_breakMode === 'edit-once' && _breakOnceId) {
+    dispatch('config.set', { key: 'breaks', value: calBreaks().filter(b => b.id !== _breakOnceId) });
+    closeBreakModal(); showToast('Block removed ✓'); _reRenderCal();
+  }
+}
+// Recurring occurrence: ask whether Save/Delete applies to just this day or the whole series.
+function _breakScopePrompt(action) {
+  const del = action === 'delete';
+  const prompt = document.createElement('div');
+  prompt.id = 'break-scope-prompt';
+  prompt.className = 'fixed inset-0 z-[90] flex items-center justify-center bg-on-surface/50 px-4';
+  prompt.onclick = e => { if (e.target === prompt) prompt.remove(); };
+  prompt.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-xs shadow-2xl text-center">
+    <div class="font-headline font-bold text-on-surface text-base mb-1">${del ? 'Delete' : 'Change'} repeating block</div>
+    <div class="text-xs font-body text-on-surface-variant mb-4">This block repeats. Apply to just this day, or every day it repeats?</div>
+    <div class="space-y-2">
+      <button onclick="applyRuleEdit('${action}','day')" class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">This day only</button>
+      <button onclick="applyRuleEdit('${action}','all')" class="w-full py-2.5 rounded-xl border-2 ${del ? 'border-error text-error' : 'border-surface-container-high text-on-surface'} font-headline font-semibold text-sm">All days</button>
+      <button onclick="document.getElementById('break-scope-prompt')?.remove()" class="w-full py-2 text-on-surface-variant font-headline font-semibold text-sm">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(prompt);
+}
+export function applyRuleEdit(action, scope) {
+  if (!canDo('manageCalendar')) return;
+  document.getElementById('break-scope-prompt')?.remove();
+  const dayStr = _breakRuleDate;
+  const rules = calBreakRules().map(r => ({ ...r }));
+  const idx = rules.findIndex(r => r.id === _breakRuleId);
+  if (idx === -1) { closeBreakModal(); return; }
+  if (action === 'delete') {
+    if (scope === 'all') { dispatch('config.set', { key: 'break_rules', value: rules.filter(r => r.id !== _breakRuleId) }); showToast('Repeating block removed ✓'); }
+    else { rules[idx].skips = [...new Set([...(rules[idx].skips || []), dayStr])]; dispatch('config.set', { key: 'break_rules', value: rules }); showToast('Skipped this day ✓'); }
+  } else {
+    const f = _readBreakForm();
+    if (!isFinite(f.h)) { showToast('Pick a start time'); return; }
+    if (scope === 'all') {
+      rules[idx] = { ...rules[idx], startMin: f.h * 60 + f.m, durMin: f.durMin, label: f.label, weekdays: f.weekdays.length ? f.weekdays : rules[idx].weekdays, until: f.until };
+      dispatch('config.set', { key: 'break_rules', value: rules }); showToast('Repeating block updated ✓');
+    } else {
+      rules[idx].overrides = { ...(rules[idx].overrides || {}), [dayStr]: { startMin: f.h * 60 + f.m, durMin: f.durMin, label: f.label } };
+      dispatch('config.set', { key: 'break_rules', value: rules }); showToast('Updated this day ✓');
+    }
+  }
+  closeBreakModal(); _reRenderCal();
+}
 export function calEventClick(e, apptId) {
   e.stopPropagation();
   const a = (getState().appointments || []).find(x => x.id === apptId);
