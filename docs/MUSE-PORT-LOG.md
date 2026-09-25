@@ -10,7 +10,10 @@ diverged).**
 
 ## Batch 2026-07-16 — staff visibility, staff PII, calendar customer-coloring, notes-everywhere
 
-Status: **built + committed on TurnDesk main (NOT pushed/deployed), not yet ported to Muse.**
+Status: **✅ ALL PORTED TO MUSE.** Hide-deactivated-staff, staff contact/SSN-4, and notes-everywhere
+shipped in Muse **v5.56**; calendar color-by-customer is also in Muse; the bundled turns
+"Awaiting price" violet cue shipped in Muse **v5.59** (2026-09-24 parity round). Nothing here is
+outstanding for Muse. Detail below retained for reference.
 Commits after the billing batch; plan `docs/superpowers/plans/2026-07-16-feature-batch.md`.
 Shared pure helpers unit-tested in `test/feature-batch-helpers.test.js`.
 
