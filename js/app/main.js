@@ -149,6 +149,11 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.52', items: [
+    { icon: 'calendar_month', t: 'Calendar works without Google — and reads appointments better', d: 'Your calendar now opens and shows all your appointments without needing to connect Google — the app keeps its own copy. Google is still there as an optional add-on if you want it. Also, a booked guest who already checked in and paid earlier the same day now shows as "Completed" on the calendar instead of looking like a no-show.' },
+    { icon: 'local_offer', t: 'Printable customer Price Menu', d: 'A new "Price menu" option in the account menu opens a clean, print-ready price list built from your own services and prices — show it on the iPad or print a copy for the front desk.' },
+    { icon: 'shield', t: 'Stability improvement', d: 'Behind the scenes, the app now clears a rare backlog of tiny pending changes on startup so a device can’t choke on it. Nothing changes in how you use TurnDesk.' },
+  ] },
   { v: 'td-v0.50', items: [
     { icon: 'shield', t: 'Security & stability improvements', d: 'Behind-the-scenes security hardening across every screen — queue, turns, floor plan, checkout, reports, gift cards and receipts all display customer names and notes with extra safeguards. Nothing changes in how you use TurnDesk.' },
   ] },

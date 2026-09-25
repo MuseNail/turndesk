@@ -2,6 +2,8 @@
 // Opens a self-contained, print-friendly document in a new tab; "Print / Save as
 // PDF" produces the PDF. Kept in code (not a committed binary) so it never drifts
 // from the app. Exposed on window via main.js glue for the account-menu buttons.
+import { getState } from '../store.js';
+import { businessName } from '../utils.js';
 
 const STYLE = `
 *{box-sizing:border-box}
@@ -37,6 +39,64 @@ function openDoc(title, html) {
 
 export function openAppGuide() { openDoc('TurnDesk — App Guide', FULL); }
 export function openAppQuickRef() { openDoc('TurnDesk — Quick Reference', QUICK); }
+
+// ── Customer Price Menu — auto-generated from the salon's catalog ──────────────
+// A print-friendly, customer-facing price list built from the services this salon shows
+// on check-in (config.services minus config.hidden_services), styled like an elegant
+// printed menu. Salon-agnostic: the header is the business name and each price comes from
+// the service's baseCost (a service with no set price shows "ask"). Ported in spirit from
+// Muse's hand-authored menu, but CATALOG-DRIVEN since every TurnDesk salon differs — so it
+// has no hardcoded services, descriptions, groupings, or cash-discount policy. Flowing
+// two-column layout so any catalog size prints cleanly across pages.
+const PRICE_MENU_STYLE = `
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
+.bar{position:sticky;top:0;z-index:5;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #ddd}
+.bar strong{font-size:14px;letter-spacing:1px}
+.bar button{background:#1a5252;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer}
+.page{max-width:8in;margin:18px auto;padding:0.55in 0.7in;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.16)}
+.wordmark{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:34px;letter-spacing:2px;text-align:center;color:#1a5252}
+.rule{border:0;border-top:1px solid #ccc;width:1.3in;margin:0.14in auto 0}
+.pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:24px;color:#1a1a1a;text-align:center;margin:8px 0 0}
+.cols{columns:2;column-gap:0.6in;margin-top:0.24in}
+.row{display:flex;align-items:baseline;gap:7px;margin:6px 0;break-inside:avoid}
+.nm{font-size:15px;font-weight:400;color:#1a1a1a}
+.dots{flex:1;border-bottom:1px dotted #ccc;transform:translateY(-4px)}
+.pr{font-size:15px;font-weight:500;color:#1a5252;white-space:nowrap}
+.empty{color:#777;font-style:italic;text-align:center;padding:0.4in 0}
+.foot{margin-top:0.3in;border-top:1px solid #ccc;padding-top:0.16in}
+.foot p{margin:6px 0;font-size:12.5px;line-height:1.5;text-align:center;color:#1a1a1a}
+@media print{.bar{display:none}body{background:#fff}.page{margin:0;box-shadow:none;max-width:none}}
+@page{size:Letter;margin:1.1cm}
+`;
+export function openPriceMenu() {
+  const w = window.open('', '_blank');
+  if (!w) { alert('Please allow pop-ups for this site to open the price menu.'); return; }
+  w.document.write(priceMenuDoc());
+  w.document.close();
+}
+function priceMenuDoc() {
+  const c = getState().config || {};
+  const hidden = new Set(c.hidden_services || []);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const services = (c.services || []).filter(s => s && s.label && !hidden.has(s.id));
+  const priceOf = s => (s.baseCost != null && s.baseCost !== '') ? ('$' + s.baseCost) : 'ask';
+  const rows = services.length
+    ? services.map(s => `<div class="row"><span class="nm">${esc(s.label)}</span><span class="dots"></span><span class="pr">${esc(priceOf(s))}</span></div>`).join('')
+    : `<div class="empty">No services to show yet — add them in Settings → Services.</div>`;
+  const name = esc(businessName() || 'Our Salon');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${name} — Price Menu</title>` +
+    `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
+    `<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">` +
+    `<style>${PRICE_MENU_STYLE}</style></head><body>` +
+    `<div class="bar"><strong>${name.toUpperCase()} · PRICE MENU</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
+    `<section class="page"><div class="wordmark">${name}</div><hr class="rule"><div class="pagetitle">Price Menu</div>` +
+    `<div class="cols">${rows}</div>` +
+    `<div class="foot"><p>Prices vary by length, shape, design &amp; add-ons — for an exact quote, please ask your technician before your service begins.</p></div>` +
+    `</section></body></html>`;
+}
 
 // ── Full guide — the detailed manual: every screen, button, symbol, and color ──
 const FULL = `

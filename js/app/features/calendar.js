@@ -341,8 +341,13 @@ export function renderTodaysAppointments() {
     const startDt = new Date(a.start);
     if (isNaN(startDt) || localDateStr(startDt) !== dstr) return;
     const g0 = (a.guests || [])[0] || {};
-    const qm = _queueForAppt(a.id);
-    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, appt: a, name: g0.name || 'Guest', confirmed: !!a.confirmed, noShow: !!a.noShow, qm });
+    let qm = _queueForAppt(a.id);
+    if (!qm) qm = _phoneQueueMatch((g0.phone || '').replace(/\D/g, ''), startDt.getTime());   // live-queue visit not linked by id
+    // Today's past-start appt with no live-queue match: did they already come in and PAY earlier
+    // today? A paid record → "Completed" instead of the "Not in" amber (mirrors the day/week grids).
+    let doneRec = false;
+    if (!qm && !a.noShow && isToday && startDt < new Date()) doneRec = !!_pastRecordMatch([a.id], (g0.phone || '').replace(/\D/g, ''), startDt.getTime());
+    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, appt: a, name: g0.name || 'Guest', confirmed: !!a.confirmed, noShow: !!a.noShow, qm, doneRec });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
   const _now = new Date();
@@ -363,7 +368,7 @@ export function renderTodaysAppointments() {
   listEl.innerHTML = shown.map(r => {
     const timeStr = r.startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
     const qs = r.qm?.status;
-    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (isToday && r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af', isToday ? 'Unconfirmed' : '']);
+    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.doneRec ? ['#0284c7','Completed'] : r.confirmed ? ['#16a34a','Confirmed'] : (isToday && r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af', isToday ? 'Unconfirmed' : '']);
     const svcLines = [];
     (r.appt.guests || []).forEach(g => { const fn = ((g.name||'').split(' ')[0]||g.name||'').trim(); (g.lines||[]).forEach(l => { const s = cfg().services.find(x=>x.id===l.serviceId); const tech = (cfg().staff||[]).find(x=>x.id===l.staffId)?.name || 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.serviceId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--on-surface-variant, #41484d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
@@ -454,7 +459,9 @@ function _calTryReady() {
   // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
   _fetchWorkerToken()
     .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
-    .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
+    // No Google connected: the calendar is app-native, so render it anyway. Google is a quiet
+    // opt-in (the Connect button stays available), never a required first step — so no "get started" nag.
+    .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus(''); _calInitialLoad(); });
 }
 
 export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
@@ -490,12 +497,11 @@ export function calSignOut() {
   fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side
   if (window.gapi?.client) gapi.client.setToken(null);
   localStorage.removeItem('turndesk_turndesk_gcal_token');
-  _calInitDone = false;   // so a fresh sign-in re-runs the initial load
-  _calCalendars = []; _calEvents = {};
-  document.getElementById('cal-grid').classList.add('hidden');
-  document.getElementById('cal-loading').classList.remove('hidden');
+  _calInitDone = false;   // so the re-render (and a later reconnect) re-runs the initial load
+  _calEvents = {};        // drop Google-sourced events; app-native appts re-render below
   document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-  calSetStatus('Signed out. Click Connect to sign back in.');
+  showToast('Google disconnected — your calendar still works.');
+  _calInitialLoad();      // re-render the app-native calendar instead of nagging to reconnect
 }
 function calSetStatus(msg) {
   const el = document.getElementById('cal-status-msg'), loading = document.getElementById('cal-loading');
@@ -706,11 +712,11 @@ export function calRenderGrid() {
       else { statusColored=false; bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // plain upcoming → no status
       // Past day: resolve the appointment against the records — Completed (showed up) or
       // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
-      if (isPastDay && isAppt && !noShow) {
+      if (isAppt && !noShow && (isPastDay || (isToday && isPast && !qs))) {
         const rawP = (primaryPhone || '').replace(/\D/g, '');
         const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
         if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; statusColored=true; }   // keep the blue Completed border (match week view)
-        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
+        else if (isPastDay && rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }   // no-show only on a fully-past day; mid-day-no-record stays "running late"
       }
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // manual no-show overrides all
       // FILL by CUSTOMER (owner: "color everything by customer") — the status stays visible via
@@ -856,11 +862,11 @@ function calRenderWeekGrid() {
       const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
       const bLeft = 4 + lane * (laneW + gap);
       let bg = color + '1f', border = color, tc = '#1a1a1a', wkStatus = false;
-      if (isPastDay && isAppt && !noShow) {
+      if (isAppt && !noShow && (isPastDay || (isToday && startDt < new Date()))) {
         const rawP = ((first.guests || [])[0]?.phone || '').replace(/\D/g, '');
         const rec = _pastRecordMatch([first.id], rawP, startDt.getTime());
         if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; wkStatus=true; }
-        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; wkStatus='noshow'; }
+        else if (isPastDay && rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; wkStatus='noshow'; }   // no-show only on a fully-past day
       }
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; wkStatus='noshow'; }
       // FILL by CUSTOMER (owner: "color everything by customer"). Week columns are DAYS, so

@@ -49,7 +49,26 @@ function loadOutbox() {
     arr = [...others, ...bulk];
     try { localStorage.setItem(scopedKey(OUTBOX_KEY), JSON.stringify(arr)); } catch {}
   }
+  // Self-heal a flooded config.set outbox (boot OOM guard): a frozen tab can enqueue thousands of
+  // config.set for the SAME key faster than the WS can ack+drain them, leaving a giant outbox that
+  // then freezes/OOMs the tab on every reload as reapplyOutbox + replayOutbox walk it. config.set is
+  // last-writer-wins per key, so all but the last write to a key are superseded — collapse them here,
+  // before either walk runs. (Ported from Muse v5.58.)
+  const coalesced = coalesceConfigSets(arr);
+  if (coalesced.length !== arr.length) { arr = coalesced; try { localStorage.setItem(scopedKey(OUTBOX_KEY), JSON.stringify(arr)); } catch {} }
   return arr;
+}
+// Drop superseded config.set ops (keep only the LAST write per key, order preserved) once the
+// outbox is pathologically full of them. Pure + exported for tests. Only kicks in past a flood
+// threshold so a normal outbox is untouched; even then it only drops same-key duplicates, never a
+// distinct key or a non-config op, so no pending write is ever lost.
+export function coalesceConfigSets(arr) {
+  const cfgCount = arr.reduce((n, m) => n + (m && m.op === 'config.set' ? 1 : 0), 0);
+  if (cfgCount <= 50) return arr;
+  const lastIdx = new Map();
+  arr.forEach((m, i) => { if (m && m.op === 'config.set' && m.payload && m.payload.key != null) lastIdx.set(m.payload.key, i); });
+  const keep = new Set(lastIdx.values());
+  return arr.filter((m, i) => !(m && m.op === 'config.set' && m.payload && m.payload.key != null) || keep.has(i));
 }
 function saveOutbox() {
   try { localStorage.setItem(scopedKey(OUTBOX_KEY), JSON.stringify(_outbox)); } catch {}
