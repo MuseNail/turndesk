@@ -5,7 +5,7 @@ import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMa
 import { GROUP_COLORS } from '../config.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus, isTechPriced } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
@@ -567,6 +567,7 @@ export function renderTurnsQueue() {
             <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
             ${techHtml}${a.cost ? ` <span class="font-semibold text-primary">$${a.cost}</span>` : ''}
           </span>
+          ${isTechPriced(a) ? `<span class="flex-shrink-0 text-[9px] font-bold px-1 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">✓</span>` : ''}
           <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
         </div>`;
       }).join('');

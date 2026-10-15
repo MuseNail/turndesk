@@ -15,7 +15,7 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, throttleWaitMsg, businessName, escHtml } from './utils.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
-import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
+import { applyAssignmentStatus, isPaidStatus, isTechPriced } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
 import * as chat from './features/chat.js';
@@ -113,6 +113,35 @@ function statusChip(status) {
   const c = STATUS_CHIP[status] || STATUS_CHIP.waiting;
   return `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:${c.bg};color:${c.fg}">${c.label}</span>`;
 }
+
+// ── Single morphing action button ──────────────────────────────────────────────
+// Decouple price entry from completion: the tech sees ONE action that walks forward —
+// Start → Save price → Complete → Reopen — so saving a price NEVER marks the service done
+// (which would wrongly free the tech before they've finished). Pure (status + saved cost/comped
+// + the price currently shown in the field) so it's unit-testable and never reads live DOM;
+// staffPriceInput re-derives it on each keystroke to morph the button. fieldPrice = the parsed
+// field value, or null. mode: start|saveprice|complete|reopen|none · style: primary|outline|violet.
+export function staffServiceAction(a, fieldPrice) {
+  const status = (a && a.status) || 'waiting';
+  if (status === 'complete' && a && a.awaitingPrice) return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'violet' };
+  if (status === 'paid' || status === 'done')        return { mode: 'none' };   // finalized line → no button (never reactivate a sale)
+  if (status === 'waiting')                          return { mode: 'start',    label: 'Start',      fn: 'staffStart',    style: 'primary' };
+  if (status === 'inservice') {
+    if (a && a.comped)                               return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
+    const saved = (a && a.cost) || 0;
+    const eff = fieldPrice == null ? saved : fieldPrice;   // an empty/cleared field keeps the saved price (no forced re-type)
+    if (saved > 0 && eff === saved)                  return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
+    return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'primary' };   // nothing saved yet, or field edited to a NEW amount
+  }
+  if (status === 'complete')                         return { mode: 'reopen',   label: 'Reopen',     fn: 'staffReopen',   style: 'outline' };
+  return { mode: 'none' };
+}
+// The in-service Save-price button is greyed until a valid price is in the field. ONE predicate so
+// the initial render (lineHtml) and the live keystroke morph (staffPriceInput) can never disagree.
+export function saveDisabled(act, fieldPrice) { return act.mode === 'saveprice' && act.style === 'primary' && !(fieldPrice > 0); }
+// Complete needs a real price OR a comp (a deliberate $0). Shared by staffServiceAction's gate and
+// staffComplete's defense-in-depth check so the shown button and the tap can never disagree.
+export function completeGateOk(effective, comped) { return !!comped || (effective != null && effective > 0); }
 
 // Keep the chat's "me" identity + the FAB in sync with who's signed in here.
 function syncChat() {
@@ -411,16 +440,30 @@ function lineHtml(entry, a) {
   const key = entry.id + ':' + a.serviceId;
   const priceVal = (key in _priceDraft) ? _priceDraft[key] : (a.cost ? a.cost : '');
   const placeholder = (s && s.baseCost != null) ? Number(s.baseCost).toFixed(2) : '0.00';
-  const btn = (txt, fn, primary) => `<button onclick="${fn}('${entry.id}','${esc(a.serviceId)}')"
-    class="flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95 ${primary
-      ? 'bg-primary hover:bg-primary-dim text-on-primary'
-      : 'border-2 border-primary text-primary hover:bg-primary/10'}">${txt}</button>`;
   const awaiting = status === 'complete' && a.awaitingPrice;   // front desk marked done; tech owes the price
   const eff = awaiting ? 'awaiting' : status;
-  const start    = status === 'waiting' ? btn('Start', 'staffStart', false) : '';
-  const complete = (status === 'waiting' || status === 'inservice') ? btn('Complete', 'staffComplete', true) : '';
-  const reopen   = (status === 'complete' && !awaiting) ? btn('Reopen', 'staffReopen', false) : '';
-  const savePrice = awaiting ? `<button onclick="staffSavePrice('${entry.id}','${esc(a.serviceId)}')" class="flex-1 py-4 rounded-xl font-headline font-bold text-lg text-white transition-all active:scale-95" style="background:#6b4fb0">Save price</button>` : '';
+  // ONE morphing action button (Start → Save price → Complete → Reopen). Saving a price never
+  // completes — only Start/Complete move status — so pricing early can't free the tech. A paid
+  // line (mode 'none') shows no button so a finalized sale is never reactivated.
+  const fieldPrice = parsePrice(priceVal);
+  const act = staffServiceAction(a, fieldPrice);
+  const actBtnDisabled = saveDisabled(act, fieldPrice);
+  const actBtn = act.mode === 'none' ? '' : (() => {
+    const common = 'flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95';
+    const cls = act.style === 'primary' ? 'bg-primary hover:bg-primary-dim text-on-primary'
+              : act.style === 'outline' ? 'border-2 border-primary text-primary hover:bg-primary/10' : 'text-white';
+    const inl = act.style === 'violet' ? ' style="background:#6b4fb0"' : '';
+    const dis = actBtnDisabled ? ' opacity-40 pointer-events-none' : '';
+    return `<button id="act-${key}"${actBtnDisabled ? ' disabled' : ''} onclick="${act.fn}('${entry.id}','${esc(a.serviceId)}')"${inl}
+      class="${common} ${cls}${dis}">${act.label}</button>`;
+  })();
+  // "Price in ✓": a tech has entered a price while still IN SERVICE — tells the tech (and the front
+  // desk) the charge is ready, without implying they're done. A filled soft-teal pill so it reads as
+  // a distinct annotation (not a 5th status, and separated from the brand-teal $price); only shows
+  // when a TECH set the price (isTechPriced). Brand teal via the --primary token (themes with the button).
+  const pricedTag = isTechPriced(a)
+    ? `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)">Price in ✓</span>`
+    : '';
   const stn = stationLbl(a.station);
   // Station is the hero (big chair + number). With no station, the service takes the hero slot.
   const stationHero = stn
@@ -429,7 +472,7 @@ function lineHtml(entry, a) {
   return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
     <div class="flex items-center justify-between gap-2 ${stn ? 'mb-2' : 'mb-3'}">
       ${stationHero || `<span class="font-headline font-extrabold text-2xl text-on-surface truncate min-w-0">${esc(label)}</span>`}
-      ${statusChip(eff)}
+      <span class="flex items-center gap-1 flex-shrink-0">${pricedTag}${statusChip(eff)}</span>
     </div>
     ${stn ? `<div class="font-headline font-bold text-xl text-on-surface truncate mb-3">${esc(label)}</div>` : ''}
     ${awaiting ? `<div class="flex items-center gap-2 mb-3 rounded-xl px-3 py-2 text-sm font-body" style="background:rgba(107,79,176,.1);color:#534ab7"><span class="material-symbols-outlined" style="font-size:18px">info</span>Front desk marked this done — add the price.</div>` : ''}
@@ -443,7 +486,7 @@ function lineHtml(entry, a) {
         <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
       </button>
     </div>
-    <div class="flex gap-2">${start}${reopen}${savePrice}${complete}</div>
+    <div class="flex gap-2">${actBtn}</div>
   </div>`;
 }
 
@@ -613,12 +656,25 @@ function updateAssignment(entryId, serviceId, newStatus, priced) {
   if (!a0) { showToast('That service is no longer assigned to you'); return; }
   const a = JSON.parse(JSON.stringify(a0));        // patch a clone of ONLY this assignment
   if (priced != null) a.cost = priced;
-  if (priced != null && priced > 0) a.awaitingPrice = false;   // entering a real price resolves "Needs price"
+  if (priced != null && priced > 0) { a.awaitingPrice = false; a.techPriced = true; }   // a real price: resolve "Needs price" + mark it tech-entered (vs front desk)
   applyAssignmentStatus(a, newStatus);             // banks serviceMs / starts spell + stamps a.status & a.updatedAt
   sync.dispatch('queue.assignmentPatch', { entryId: String(entryId), serviceId, techId: myId, assignment: a });
 }
 
-window.staffPriceInput = (entryId, serviceId, val) => { _priceDraft[entryId + ':' + serviceId] = val; };
+window.staffPriceInput = (entryId, serviceId, val) => {
+  const key = entryId + ':' + serviceId; _priceDraft[key] = val;
+  // Morph the ONE in-service action between "Save price" (draft differs from the saved cost) and
+  // "Complete" (draft matches) as the tech types — without re-rendering, so the field keeps focus.
+  const b = document.getElementById('act-' + key); if (!b) return;
+  const a = (queue().find(e => String(e.id) === String(entryId))?.assignments || [])
+    .find(x => x.serviceId === serviceId && x.techId === myId);
+  if (!a || a.status !== 'inservice' || a.comped) return;   // only the in-service, non-comped button morphs
+  const act = staffServiceAction(a, parsePrice(val));
+  b.textContent = act.label;
+  b.setAttribute('onclick', `${act.fn}('${entryId}','${esc(serviceId)}')`);
+  const dis = saveDisabled(act, parsePrice(val));
+  b.disabled = dis; b.classList.toggle('opacity-40', dis); b.classList.toggle('pointer-events-none', dis);
+};
 
 window.staffStart = (entryId, serviceId) => {
   const priced = parsePrice(_priceDraft[entryId + ':' + serviceId]);
@@ -634,7 +690,7 @@ window.staffComplete = (entryId, serviceId) => {
   const existing = (queue().find(e => String(e.id) === String(entryId))?.assignments || [])
     .find(x => x.serviceId === serviceId && x.techId === myId);
   const effective = priced != null ? priced : parsePrice(existing?.cost);
-  if (effective == null || effective <= 0) { showToast('Enter a price first'); return; }
+  if (!completeGateOk(effective, existing?.comped)) { showToast('Enter a price first'); return; }   // comped is a valid $0
   updateAssignment(entryId, serviceId, 'complete', priced);
   delete _priceDraft[key];
   showToast('Sent to front desk ✓');
@@ -643,15 +699,19 @@ window.staffReopen = (entryId, serviceId) => {
   updateAssignment(entryId, serviceId, 'inservice');
   showToast('Reopened');
 };
-// "Needs price": the front desk already marked this service done — the tech only owes the price.
-// Keeps the service complete, sets the cost, clears the awaiting-price flag (unblocks checkout).
+// Save a price WITHOUT changing status — the decoupled "price early" action. Keeps the service's
+// current status (in-service stays in-service → the tech stays busy; the awaiting-complete case
+// stays complete and clears the awaiting-price flag via updateAssignment). Never completes.
 window.staffSavePrice = (entryId, serviceId) => {
   const key = entryId + ':' + serviceId;
   const priced = parsePrice(_priceDraft[key]);
   if (priced == null || priced <= 0) { showToast('Enter a price first'); return; }
-  updateAssignment(entryId, serviceId, 'complete', priced);
+  const a = (queue().find(e => String(e.id) === String(entryId))?.assignments || [])
+    .find(x => x.serviceId === serviceId && x.techId === myId);
+  const keep = (a && a.status) || 'inservice';
+  updateAssignment(entryId, serviceId, keep, priced);
   delete _priceDraft[key];
-  showToast('Price sent ✓');
+  showToast('Price saved ✓');
 };
 window.staffTab = (v) => { _view = (v === 'history' || v === 'appts') ? v : 'active'; render(); };
 

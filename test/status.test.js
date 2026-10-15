@@ -1,7 +1,20 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle, isEntryAwaitingPrice, effectiveEntryStatus } from '../js/app/features/status.js';
+import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle, isEntryAwaitingPrice, effectiveEntryStatus, isTechPriced } from '../js/app/features/status.js';
+
+// isTechPriced: a TECH entered the price while the service is still in progress (vs the front
+// desk). Display/provenance only — true ONLY while the assignment is 'inservice', so it can't
+// imply availability and a stale flag on a completed/paid line never shows.
+test('isTechPriced: true only when techPriced AND status inservice', () => {
+  assert.equal(isTechPriced({ techPriced: true, status: 'inservice' }), true);
+  assert.equal(isTechPriced({ techPriced: true, status: 'complete' }), false);   // finished → marker gone
+  assert.equal(isTechPriced({ techPriced: true, status: 'paid' }), false);
+  assert.equal(isTechPriced({ techPriced: true, status: 'waiting' }), false);
+  assert.equal(isTechPriced({ techPriced: false, status: 'inservice' }), false); // FD-priced → no marker
+  assert.equal(isTechPriced({ status: 'inservice' }), false);                    // flag absent
+  assert.equal(isTechPriced(null), false);
+});
 
 // The 4-state workflow: waiting → inservice → complete → paid (legacy 'done' ≡ paid).
 // These encode the exact spec so a regression in the state machine fails CI.

@@ -26,8 +26,36 @@ export const DEVICE_ID = (() => {
 
 let _ws = null, _connected = false, _reconnect = null, _ping = null, _mutCounter = 0;
 let _lastRecv = 0, _resyncTimer = null;   // heartbeat watchdog + resync throttle
+let _authNeeded = false, _snapshotInFlight = false;   // mirror the auth gate for the watchdog; serialize snapshots
 let _outbox = loadOutbox();
 
+// ── Wake / liveness ──────────────────────────────────────────────────────────
+// A socket that hasn't delivered anything in STALE_MS is treated as dead even when
+// the browser still reports it OPEN — iOS leaves a "zombie-OPEN" socket after the
+// phone sleeps, which is why the board went stale until a manual refresh. 30s sits
+// comfortably above the 20s ping cadence (a live socket is never that quiet) and
+// under the 40s heartbeat backstop. TODO(revisit ~late-2026): retune STALE_MS once
+// we've watched it run on the techs' phones — see PRIORITIES.md. Note: any value below
+// ~40s means a single dropped pong on an otherwise-idle socket forces a (clean) reconnect
+// rather than just an HTTP refresh; that's the main thing to weigh when retuning.
+const STALE_MS = 30000;
+
+// Reconnect the WS on a wake? No socket / non-OPEN → yes (as before); an OPEN socket
+// silent past STALE_MS is a zombie → yes. A live, recently-heard-from socket → no.
+export function _shouldReconnect(now, lastRecv, isOpen) {
+  return !isOpen || (now - lastRecv > STALE_MS);
+}
+// Should the visible-only watchdog / touch handler fire a resync now? Only while the
+// page is visible, the session is valid (no 401 loop), the socket has ever connected,
+// and we've genuinely gone quiet past STALE_MS.
+export function _shouldResync(now, lastRecv, visible, authNeeded) {
+  return visible && !authNeeded && lastRecv > 0 && (now - lastRecv > STALE_MS);
+}
+// Keep the store indicator and the watchdog's local gate in lockstep — _shouldResync reads
+// _authNeeded, not the store, so every auth flip must go through here or the two can drift.
+function markAuthNeeded(v) { setAuthNeeded(v); _authNeeded = v; }
+
+// ── Outbox ───────────────────────────────────────────────────────────────────
 function loadOutbox() {
   let arr = [];
   try { arr = JSON.parse(localStorage.getItem(scopedKey(OUTBOX_KEY)) || '[]'); } catch { return []; }
@@ -125,8 +153,31 @@ export async function start() {
   // slept or had a wifi blip otherwise keeps a dead socket and stops seeing other devices'
   // changes until a manual refresh — this is what makes updates appear without one. flushCache on
   // hide/pagehide so the last optimistic write isn't lost in the async-commit window.
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.hidden) flushCache(); else resync(); });
-  if (typeof window !== 'undefined') { window.addEventListener('online', resync); window.addEventListener('focus', resync); window.addEventListener('pagehide', flushCache); }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flushCache(); else resync(); });
+    document.addEventListener('resume', resync);   // Page Lifecycle thaw — Chromium/Android PWAs; iOS doesn't fire it (the watchdog covers iPhones), kept for the broader fleet
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', resync);
+    window.addEventListener('focus', resync);
+    window.addEventListener('pagehide', flushCache);
+    // bfcache restore. persisted-gated: an unrestored (cold) load is already handled by
+    // connect() above, and resyncing then would needlessly tear down the CONNECTING boot socket.
+    window.addEventListener('pageshow', (e) => { if (e && e.persisted) resync(); });
+    // First tap after a quiet spell catches up instantly. passive so it can't affect scroll/drag.
+    window.addEventListener('touchstart', wakeCheck, { passive: true });
+  }
+  // Visible-only freshness watchdog. Timers freeze while the page is backgrounded, so this runs
+  // only while a tech is actually looking at the screen — and it catches the iOS wakes that fire
+  // NO event at all (the "board stays stale until a manual refresh" case), within ~5s.
+  setInterval(wakeCheck, 5000);
+}
+
+// Fire a wake resync iff we're visible, signed in, and genuinely stale (shared by the watchdog
+// interval and the touchstart handler).
+function wakeCheck() {
+  const visible = !(typeof document !== 'undefined' && document.hidden);
+  if (_shouldResync(Date.now(), _lastRecv, visible, _authNeeded)) resync();
 }
 
 // Force the connection healthy and pull a fresh snapshot to catch any broadcasts missed while
@@ -134,13 +185,16 @@ export async function start() {
 export function resync() {
   if (_resyncTimer) return;
   _resyncTimer = setTimeout(() => { _resyncTimer = null; }, 1500);
-  // On wake/focus, trust ONLY a genuinely OPEN socket. Anything else — including a zombie stuck
-  // in CONNECTING from a frozen background tab — won't heal on its own, so tear it down and
-  // reconnect now rather than waiting on a throttled reconnect timer (this was the "stays
-  // disconnected until I refresh" bug after tabbing back in on desktop).
-  if (!_ws || _ws.readyState !== WebSocket.OPEN) {
+  // Don't trust readyState alone: a socket silent past STALE_MS is dead even when it still reports
+  // OPEN (iOS zombie-OPEN after sleep) — _shouldReconnect tears that down too, not just a non-OPEN
+  // socket. But leave a socket still CONNECTING alone: a fresh connect is already in flight (the
+  // 10s openTimer recycles a CONNECTING zombie), so killing it every watchdog tick would stop a
+  // slow connection from ever completing.
+  const rs = _ws ? _ws.readyState : null;
+  if (rs !== WebSocket.CONNECTING && _shouldReconnect(Date.now(), _lastRecv, rs === WebSocket.OPEN)) {
     if (_reconnect) { clearTimeout(_reconnect); _reconnect = null; }
     const old = _ws; _ws = null;                       // drop our ref first so old's late onclose no-ops
+    clearInterval(_ping); _ping = null;                // ...which means old's onclose won't clear its heartbeat — do it here so the interval doesn't leak
     if (old) { try { old.close(); } catch {} }
     connect();
   }
@@ -166,9 +220,10 @@ function connect() {
     if (_ws !== ws) { try { ws.close(); } catch {} return; }   // superseded by a newer socket
     _connected = true;
     _lastRecv = Date.now();
-    setAuthNeeded(false);   // the WS upgrade only succeeds with a valid session
+    markAuthNeeded(false);   // the WS upgrade only succeeds with a valid session
     setConnection(true, _outbox.length);
     send({ type: 'hello' });
+    clearInterval(_ping);   // defensive: never stack a second heartbeat if a prior socket's onclose didn't clear it
     _ping = setInterval(() => {
       // Heartbeat watchdog: if nothing (not even a pong) has arrived in ~40s the socket is a
       // zombie — device slept / wifi blipped with no close event — so it silently stops
@@ -277,23 +332,31 @@ export function dispatch(op, payload) {
 let _lastAuthToast = 0;
 function notifyUnauthorized() {
   console.warn('[sync] 401 — no valid sign-in session on this browser');
-  setAuthNeeded(true);   // flips the indicator to "Sign in needed" (not a plain "Offline")
+  markAuthNeeded(true);   // flips the indicator to "Sign in needed" (not a plain "Offline"); also stops the watchdog polling a 401 every 5s
   if (Date.now() - _lastAuthToast < 60000) return;
   _lastAuthToast = Date.now();
   try { window.showToast?.('Sign in needed — enter your PIN to reconnect this device.'); } catch {}
 }
 
 async function httpSnapshot() {
+  if (_snapshotInFlight) return;   // serialize: a second snapshot mid-fetch could hydrate() out of order and clobber newer state
+  _snapshotInFlight = true;
+  // Abort after 10s (matches the WS openTimer). Without it a fetch over a dead radio / captive
+  // portal can hang forever, never settle, and leave _snapshotInFlight stuck true — which would
+  // silently disable every future HTTP catch-up for the session.
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch {} }, 10000) : null;
   try {
-    const res = await fetch(STATE + '/snapshot', { cache: 'no-store' });
+    const res = await fetch(STATE + '/snapshot', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
     if (res.status === 401) { notifyUnauthorized(); return; }
     if (!res.ok) return;
-    setAuthNeeded(false);   // a 200 means the session is valid again
+    markAuthNeeded(false);   // a 200 means the session is valid again
     hydrate(await res.json());
     markServerHydrated();
     reapplyOutbox();
     replayOutbox();
-  } catch (e) { /* offline — the IndexedDB/localStorage cache already rendered */ }
+  } catch (e) { /* offline / aborted — the IndexedDB/localStorage cache already rendered */ }
+  finally { if (killer) clearTimeout(killer); _snapshotInFlight = false; }
 }
 
 async function httpMutate(msg) {

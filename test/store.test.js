@@ -78,6 +78,54 @@ test('queue.upsert per-assignment merge: both-unstamped applies (legacy); numeri
   assert.equal(getState().queue.find(x => x.id === 'q3').assignments[0].cost, 36);   // numeric tie → incoming
 });
 
+// queue.assignmentPatch device-scoped guard (mirrors the DO): reject ONLY a SAME-device older
+// replay (an offline-outbox re-send of a value that device already superseded). A cross-device
+// patch always applies — a naive cross-device wall-clock compare would drop a tech's genuinely-
+// later price when their phone clock lags the front desk (the deliberate design in worker.js).
+test('queue.assignmentPatch: a same-device older replay is dropped (keeps the newer stored value)', () => {
+  hydrate({ state: { queue: [{ id: 'p1', status: 'inservice', assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40, updatedAt: 200, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p1', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 99, updatedAt: 100, updatedBy: 'devA' } });
+  assert.equal(getState().queue.find(x => x.id === 'p1').assignments[0].cost, 40);
+});
+test('queue.assignmentPatch: a cross-device older patch STILL applies (no clock-skew drop)', () => {
+  hydrate({ state: { queue: [{ id: 'p2', status: 'inservice', assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40, updatedAt: 200, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p2', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 99, updatedAt: 100, updatedBy: 'devB' } });
+  assert.equal(getState().queue.find(x => x.id === 'p2').assignments[0].cost, 99);
+});
+test('queue.assignmentPatch: newer same-device, equal, and unstamped all apply', () => {
+  hydrate({ state: { queue: [{ id: 'p3', status: 'inservice', assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40, updatedAt: 200, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p3', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 50, updatedAt: 300, updatedBy: 'devA' } });
+  assert.equal(getState().queue.find(x => x.id === 'p3').assignments[0].cost, 50);   // newer same-device
+  applyChange('queue.assignmentPatch', { entryId: 'p3', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 51, updatedAt: 300, updatedBy: 'devA' } });
+  assert.equal(getState().queue.find(x => x.id === 'p3').assignments[0].cost, 51);   // numeric tie → applies
+  applyChange('queue.assignmentPatch', { entryId: 'p3', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 52 } });
+  assert.equal(getState().queue.find(x => x.id === 'p3').assignments[0].cost, 52);   // unstamped → applies
+});
+test('queue.assignmentPatch: never touches a paid/done entry, drops a reassigned-away patch', () => {
+  hydrate({ state: { queue: [{ id: 'p4', status: 'paid', assignments: [{ serviceId: 's1', techId: 't1', status: 'paid', cost: 70, updatedAt: 200, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p4', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 1, updatedAt: 999, updatedBy: 'devB' } });
+  assert.equal(getState().queue.find(x => x.id === 'p4').assignments[0].status, 'paid');   // paid entry untouched
+  hydrate({ state: { queue: [{ id: 'p5', status: 'inservice', assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40, updatedAt: 200, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p5', serviceId: 'sX', techId: 't9', assignment: { serviceId: 'sX', techId: 't9', cost: 1, updatedAt: 999 } });
+  assert.equal(getState().queue.find(x => x.id === 'p5').assignments.length, 1);          // no match → dropped, no throw
+});
+
+// Provenance: a tech's techPriced flag rides the patch; a genuine FD re-price (newer per-assignment
+// stamp, via the whole-entry upsert merge) clears it; a stale/older FD save leaves it intact.
+test('queue.assignmentPatch carries techPriced; a newer FD upsert clears it, an older one does not', () => {
+  hydrate({ state: { queue: [{ id: 'p6', status: 'inservice', assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 0, updatedAt: 100, updatedBy: 'devA' }] }] }, seq: 1 });
+  applyChange('queue.assignmentPatch', { entryId: 'p6', serviceId: 's1', techId: 't1', assignment: { serviceId: 's1', techId: 't1', status: 'inservice', cost: 38, techPriced: true, updatedAt: 200, updatedBy: 'devA' } });
+  assert.equal(getState().queue.find(x => x.id === 'p6').assignments[0].techPriced, true);
+  // stale FD save (older per-assignment stamp) → keep the tech's priced flag + cost
+  applyChange('queue.upsert', { entry: { id: 'p6', updatedAt: 300, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 20, techPriced: false, updatedAt: 150 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'p6').assignments[0].techPriced, true);
+  // genuine FD re-price (newer stamp) → FD's cleared flag wins
+  applyChange('queue.upsert', { entry: { id: 'p6', updatedAt: 400, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 42, techPriced: false, updatedAt: 250 }] } });
+  const a = getState().queue.find(x => x.id === 'p6').assignments[0];
+  assert.equal(a.techPriced, false);
+  assert.equal(a.cost, 42);
+});
+
 test('legacy data without timestamps still applies (guard never blocks untimestamped writes)', () => {
   hydrate({ state: { records: [{ id: 'old', totalCost: 10 }] }, seq: 1 });
   applyChange('record.save', { record: { id: 'old', totalCost: 12 } });   // no updatedAt either side

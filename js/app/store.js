@@ -187,6 +187,13 @@ export function applyChange(op, payload, seq) {
       if (e.status === 'paid' || e.status === 'done') return;           // never let a stale device un-pay
       const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
       if (idx < 0) return;                                              // assignment reassigned away — drop
+      // Device-scoped stale-patch guard (mirrors the DO, worker.js): reject ONLY a SAME-device
+      // older replay (an offline-outbox re-send of a value this device already superseded). A
+      // cross-device patch always applies — a cross-device wall-clock compare would drop a tech's
+      // genuinely-later price when their phone clock lags the front desk. Unstamped patches apply.
+      const sa = e.assignments[idx], ia = payload.assignment;
+      if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' &&
+          ia.updatedBy && ia.updatedBy === sa.updatedBy && ia.updatedAt < sa.updatedAt) return;
       e.assignments[idx] = payload.assignment;
       deriveEntryStatusFields(e);
       break;

@@ -13,7 +13,7 @@ import { waiverActive } from '../waiver-util.js';
 import { handoffNonce, handoffEntryId, buildHandoff, handoffTombstone, handoffIsTombstone, handoffResult, handoffPrimaryName, handoffMultiGuest, HANDOFF_TTL_MS } from './checkin-handoff.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
 import { ui, canDo, getActiveUser } from '../session.js';
-import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
+import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice, isTechPriced } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview } from './square-customers.js';
@@ -315,7 +315,8 @@ function buildQueueRow(e) {
       ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
       ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (isAwaitingPrice(a) ? `<span class="font-semibold" style="color:#6b4fb0">Pending</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''))}
       ${tip}
-      <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
+      ${isTechPriced(a) ? `<span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">Price in ✓</span>` : ''}
+      <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${(tip || isTechPriced(a)) ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
     </div>`;
   }).join('');
   const totalDisplay = e.totalCost ? `<span class="font-semibold text-primary ml-1">$${e.totalCost.toFixed(2)}</span>` : '';
@@ -1042,6 +1043,7 @@ function _applyRowToAssignment(entryId, a, row, isNew) {
   const domCost = domComped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
   if (!snap) {   // new (or un-snapshotted) row → write everything, as the original save did
     a.techId = domTech; a.station = domStation; a.comped = domComped; a.compReason = domCompReason; a.cost = domCost;
+    a.techPriced = false;   // this price was set by the front desk, not a tech
     if (a.techId && !prevTech) a.assignedAt = Date.now();
     a.updatedAt = Date.now();
     return;
@@ -1049,9 +1051,9 @@ function _applyRowToAssignment(entryId, a, row, isNew) {
   let changed = false;
   if (domTech !== snap.techId) { a.techId = domTech; changed = true; }
   if (domStation !== snap.station) { a.station = domStation; changed = true; }
-  if (domComped !== snap.comped) { a.comped = domComped; changed = true; }
+  if (domComped !== snap.comped) { a.comped = domComped; if (domComped) a.techPriced = false; changed = true; }   // a comp voids any tech-entered price
   if (domCompReason !== snap.compReason) { a.compReason = domCompReason; changed = true; }
-  if (_costCents(domCost) !== snap.cost) { a.cost = domCost; changed = true; }
+  if (_costCents(domCost) !== snap.cost) { a.cost = domCost; a.techPriced = false; changed = true; }   // FD set this price → no longer tech-entered
   // Front-desk override: entering a real price (or comping) on an awaiting-price service resolves it.
   if (a.awaitingPrice && ((a.cost || 0) > 0 || a.comped)) { a.awaitingPrice = false; changed = true; }
   if (a.techId && !prevTech) a.assignedAt = Date.now();
@@ -1241,6 +1243,7 @@ export function markAwaitingPrice(entryId, serviceId) {
   a.awaitingPrice = true;
   a.comped = false; a.compReason = '';
   a.cost = 0;
+  a.techPriced = false;   // zeroing the price drops any "a tech priced it" claim (no stale "Price in ✓" after a later reopen)
   setAssignmentStatus(entry, serviceId, 'complete');   // dispatches queue.upsert; applyAssignmentStatus stamps a.updatedAt
   window.logAudit?.('Awaiting price', `${entry.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${staffById(a.techId)?.name || 'tech'} to price`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
   renderGroupAssignContent();

@@ -20,6 +20,11 @@ export const isPaidStatus = s => s === 'paid' || s === 'done';
 // flow); this only changes the pill/visual + gates checkout. Route every per-service
 // serviceLineStyle() call through this so all surfaces show the violet "Awaiting price" pill.
 export function isAwaitingPrice(a) { return !!(a && a.awaitingPrice && (a.status === 'complete')); }
+// Mirror image of awaiting-price: a TECH entered this price while the service is still IN PROGRESS
+// (vs the front desk), so the front desk knows the charge is ready to check out without the tech
+// being marked done. Display/provenance only (a.techPriced) — the real status stays 'inservice', so
+// availability is unchanged; gated on 'inservice' so a lingering flag never shows once finished.
+export function isTechPriced(a) { return !!(a && a.techPriced && (a.status === 'inservice')); }
 export function effectiveServiceStatus(entry, a) {
   const s = getAssignmentStatus(entry, a);
   return (s === 'complete' && a && a.awaitingPrice) ? 'awaiting' : s;

@@ -21,6 +21,34 @@ Source: a full feature-parity audit of both repos on **2026-09-24**.
   opt-in. Previously the calendar was gated behind connecting Google (a salon that never
   connected couldn't see its own app-native calendar). (`features/calendar.js`.)
 
+## Ported into TurnDesk (2026-10-14 round) — td-v0.53
+
+Three reviewed/shipped Muse features transplanted faithfully (Muse was the source of truth;
+each was already rigorous-build-reviewed + live on Muse). All 51 TD test files pass.
+
+- **Tech price entry decoupled from completion** (Muse v5.60, commits `6691f8b`+`4d6ca7a`) —
+  the tech app is one morphing button (Start → Save price → Complete → Reopen); saving a price
+  NEVER changes status, so a tech who prices early isn't shown Available while still working. New
+  `assignment.techPriced` provenance flag (tech-set, FD-cleared) → "Price in ✓" cue on the staff
+  app + queue (+ compact ✓ on turns; floor excluded). `staff.js` (`staffServiceAction`/
+  `saveDisabled`/`completeGateOk`), `status.js` (`isTechPriced`), `turns.js`, `queue.js`,
+  `store.js` (the **device-scoped** `queue.assignmentPatch` stale-guard — same-device replay only;
+  do NOT make it cross-device). Tests: staff/status/store. ⚠️ Muse's **v5.61** one-tap-calculator
+  follow-on is deliberately Muse-ONLY and was NOT ported.
+- **Heal stale board on phone wake** (Muse v5.62, commit `ff4a32e`) — `sync.js` rebuilds a
+  zombie-OPEN WebSocket on wake (`_shouldReconnect`/`_shouldResync` + `pageshow`/`resume`/
+  `touchstart` + a 5s visible-only watchdog; `_lastRecv` stays WS-liveness-only; `_ping` leak fix;
+  `httpSnapshot` in-flight guard + 10s AbortController). TD multi-tenant specifics (`scopedKey`
+  outbox, plain hello, IDB cache) preserved. Test: `wake-resync.test.js`.
+- **Payroll "All techs" Total column** (Muse v5.63, commit `f8836bc`) — read-only column pinned
+  far-left on the tech payroll table, sums every row across techs (override- + lock-snapshot-aware,
+  compare-to-last, light-blue, whole-dollar). `payrollColumnTotals` + `.ptot` sticky CSS. TD's
+  `.sticky-col` is 120px so `PL=120` ported unchanged. Test: `payroll-total.test.js`.
+
+Open for TD: eyeball the payroll frozen column on a real iPad (compare on, 3+ techs) + the wake
+fix on a phone, same as Muse. NOTE: for very large multi-location totals, `PW=72` (fits ~$999,999)
+may want bumping.
+
 ## Deferred (documented, not built)
 
 - **#1 — Helcim refund safety hardening.** Muse (v4.97) hardened its card-refund path:

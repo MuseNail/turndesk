@@ -1564,6 +1564,32 @@ export function payrollFdRows(offset = _payrollOffset) {
   return { rows, locked: !!lock, cur };
 }
 
+// Pinned "All techs" Total column: sum the ALREADY-RESOLVED per-tech rows (overrides + lock
+// snapshot already folded into T by renderPayrollPage) so the totals match exactly what's shown.
+// Pure + non-mutating — the Lock button snapshots T right after. Commission is RAW (refunds are a
+// separate row); every field is ||0-coerced because an old lock snapshot can carry undefined
+// deduction/total (one NaN would poison a whole column); daily lookups are guarded like the render
+// so a tech who missed a day can't throw and blank the Payroll tab.
+export function payrollColumnTotals(T, curDays, prevDays) {
+  const rows = T || [];
+  const n = k => rows.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+  const nc = (side, k) => rows.reduce((s, x) => s + (Number(x[side] && x[side][k]) || 0), 0);
+  const dayTot = (side, day) => rows.reduce((acc, x) => {
+    const d = (x[side] && x[side].daily && x[side].daily[day]) || {};
+    acc.billed += Number(d.billed) || 0; acc.comm += Number(d.commission) || 0; return acc;
+  }, { billed: 0, comm: 0 });
+  return {
+    billed: nc('c', 'billed'), comm: nc('c', 'commission'),
+    pBilled: nc('p', 'billed'), pComm: nc('p', 'commission'),
+    refund: nc('c', 'refund'), refundComm: nc('c', 'refundComm'),
+    pRefund: nc('p', 'refund'), pRefundComm: nc('p', 'refundComm'),
+    chk: n('cChk'), pChk: n('pChk'), ded: n('cDed'), pDed: n('pDed'),
+    cash: n('cCash'), pCash: n('pCash'), total: n('cTotal'), pTotal: n('pTotal'),
+    daily: (curDays || []).map(day => dayTot('c', day)),
+    pDaily: (prevDays || []).map(day => dayTot('p', day)),
+  };
+}
+
 export function renderPayrollPage() {
   window.renderClockedInNow?.();   // live "clocked in now" card (gated by viewClockedIn)
   const wrap = document.getElementById('payroll-cards'); if (!wrap) return;
@@ -1653,25 +1679,52 @@ export function renderPayrollPage() {
     `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td>`
     + (cmp ? `<td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>` : '');
   const info = `<button onclick="showToast('Day cells show billed and commission, this period vs last. The Δ column is the change in billed vs the same weekday in the previous pay period.')" title="Day cells = billed and commission, this period vs last. Δ = change in billed vs the same weekday in the previous pay period." style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;cursor:help;border:none;background:transparent;border-radius:50%"><span class="material-symbols-outlined" style="font-size:15px;color:var(--md-on-surface-variant)">info</span></button>`;
+  // ── "All techs" Total column — pinned (frozen) beside the labels, read-only, whole-dollar ──
+  // Sums the already-resolved T (overrides + lock snapshot folded in) so it matches what's shown.
+  // Whole dollars keep the frozen block narrow; fixed sub-column widths make the cumulative sticky
+  // `left` offsets (set inline per cell) deterministic. Opaque light-blue masks scrolled tech cells.
+  const TOT = payrollColumnTotals(T, curDays, prevDays);
+  const PL = 120, PW = 72, PA = 30;   // label-col width, money sub-col width, Δ sub-col width
+  const LB = cmp ? [PL, PL + PW, PL + 2 * PW, PL + 2 * PW + PA, PL + 2 * PW + PA + PW] : [PL, PL + PW];
+  const tm = m0;   // whole-dollar money for the Total column (reuse the day-grid formatter)
+  const _tc = (left, w, cls, html, extra) => `<td class="ptot ${cls}" style="left:${left}px;min-width:${w}px;max-width:${w}px${extra ? ';' + extra : ''}">${html}</td>`;
+  // billed|comm (|Δ|last-billed|last-comm) — the Total row and each day row
+  const totQuad = (cb, cc, pb, pc) =>
+      _tc(LB[0], PW, 'num staff-sep', tm(cb)) + _tc(LB[1], PW, 'num' + (cmp ? '' : ' ptot-end'), tm(cc))
+    + (cmp ? _tc(LB[2], PA, 'arrow-col', _pcmp(cb, pb)) + _tc(LB[3], PW, 'num last thislast-sep', tm(pb)) + _tc(LB[4], PW, 'num last ptot-end', tm(pc)) : '');
+  // single payout value: This side (colspan 3 or 2) + Last side (colspan 2). xcls adds e.g. ptot-paid.
+  const totSpan = (cVal, pVal, xcls, xstyle) =>
+      `<td class="ptot num staff-sep ${cmp ? '' : 'ptot-end'} ${xcls || ''}" colspan="${cmp ? 3 : 2}" style="left:${PL}px${xstyle ? ';' + xstyle : ''}">${cVal}</td>`
+    + (cmp ? `<td class="ptot num last thislast-sep ptot-end ${xcls || ''}" colspan="2" style="left:${LB[3]}px${xstyle ? ';' + xstyle : ''}">${pVal}</td>` : '');
+  const totRefCell = () =>
+      _tc(LB[0], PW, 'num staff-sep', TOT.refund ? '-$' + Math.abs(TOT.refund).toFixed(0) : '—', 'color:#dc2626') + _tc(LB[1], PW, 'num' + (cmp ? '' : ' ptot-end'), TOT.refundComm ? '-$' + Math.abs(TOT.refundComm).toFixed(0) : '—', 'color:#dc2626')
+    + (cmp ? _tc(LB[2], PA, 'arrow-col', '') + _tc(LB[3], PW, 'num last thislast-sep', TOT.pRefund ? '-$' + Math.abs(TOT.pRefund).toFixed(0) : '—', 'color:#dc2626') + _tc(LB[4], PW, 'num last ptot-end', TOT.pRefundComm ? '-$' + Math.abs(TOT.pRefundComm).toFixed(0) : '—', 'color:#dc2626') : '');
+  const totBlank = () => `<td class="ptot ptot-end" colspan="${colsPer}" style="left:${PL}px"></td>`;
   const rows = [
-    `<tr><td class="sticky-col">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
+    `<tr><td class="sticky-col">Total</td>${totQuad(TOT.billed, TOT.comm, TOT.pBilled, TOT.pComm)}${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
     ...(T.some(x => x.c.refund || x.p.refund) ? [
-      `<tr><td class="sticky-col">Refunds</td>${T.map(x => refCells(x.c, x.p)).join('')}</tr>`,
+      `<tr><td class="sticky-col">Refunds</td>${totRefCell()}${T.map(x => refCells(x.c, x.p)).join('')}</tr>`,
     ] : []),
-    `<tr><td class="sticky-col">Check</td>${T.map(x => ovCell(x, 'check', x.cChk, _m2(x.pChk))).join('')}</tr>`,
-    `<tr><td class="sticky-col" style="font-weight:400;font-size:11px;color:var(--md-on-surface-variant)">Check #</td>${T.map(checkNumCell).join('')}</tr>`,
-    `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => ovCell(x, 'deduction', x.cDed, x.pDed ? '-' + _m2(x.pDed) : '—', 'text-error')).join('')}</tr>`,
-    `<tr><td class="sticky-col">Cash</td>${T.map(x => ovCell(x, 'cash', x.cCash, _m2(x.pCash))).join('')}</tr>`,
-    `<tr style="font-weight:700"><td class="sticky-col">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
-    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * colsPer}"></td></tr>`,
+    `<tr><td class="sticky-col">Check</td>${totSpan(tm(TOT.chk), tm(TOT.pChk))}${T.map(x => ovCell(x, 'check', x.cChk, _m2(x.pChk))).join('')}</tr>`,
+    `<tr><td class="sticky-col" style="font-weight:400;font-size:11px;color:var(--md-on-surface-variant)">Check #</td>${totBlank()}${T.map(checkNumCell).join('')}</tr>`,
+    `<tr><td class="sticky-col">Cash deduction</td>${totSpan(TOT.ded ? '-' + tm(TOT.ded) : '—', TOT.pDed ? '-' + tm(TOT.pDed) : '—', '', 'color:#dc2626')}${T.map(x => ovCell(x, 'deduction', x.cDed, x.pDed ? '-' + _m2(x.pDed) : '—', 'text-error')).join('')}</tr>`,
+    `<tr><td class="sticky-col">Cash</td>${totSpan(tm(TOT.cash), tm(TOT.pCash))}${T.map(x => ovCell(x, 'cash', x.cCash, _m2(x.pCash))).join('')}</tr>`,
+    `<tr style="font-weight:700"><td class="sticky-col">Total paid</td>${totSpan(tm(TOT.total), tm(TOT.pTotal), 'ptot-paid')}${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
+    `<tr class="section-row"><td class="sticky-col">By day ${info}</td>${totBlank()}<td colspan="${T.length * colsPer}"></td></tr>`,
     ...curDays.map((day, i) => {
       const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
-      return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
+      const td = TOT.daily[i] || { billed: 0, comm: 0 }, pd = TOT.pDaily[i] || { billed: 0, comm: 0 };
+      return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${totQuad(td.billed, td.comm, pd.billed, pd.comm)}${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const head1 = T.map(x => { const legal = x.tech.legalName || '', pref = x.tech.name || legal || ''; const showLegal = legal && legal.toLowerCase() !== pref.toLowerCase(); return `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${_eTxn(pref)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span>${showLegal ? `<div style="font-weight:400;font-size:10px;color:var(--md-on-surface-variant)">${_eTxn(legal)}</div>` : ''}</th>`; }).join('');
-  const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
-  const head3 = T.map(() => cmp
+  const head1 = `<th class="ptot-h staff-sep" colspan="${colsPer}" style="left:${PL}px;text-align:center" title="Read-only — totals across all technicians (reflects any overrides)">All techs</th>`
+    + T.map(x => { const legal = x.tech.legalName || '', pref = x.tech.name || legal || ''; const showLegal = legal && legal.toLowerCase() !== pref.toLowerCase(); return `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${_eTxn(pref)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span>${showLegal ? `<div style="font-weight:400;font-size:10px;color:var(--md-on-surface-variant)">${_eTxn(legal)}</div>` : ''}</th>`; }).join('');
+  const head2 = `<th class="ptot-h staff-sep" colspan="2" style="left:${PL}px;text-align:center;font-weight:600">This</th><th class="ptot-h arrow-col" style="left:${LB[2]}px"></th><th class="ptot-h thislast-sep" colspan="2" style="left:${LB[3]}px;text-align:center;font-weight:600">Last</th>`
+    + T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
+  const head3 = (cmp
+      ? `<th class="ptot-h num staff-sep" style="left:${LB[0]}px;min-width:${PW}px">Billed</th><th class="ptot-h num" style="left:${LB[1]}px;min-width:${PW}px">Comm</th><th class="ptot-h arrow-col" style="left:${LB[2]}px;min-width:${PA}px"></th><th class="ptot-h num thislast-sep" style="left:${LB[3]}px;min-width:${PW}px">Billed</th><th class="ptot-h num" style="left:${LB[4]}px;min-width:${PW}px">Comm</th>`
+      : `<th class="ptot-h num staff-sep" style="left:${LB[0]}px;min-width:${PW}px">Billed</th><th class="ptot-h num" style="left:${LB[1]}px;min-width:${PW}px">Comm</th>`)
+    + T.map(() => cmp
     ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
     : `<th class="num staff-sep">Billed</th><th class="num">Comm</th>`).join('');
   // ── Front-desk hourly pay (clocked hours × rate) + Check/Cash split ──

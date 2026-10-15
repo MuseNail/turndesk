@@ -447,6 +447,16 @@
   .data-table .thislast-sep { border-left: 1px dashed #9aa6a6; }
   .data-table thead .thislast-sep { border-left-color: rgba(255,255,255,.55); }
   .data-table .arrow-col { text-align: center; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+  /* Payroll "All techs" Total column — frozen beside the labels (a 2nd sticky block after
+     .sticky-col). Opaque so scrolled tech cells don't show through; the nth-child overrides beat
+     the zebra background rules (same trick as .sticky-col above). Fixed sub-column widths keep the
+     cumulative sticky left offsets (set inline per cell) deterministic. */
+  .data-table .ptot { position: sticky; z-index: 1; background: #dceaf7; }
+  .data-table tbody tr:nth-child(even) .ptot, .data-table tbody tr:nth-child(odd) .ptot { background: #dceaf7; }
+  .data-table tbody tr:nth-child(even) .ptot-paid, .data-table tbody tr:nth-child(odd) .ptot-paid { background: #c7ddf1; }
+  .data-table tbody tr.section-row td.ptot { background: #d0d6da; }
+  .data-table .ptot-end { border-right: 2px solid #8fb9dd; }
+  .data-table thead .ptot-h { position: sticky; z-index: 3; background: #1a5252; color: #fff; font-weight: 700; font-size: 12px; }
 
   /* Lift the item being dragged (turns ghost is already styled; match the others) */
   .tech-order-item.dragging, .floor-bubble.dragging {
