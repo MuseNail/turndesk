@@ -49,10 +49,11 @@ import * as landing from './features/landing.js';
 import * as billing from './features/billing.js';
 import * as support from './features/support.js';
 import * as waiver from './features/waiver.js';
+import * as pricemenuEditor from './features/pricemenu-editor.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver, pricemenuEditor]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -121,6 +122,8 @@ function setupBackHandler() {
   });
 }
 function goTo(screenId, param) {
+  // Unsaved-changes guard (price-menu editor) — a screen change (incl. the OS back gesture) while editing.
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => goTo(screenId, param)); return; }
   closeAllModals();   // a screen change never leaves a modal orphaned over the new screen
   const prevScreen = document.querySelector('.screen.active')?.id;
   if (prevScreen && prevScreen !== screenId && !_navBack) {
@@ -149,6 +152,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.57', items: [
+    { icon: 'receipt_long', t: 'Build your own printed price menu', d: 'Settings → Business → Price Menu lets you create a polished, print-ready customer price menu — two pages, grouped into sections, with optional per-service options (pick-one variants) and add-ons, descriptions, and footer notes. Edit it in a tidy list-and-detail editor (type to filter, drag to reorder, “Prints in” to move a service), Preview it in a new tab, and nothing goes live until you tap Save. New salons start from a neutral sample menu to edit. You can also look up any price fast from the header search (“how much is a gel manicure?”).' },
+  ] },
   { v: 'td-v0.56', items: [
     { icon: 'how_to_reg', t: 'Check a customer in straight from their profile', d: 'Looking up a customer now shows a “Check in” button — on each row of the Customers tab and inside their profile. It opens the normal check-in builder already filled in with their name and phone (so the waiver, duplicate-check-in, and appointment guards all still apply); you just pick the service.' },
     { icon: 'event_seat', t: 'Check a walk-in in right from the Floor Plan', d: 'Tap an empty chair on the Floor Plan to start a check-in aimed at that seat — the guest is seated there automatically once you finish. There’s also a “Check in” button on the Floor Plan toolbar for a walk-in with no seat chosen yet.' },
@@ -277,6 +283,8 @@ function renderDashSubnav(grp, activePanel) {
 }
 
 function showDashPanel(panel) {
+  // Unsaved-changes guard (price-menu editor) — intercept a tab switch while editing; re-invoke on Save/Discard.
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => showDashPanel(panel)); return; }
   if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Your role doesn’t have permission to view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {

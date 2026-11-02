@@ -369,6 +369,7 @@ const SETTINGS_NAV = [
     { label:'Business Profile', sub:'Name, address & phone — on the app & receipts', content:'bizprofile-section', render:'renderBusinessProfile', adminOnly:true, icon:'store' },
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
+    { label:'Price Menu', sub:'Edit the printed customer price menu', content:'settings-pricemenu-section', render:'renderPriceMenuEditor', adminOnly:true, icon:'receipt_long' },
     { label:'Check-in Waiver', sub:'Require a signed service waiver at check-in', content:'waiver-section', render:'renderWaiverSettings', adminOnly:true, icon:'gavel' },
     { label:'Check-in Kiosk & Bypass', sub:'Designate the signing kiosk + temporary bypass', content:'kiosk-bypass-section', render:'renderKioskBypassSettings', adminOnly:true, icon:'tablet' },
     // Exists ONLY while the operator's selfserve billing flag is on (Phase 1 default: off) —
@@ -410,6 +411,7 @@ function _settingsItemRow(it, subText) {
 }
 
 export function settingsNavRoot() {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsNavRoot()); return; }
   _settingsView = 'root'; _settingsCat = null;
   window.refreshBillingFlags?.();   // fire-and-forget — the Billing entry appears on the next nav render once the flag is on
   _hideAllSettingsSections();
@@ -446,6 +448,7 @@ export function filterSettings(q) {
 }
 export function clearSettingsSearch() { const i = document.getElementById('settings-search'); if (i) { i.value = ''; filterSettings(''); i.focus(); } }
 export function settingsOpenCategory(catId) {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenCategory(catId)); return; }   // defense-in-depth (unreachable from a leaf view today)
   const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
   _settingsView = 'cat'; _settingsCat = catId;
   _hideAllSettingsSections();
@@ -458,6 +461,7 @@ export function settingsOpenCategory(catId) {
   _setSettingsHeader(g.title, g.desc, true);
 }
 export function settingsOpenLeaf(contentId) {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenLeaf(contentId)); return; }
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
   if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
@@ -474,9 +478,13 @@ export function settingsOpenLeaf(contentId) {
     content.classList.remove('hidden');
     const hdr = wrapper?.querySelector(':scope > button'); if (hdr) hdr.classList.add('hidden');
   }
+  // The price-menu editor renders while its section is still display:none (clientWidth 0), so its
+  // fraction-based list-column width can't be computed until now — re-apply once it's visible.
+  if (contentId === 'settings-pricemenu-section') window._applyPmListColW?.();
   _setSettingsHeader(item?.label || 'Settings', '', true);
 }
 export function settingsBack() {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsBack()); return; }
   if (_settingsView === 'leaf' && _settingsCat) settingsOpenCategory(_settingsCat);
   else settingsNavRoot();
 }

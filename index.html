@@ -1200,6 +1200,10 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="receipt-section" class="hidden px-5 py-4"></div>
         </div>
+        <!-- Leaf: Price Menu (admin only) — filled by renderPriceMenuEditor -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-pricemenu-section" class="hidden px-5 py-4"></div>
+        </div>
         <!-- Leaf: Check-in Waiver (admin only) — filled by renderWaiverSettings -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="waiver-section" class="hidden px-5 py-4"></div>
@@ -3183,6 +3187,22 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      WHAT'S NEW (one-time per device after a version update)
 ═══════════════════════════════════════════════ -->
+<!-- Unsaved-changes guard for the price-menu editor (Settings → Price Menu) -->
+<div id="pm-unsaved-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/50" style="display:none">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 text-center">
+    <div class="w-14 h-14 rounded-full bg-secondary-container flex items-center justify-center mx-auto mb-4">
+      <span class="material-symbols-outlined text-secondary" style="font-size:28px;font-variation-settings:'FILL' 1">edit_note</span>
+    </div>
+    <h2 class="text-xl font-headline font-bold text-on-surface mb-2">Unsaved changes</h2>
+    <p class="text-sm font-body text-on-surface-variant mb-6">You have unsaved edits to the price menu. Save them, discard them, or keep editing?</p>
+    <div class="flex flex-col gap-2.5">
+      <button onclick="pmUnsavedSave()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save and leave</button>
+      <button onclick="pmUnsavedDiscard()" class="w-full border-2 border-error text-error hover:bg-error/10 py-3 rounded-xl font-headline font-bold transition-all">Discard changes</button>
+      <button onclick="pmUnsavedStay()" class="w-full border-2 border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-bold transition-all">Keep editing</button>
+    </div>
+  </div>
+</div>
+
 <div id="whatsnew-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeWhatsNew()">
   <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md shadow-2xl fade-up max-h-[85vh] flex flex-col">
     <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">

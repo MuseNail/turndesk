@@ -4,6 +4,7 @@
 // not-yet-checked-in appointments. Tap a result to jump straight to it.
 import { getState } from '../store.js';
 import { escHtml, escAttrJs } from '../utils.js';
+import { priceMenuSearch, normalizePriceMenu } from './guide.js';   // desk "how much is X?" price lookup
 
 // DO customer entities (state.customers) carry firstName/lastName/phone — match the
 // directory's real shape (square-customers.js rebuildDirectory), not the old Square
@@ -115,12 +116,25 @@ function _gsSearch(qstr) {
     go: `gsGo('gc','${escAttrJs(String(g.id))}')`,
   })) });
 
+  // Service prices (the desk "how much is X?" lookup — reads the price-menu data)
+  try {
+    const prices = priceMenuSearch(normalizePriceMenu(st.config && st.config.price_menu), ql).slice(0, 6);
+    if (prices.length) out.push({ label: 'Prices', icon: 'sell', rows: prices.map(m => ({
+      title: esc(`${m.label}${m.price ? ' — ' + m.price : ''}`),
+      sub: esc(m.section || ''),
+      go: `gsGo('price')`,
+    })) });
+  } catch {}
+
   return out;
 }
 
 // Result tap → jump. One dispatcher keeps the inline onclicks tiny and safe.
 export function gsGo(kind, a) {
   closeGlobalSearch();
+  // Respect an open unsaved price-menu editor before jumping away (mirrors showDashPanel's guard).
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => gsGo(kind, a)); return; }
+  if (kind === 'price') { window.openPriceMenu?.(); return; }   // show the full printed menu
   if (kind === 'cust')  { window.showEditCustomer?.(a); return; }
   if (kind === 'queue') { window.showDashPanel?.('queue'); window.showGroupAssignModal?.(a); return; }
   if (kind === 'txn')   { window.showDashPanel?.('transactions'); window.selectRangeDay?.(a); return; }

@@ -3,7 +3,7 @@
 // PDF" produces the PDF. Kept in code (not a committed binary) so it never drifts
 // from the app. Exposed on window via main.js glue for the account-menu buttons.
 import { getState } from '../store.js';
-import { businessName } from '../utils.js';
+import { businessName, escHtml } from '../utils.js';
 
 const STYLE = `
 *{box-sizing:border-box}
@@ -40,62 +40,227 @@ function openDoc(title, html) {
 export function openAppGuide() { openDoc('TurnDesk — App Guide', FULL); }
 export function openAppQuickRef() { openDoc('TurnDesk — Quick Reference', QUICK); }
 
-// ── Customer Price Menu — auto-generated from the salon's catalog ──────────────
-// A print-friendly, customer-facing price list built from the services this salon shows
-// on check-in (config.services minus config.hidden_services), styled like an elegant
-// printed menu. Salon-agnostic: the header is the business name and each price comes from
-// the service's baseCost (a service with no set price shows "ask"). Ported in spirit from
-// Muse's hand-authored menu, but CATALOG-DRIVEN since every TurnDesk salon differs — so it
-// has no hardcoded services, descriptions, groupings, or cash-discount policy. Flowing
-// two-column layout so any catalog size prints cleanly across pages.
+// ── Customer Price Menu — editable, tiered, print-friendly (ported from Muse) ──
+// The menu is DATA (config.price_menu), edited in Settings → Price Menu and rendered by a pure
+// priceMenuToHtml into a print-friendly two-page doc. A service can carry pick-one `variants` and/or
+// stackable `addons`, rendered indented. Owner text is stored DECODED and escaped exactly once on
+// render — the doc is document.write-n into a new tab, so escaping is the whole XSS defense.
+// Multi-tenant: the header is the salon's businessName() (no hardcoded logo), and a salon that hasn't
+// built a menu yet gets a GENERIC nail-salon starter (DEFAULT_PRICE_MENU) to edit — never another
+// salon's prices. normalizePriceMenu hardens the read path so a malformed/partial/empty synced config
+// can never throw or blank the customer-facing menu.
 const PRICE_MENU_STYLE = `
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+@page{size:Letter;margin:0}
 body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .bar{position:sticky;top:0;z-index:5;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #ddd}
 .bar strong{font-size:14px;letter-spacing:1px}
 .bar button{background:#1a5252;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer}
-.page{max-width:8in;margin:18px auto;padding:0.55in 0.7in;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.16)}
-.wordmark{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:34px;letter-spacing:2px;text-align:center;color:#1a5252}
-.rule{border:0;border-top:1px solid #ccc;width:1.3in;margin:0.14in auto 0}
-.pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:24px;color:#1a1a1a;text-align:center;margin:8px 0 0}
-.cols{columns:2;column-gap:0.6in;margin-top:0.24in}
-.row{display:flex;align-items:baseline;gap:7px;margin:6px 0;break-inside:avoid}
-.nm{font-size:15px;font-weight:400;color:#1a1a1a}
-.dots{flex:1;border-bottom:1px dotted #ccc;transform:translateY(-4px)}
-.pr{font-size:15px;font-weight:500;color:#1a5252;white-space:nowrap}
-.empty{color:#777;font-style:italic;text-align:center;padding:0.4in 0}
-.foot{margin-top:0.3in;border-top:1px solid #ccc;padding-top:0.16in}
+.page{width:8.5in;height:11in;padding:0.22in 0.6in 0.3in;background:#ffffff;margin:18px auto;box-shadow:0 4px 18px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden}
+.phead{display:flex;align-items:center;gap:0.2in;border-bottom:1px solid #cccccc;padding-bottom:0.1in}
+.pm-wordmark{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:23px;letter-spacing:1px;color:#1a5252;width:1.7in;flex-shrink:0;line-height:1.1}
+.phead-sp{width:1.7in;flex-shrink:0}
+.pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:25px;color:#1a1a1a;text-align:center;margin:0;flex:1}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 0.55in;margin-top:0.16in;flex:1}
+.sec{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:19px;letter-spacing:3px;color:#1a5252;text-transform:uppercase;margin:15px 0 7px;display:flex;align-items:center;gap:9px}
+.col>.sec:first-child{margin-top:0}
+.sec::after{content:"";flex:1;border-bottom:1px solid #cccccc}
+.row{display:flex;align-items:baseline;gap:7px;margin:5px 0}
+.nm{font-size:15.5px;font-weight:400;color:#1a1a1a}
+.dots{flex:1;border-bottom:1px dotted #cccccc;transform:translateY(-4px)}
+.pr{font-size:13.5px;font-weight:500;color:#1a5252;white-space:nowrap}
+.desc{font-size:12px;color:#1a1a1a;font-style:italic;margin:-2px 0 4px;white-space:pre-line}
+.sec+.desc{margin-top:0}
+.subhead{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:14.5px;letter-spacing:1px;color:#2a6d6a;margin:9px 0 3px 0.08in}
+.choose{font-size:11px;font-style:italic;color:#8a8a8a;margin:2px 0 1px 0.16in}
+.subrow,.addon{display:flex;align-items:baseline;gap:7px;margin:3px 0 3px 0.16in}
+.subrow .nm,.addon .nm{font-size:13.5px;color:#444444}
+.subrow .pr,.addon .pr{font-size:13.5px;font-weight:500;color:#1a5252;white-space:nowrap}
+.subrow .dots,.addon .dots{flex:1;border-bottom:1px dotted #d8d8d8;transform:translateY(-3px)}
+.subrow+.desc,.addon+.desc{margin-left:0.16in}
+.foot{margin-top:0.16in;border-top:1px solid #cccccc;padding-top:0.12in}
 .foot p{margin:6px 0;font-size:12.5px;line-height:1.5;text-align:center;color:#1a1a1a}
-@media print{.bar{display:none}body{background:#fff}.page{margin:0;box-shadow:none;max-width:none}}
-@page{size:Letter;margin:1.1cm}
+.foot .cash{font-weight:500;color:#1a5252}
+.foot .fix{font-size:11.5px;color:#1a1a1a;font-style:italic}
+@media print{.bar{display:none}body{background:#fff}.page{margin:0;box-shadow:none}}
 `;
+
+// ── Price-menu data model + render ────────────────────────────────────────────
+// Owner text is stored DECODED (real "&", real non-breaking spaces) and escaped exactly once on
+// render — the doc is document.write-n into a new tab, so escaping is the whole XSS defense. A service
+// can carry pick-one `variants` and/or stackable `addons`, rendered indented.
+const NB = ' ';   // non-breaking space (the "set / fill" spacer)
+// Generic nail-salon STARTER — a brand-neutral sample every salon edits in Settings → Price Menu.
+// It is NOT any real salon's prices; it exists only so a salon that hasn't built a menu sees a
+// sensible, editable shape rather than a blank page.
+export const DEFAULT_PRICE_MENU = { v: 1, pages: [
+  { title: 'Hand Services', cols: [
+    [
+      { t: 'sec', label: 'Manicures' },
+      { t: 'row', nm: 'Classic Manicure', pr: '$25' },
+      { t: 'row', nm: 'Gel Manicure', pr: '$35' },
+      { t: 'row', nm: 'Deluxe Manicure', pr: '$45', desc: 'scrub, mask & hot towel' },
+      { t: 'sec', label: 'Full Sets & Fills', desc: 'set / fill' },
+      { t: 'row', nm: 'Acrylic', pr: '$55 / 45' },
+      { t: 'row', nm: 'Dip Powder', pr: '$50' },
+      { t: 'row', nm: 'Gel-X', pr: '$65 / 55' },
+    ],
+    [
+      { t: 'sec', label: 'Color & Add-Ons' },
+      { t: 'row', nm: 'Regular Polish Change', pr: '$15' },
+      { t: 'row', nm: 'Gel Color Change', pr: '$25' },
+      { t: 'row', nm: 'Nail Art', pr: 'from $5' },
+      { t: 'row', nm: 'French Tip', pr: 'from $7' },
+      { t: 'row', nm: 'Gel Removal', pr: '$10' },
+    ],
+  ], foot: [
+    { text: 'Prices vary by length, shape, design & add-ons — for an exact quote, please ask your technician before your service begins.' },
+    { text: 'This is a sample menu. Edit it in Settings → Price Menu to match your salon.', cls: 'fix' },
+  ] },
+  { title: 'Foot Services & Waxing', cols: [
+    [
+      { t: 'sec', label: 'Pedicures' },
+      { t: 'row', nm: 'Classic Pedicure', pr: '$33' },
+      { t: 'row', nm: 'Spa Pedicure', pr: '$45' },
+      { t: 'row', nm: 'Deluxe Pedicure', pr: '$60', desc: 'scrub, mask, paraffin & extended massage' },
+      { t: 'sec', label: 'Pedicure Add-Ons' },
+      { t: 'row', nm: 'Gel Polish', pr: '$13' },
+      { t: 'row', nm: 'Callus Treatment', pr: '$7' },
+    ],
+    [
+      { t: 'sec', label: 'Waxing' },
+      { t: 'row', nm: 'Eyebrows', pr: '$15' },
+      { t: 'row', nm: 'Lip or Chin', pr: '$10' },
+      { t: 'row', nm: 'Underarms', pr: '$20' },
+      { t: 'row', nm: 'Half / Full Leg', pr: '$40 / 60' },
+    ],
+  ], foot: [
+    { text: 'Prices vary by length, shape, design & add-ons — for an exact quote, please ask your technician before your service begins.' },
+  ] },
+] };
+
+const _WL_CLS = new Set(['', 'cash', 'fix']);
+let _pmc = 0;
+const _pmUid = () => 'pm' + (++_pmc) + Math.random().toString(36).slice(2, 6);
+const _str = v => String(v == null ? '' : v);
+function _normSub(v) { return (v && typeof v === 'object') ? { id: v.id || _pmUid(), nm: _str(v.nm), pr: _str(v.pr), ...(v.desc != null ? { desc: _str(v.desc) } : {}) } : null; }
+function _normItem(it) {
+  if (!it || typeof it !== 'object') return null;
+  if (it.t === 'sec') return { id: it.id || _pmUid(), t: 'sec', label: _str(it.label), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
+  if (it.t === 'sub') return { id: it.id || _pmUid(), t: 'sub', label: _str(it.label) };   // subheader: a secondary heading under a section
+  if (it.t === 'row') {
+    const row = { id: it.id || _pmUid(), t: 'row', nm: _str(it.nm), pr: _str(it.pr), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
+    const vs = (Array.isArray(it.variants) ? it.variants : []).map(_normSub).filter(Boolean); if (vs.length) row.variants = vs;
+    const as = (Array.isArray(it.addons) ? it.addons : []).map(_normSub).filter(Boolean); if (as.length) row.addons = as;
+    return row;
+  }
+  return null;   // unknown item type → drop
+}
+function _normPages(pages) {
+  return pages.map(p => ({
+    id: (p && p.id) || _pmUid(),   // pages + foot lines carry ids too, so the editor can address EVERYTHING by id
+    title: _str(p && p.title),
+    cols: (Array.isArray(p && p.cols) ? p.cols : []).map(col => (Array.isArray(col) ? col : []).map(_normItem).filter(Boolean)),
+    foot: (Array.isArray(p && p.foot) ? p.foot : []).map(f => (f && typeof f === 'object') ? { id: f.id || _pmUid(), text: _str(f.text), cls: _WL_CLS.has(f.cls) ? f.cls : '' } : null).filter(Boolean),
+  }));
+}
+// Return a valid, id-stamped menu — NEVER throw and never let a malformed/partial/stale synced
+// config.price_menu blank the customer-facing menu. Falls back to the default for anything that
+// isn't a well-formed { pages: [...] }; coerces junk nodes per-field; backfills missing ids.
+export function normalizePriceMenu(stored, opts) {
+  const src = (stored && Array.isArray(stored.pages) && stored.pages.length) ? stored : DEFAULT_PRICE_MENU;
+  let pages;
+  try { pages = _normPages(src.pages); } catch { pages = _normPages(DEFAULT_PRICE_MENU.pages); }
+  if (opts && opts.allowEmpty) return { v: 1, pages };   // preview renders the LITERAL draft, even mid-build
+  // A structurally-valid but CONTENT-empty config would render blank customer-facing pages — the one
+  // thing this function promises can't happen. Fall back to the default whenever nothing renders.
+  if (!pages.some(p => (p.cols || []).some(c => c.length))) pages = _normPages(DEFAULT_PRICE_MENU.pages);
+  return { v: 1, pages };
+}
+
+// Desk "how much is X?" lookup: flatten the menu into { label, price, section } matches for a query.
+// A matching service returns itself + its variants/add-ons; a variant/add-on is also findable by its
+// own name even when the parent doesn't match. Pure + tolerant of a malformed menu.
+export function priceMenuSearch(menu, query) {
+  const q = String(query == null ? '' : query).trim().toLowerCase(); if (!q) return [];
+  const hit = s => String(s == null ? '' : s).toLowerCase().includes(q);
+  const out = [];
+  for (const p of (menu && menu.pages) || []) {
+    let section = '';
+    for (const col of (p && p.cols) || []) {
+      for (const it of (col || [])) {
+        if (!it) continue;
+        if (it.t === 'sec') { section = it.label || ''; continue; }
+        if (it.t !== 'row') continue;
+        if (hit(it.nm)) {   // service name matches → show it + all its tiers
+          out.push({ label: it.nm || '', price: it.pr || '', section });
+          for (const v of (it.variants || [])) out.push({ label: (it.nm || '') + ' · ' + (v.nm || ''), price: v.pr || '', section });
+          for (const a of (it.addons || [])) out.push({ label: '+ ' + (a.nm || ''), price: a.pr || '', section: it.nm || '' });
+        } else {            // otherwise match a tier by its own name
+          for (const v of (it.variants || [])) if (hit(v.nm)) out.push({ label: (it.nm || '') + ' · ' + (v.nm || ''), price: v.pr || '', section });
+          for (const a of (it.addons || [])) if (hit(a.nm)) out.push({ label: '+ ' + (a.nm || '') + ' (' + (it.nm || '') + ')', price: a.pr || '', section });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Pure renderer: data → the menu's page sections (no getState inside; menu + escaper passed in).
+export function priceMenuToHtml(menu, logoTag, esc) {
+  const e = typeof esc === 'function' ? esc : (s => _str(s));
+  const sub = (cls, prefix, v) => `<div class="${cls}"><span class="nm">${prefix}${e(v.nm)}</span><span class="dots"></span><span class="pr">${e(v.pr)}</span></div>` + (v.desc ? `<div class="desc">${e(v.desc)}</div>` : '');
+  const itemHtml = it => {
+    if (!it) return '';                                 // self-safe even if handed un-normalized data
+    if (it.t === 'sec') return `<div class="sec">${e(it.label)}</div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
+    if (it.t === 'sub') return `<div class="subhead">${e(it.label)}</div>`;   // secondary heading under a section
+    if (it.t !== 'row') return '';                      // unknown node type → render nothing (not "undefined")
+    let h = `<div class="row"><span class="nm">${e(it.nm)}</span><span class="dots"></span><span class="pr">${e(it.pr)}</span></div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
+    if (it.variants && it.variants.length) h += it.variants.map(v => sub('subrow', '', v)).join('');
+    if (it.addons && it.addons.length) h += it.addons.map(a => sub('addon', '+ ', a)).join('');
+    return h;
+  };
+  const colHtml = col => `<div class="col">${(col || []).map(itemHtml).join('')}</div>`;
+  const footHtml = foot => (foot && foot.length) ? `<div class="foot">${foot.map(f => { const c = _WL_CLS.has(f.cls) ? f.cls : ''; return `<p${c ? ` class="${c}"` : ''}>${e(f.text)}</p>`; }).join('')}</div>` : '';
+  return (menu.pages || []).map(p =>
+    `<section class="page"><div class="phead">${logoTag}<div class="pagetitle">${e(p.title)}</div><div class="phead-sp"></div></div><div class="cols">${(p.cols || []).map(colHtml).join('')}</div>${footHtml(p.foot)}</section>`
+  ).join('');
+}
+
 export function openPriceMenu() {
   const w = window.open('', '_blank');
   if (!w) { alert('Please allow pop-ups for this site to open the price menu.'); return; }
   w.document.write(priceMenuDoc());
   w.document.close();
 }
-function priceMenuDoc() {
-  const c = getState().config || {};
-  const hidden = new Set(c.hidden_services || []);
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-  const services = (c.services || []).filter(s => s && s.label && !hidden.has(s.id));
-  const priceOf = s => (s.baseCost != null && s.baseCost !== '') ? ('$' + s.baseCost) : 'ask';
-  const rows = services.length
-    ? services.map(s => `<div class="row"><span class="nm">${esc(s.label)}</span><span class="dots"></span><span class="pr">${esc(priceOf(s))}</span></div>`).join('')
-    : `<div class="empty">No services to show yet — add them in Settings → Services.</div>`;
-  const name = esc(businessName() || 'Our Salon');
+// menuOverride (optional) renders that menu instead of the live config — used by the editor preview,
+// which passes the unsaved DRAFT and renders it literally (allowEmpty) so a half-built menu shows as-is.
+// A preview also gets a per-page overflow banner (accurate — measured with the real print fonts).
+function priceMenuDoc(menuOverride) {
+  const name = businessName() || 'Our Salon';
+  const logo = `<div class="pm-wordmark">${escHtml(name)}</div>`;
+  const preview = menuOverride != null;
+  let body;
+  try {
+    const menu = preview ? normalizePriceMenu(menuOverride, { allowEmpty: true }) : normalizePriceMenu(getState().config.price_menu);
+    body = priceMenuToHtml(menu, logo, escHtml);
+  } catch { try { body = priceMenuToHtml(normalizePriceMenu(null), logo, escHtml); } catch { body = ''; } }
+  const overflowScript = preview ? `<script>addEventListener('load',function(){document.querySelectorAll('.page').forEach(function(pg){if(pg.scrollHeight>pg.clientHeight+2){var b=document.createElement('div');b.textContent='⚠ This page is longer than one printed sheet — some items may be cut off when printed.';b.style.cssText='background:#fdecec;color:#8a2b2b;font-size:12px;padding:6px 12px;text-align:center;font-family:sans-serif';pg.parentNode.insertBefore(b,pg);}});});<\/script>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${name} — Price Menu</title>` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(name)} — Price Menu${preview ? ' (preview)' : ''}</title>` +
     `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
-    `<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">` +
+    `<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">` +
     `<style>${PRICE_MENU_STYLE}</style></head><body>` +
-    `<div class="bar"><strong>${name.toUpperCase()} · PRICE MENU</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
-    `<section class="page"><div class="wordmark">${name}</div><hr class="rule"><div class="pagetitle">Price Menu</div>` +
-    `<div class="cols">${rows}</div>` +
-    `<div class="foot"><p>Prices vary by length, shape, design &amp; add-ons — for an exact quote, please ask your technician before your service begins.</p></div>` +
-    `</section></body></html>`;
+    `<div class="bar"><strong>${escHtml(name.toUpperCase())} · PRICE MENU${preview ? ' · PREVIEW' : ''}</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
+    body + overflowScript +
+    `</body></html>`;
+}
+// Open the editor's unsaved DRAFT in a single reused tab (named window) — not the live menu.
+export function openPriceMenuPreview(menu) {
+  const w = window.open('', 'td-price-preview');
+  if (!w) { alert('Please allow pop-ups for this site to open the preview.'); return; }
+  w.document.open(); w.document.write(priceMenuDoc(menu)); w.document.close(); try { w.focus(); } catch {}
 }
 
 // ── Full guide — the detailed manual: every screen, button, symbol, and color ──
