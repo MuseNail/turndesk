@@ -119,7 +119,7 @@ function custLines(e, stationId, fs = 1) {
     const s = svc(sid), t = a && a.techId ? staffById(a.techId) : null;
     const dot = `<span style="display:inline-block;width:${dotPx}px;height:${dotPx}px;border-radius:50%;flex-shrink:0;box-sizing:border-box;${ls.dot}"></span>`;
     const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
-      ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}${t ? '' : ' · Wait'}</span>
+      ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.comped ? ' · Comp' : (a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : '')}${t ? '' : ' · Wait'}</span>
     </div>`;
     const sti = a ? serviceTimeInfo(a) : null;
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';

@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, escHtml, businessName, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel, xlsxBlob } from '../utils.js';
+import { showToast, escHtml, businessName, localDateStr, todayStr, partyLetterMap, ticketTotal, lineCharge, compedAmount, newEntryId, dateBtnLabel, xlsxBlob } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -536,10 +536,13 @@ export function runReport() {
     return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund');
   });
 
-  const svcTotal = filtered.reduce((s,r)=>s+(r.assignments||[]).reduce((a,x)=>a+(x.cost||0),0),0);
+  const svcTotal = filtered.reduce((s,r)=>s+(r.assignments||[]).reduce((a,x)=>a+lineCharge(x),0),0);   // services REVENUE: comp excluded (business)
   const itemsTotal = filtered.reduce((s,r)=>s+(r.items||[]).reduce((a,x)=>a+(x.price||0)*(x.qty||0),0),0);
   const feesTotal = filtered.reduce((s,r)=>s+(r.fees||[]).reduce((a,x)=>a+(x.amount||0),0),0);
   const discountTotal = filtered.reduce((s,r)=>s+(r.discount||0),0);
+  // Comped = the business giveaway: sum of every comped line's price (the tech was still paid on it,
+  // the customer paid $0, so it's a loss the owner wants visible). NOT subtracted from any shown total.
+  const compedTotal = filtered.reduce((s,r)=>s+(r.assignments||[]).reduce((a,x)=>a+compedAmount(x),0),0);
   const totalIncome = filtered.reduce((s,r)=>s+(r.totalCost||0),0);   // "Total Billed" — bill only, no tips; still drives Avg Ticket / Shop Keeps
   const guestCount = filtered.filter(r => isPaidStatus(r.status) && !r.quickSale).length;   // retail/gift-card-only Quick Sales aren't "guests"
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
@@ -553,6 +556,7 @@ export function runReport() {
   set('rpt-total-guests', guestCount); set('rpt-avg-ticket', `$${avgTicket.toFixed(2)}`);
   set('rpt-svc-total', `$${svcTotal.toFixed(2)}`); set('rpt-items-total', `$${itemsTotal.toFixed(2)}`); set('rpt-fees-total', `$${feesTotal.toFixed(2)}`);
   set('rpt-discount-total', discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00');
+  set('rpt-comped-total', `$${compedTotal.toFixed(2)}`);
   set('rpt-total-tips', `$${tipsTotal.toFixed(2)}`);
   set('rpt-pay-card', `$${cardMix.toFixed(2)}`); set('rpt-pay-cash', `$${cashMix.toFixed(2)}`); set('rpt-pay-gift', `$${giftMix.toFixed(2)}`); set('rpt-pay-zelle', `$${zelleMix.toFixed(2)}`); set('rpt-pay-other', `$${otherMix.toFixed(2)}`);
   const refundsTotal = filtered.filter(r => r.status === 'refund').reduce((s,r)=>s+(r.totalCost||0),0);
@@ -618,7 +622,7 @@ export function runReport() {
   const svcMap = {};
   filtered.forEach(r => {
     if (r.status === 'refund') return;   // a refund has no assignments; without this it would fall into the count-only branch below and inflate a service's "times" by 1 (no $ impact, but wrong count)
-    (r.assignments||[]).forEach(a => { if (!a.serviceId) return; if (!svcMap[a.serviceId]) svcMap[a.serviceId] = { income:0, count:0 }; svcMap[a.serviceId].income += a.cost||0; svcMap[a.serviceId].count++; });
+    (r.assignments||[]).forEach(a => { if (!a.serviceId) return; if (!svcMap[a.serviceId]) svcMap[a.serviceId] = { income:0, count:0 }; svcMap[a.serviceId].income += lineCharge(a); svcMap[a.serviceId].count++; });   // per-service revenue: comp excluded
     if (!r.assignments || r.assignments.length === 0) r.services.forEach(sid => { if (!svcMap[sid]) svcMap[sid] = { income:0, count:0 }; svcMap[sid].count++; });
   });
   const svcBreakdown = document.getElementById('rpt-services-breakdown');
@@ -672,7 +676,7 @@ export function runReport() {
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
-  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix });
+  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, compedTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix });
   renderPerformance(filtered, from, to);
   updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
@@ -695,7 +699,7 @@ function buildAnalyticsSummary() {
     byHour[d.getHours()].rev += rev; byHour[d.getHours()].n++;
     byDow[d.getDay()].rev += rev; byDow[d.getDay()].n++;
     byDay[localDateStr(d)] = (byDay[localDateStr(d)] || 0) + rev;
-    (r.assignments || []).forEach(a => { const name = svc(a.serviceId)?.label || 'Service'; (bySvc[name] = bySvc[name] || { rev: 0, n: 0 }); bySvc[name].rev += a.cost || 0; bySvc[name].n++; });
+    (r.assignments || []).forEach(a => { const name = svc(a.serviceId)?.label || 'Service'; (bySvc[name] = bySvc[name] || { rev: 0, n: 0 }); bySvc[name].rev += lineCharge(a); bySvc[name].n++; });   // per-service revenue (AI summary): comp excluded, consistent with the headline total
   });
   const L = [];
   L.push(`${businessName()} — ${rangeLabel()}`);
@@ -735,10 +739,11 @@ export function aiOpenClaude() { window.open('https://claude.ai/new', '_blank');
 export function computeMetrics(from, to) {
   const filtered = buildCombinedRecords().filter(r => { if (r.status === 'deleted') return false; const d = new Date(r.checkinTime); return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund'); });
   const sum = (arr, f) => arr.reduce((s,x)=>s+f(x),0);
-  const svcTotal = sum(filtered, r => sum(r.assignments||[], x => x.cost||0));
+  const svcTotal = sum(filtered, r => sum(r.assignments||[], x => lineCharge(x)));   // services revenue: comp excluded (business)
   const itemsTotal = sum(filtered, r => sum(r.items||[], x => (x.price||0)*(x.qty||0)));
   const feesTotal = sum(filtered, r => sum(r.fees||[], x => x.amount||0));
   const discountTotal = sum(filtered, r => r.discount||0);
+  const compedTotal = sum(filtered, r => sum(r.assignments||[], x => compedAmount(x)));
   const totalIncome = sum(filtered, r => r.totalCost||0);
   const guestCount = filtered.filter(r => isPaidStatus(r.status) && !r.quickSale).length;   // retail/gift-card-only Quick Sales aren't "guests"
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
@@ -751,13 +756,13 @@ export function computeMetrics(from, to) {
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const tipsTotal = sum(filtered, r => r.tip||0);
   const { cardMix, cashMix, giftMix, zelleMix, otherMix } = paymentMix(filtered, tipsTotal);
-  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
+  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, compedTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 const _DELTA_CARDS = [
   ['rpt-gross-income-delta','grossIncome'], ['rpt-total-tips-delta','tipsTotal'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
   ['rpt-shop-keeps-delta','shopKeeps'], ['rpt-total-commission-delta','commission'],
   ['rpt-svc-total-delta','svcTotal'], ['rpt-items-total-delta','itemsTotal'], ['rpt-fees-total-delta','feesTotal'],
-  ['rpt-discount-total-delta','discountTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
+  ['rpt-discount-total-delta','discountTotal'], ['rpt-comped-total-delta','compedTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
   ['rpt-pay-card-delta','cardMix'], ['rpt-pay-cash-delta','cashMix'], ['rpt-pay-gift-delta','giftMix'], ['rpt-pay-zelle-delta','zelleMix'], ['rpt-pay-other-delta','otherMix'],
 ];
 function setDelta(id, cur, prev) {
@@ -782,7 +787,7 @@ let perfGran = 'hour', perfMetric = 'revenue', perfUnit = 'amount';   // device-
 // pulls from the gift-card ledger (by date) instead of records; avg:true = per-bucket avg ticket.
 const PERF_METRICS = [
   { key:'revenue',    label:'Total revenue',       units:'$',  val: r => r.totalCost || 0 },
-  { key:'services',   label:'Services',            units:'$',  val: r => (r.assignments || []).reduce((s, a) => s + (a.cost || 0), 0) },
+  { key:'services',   label:'Services',            units:'$',  val: r => (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0) },
   { key:'guests',     label:'Guests served',       units:'#',  cnt: () => 1 },
   { key:'avg',        label:'Avg ticket',          units:'$',  avg: true },
   { key:'tips',       label:'Tips collected',      units:'$',  val: r => r.tip || 0 },
@@ -925,7 +930,7 @@ export function resetServiceTime(techId) {
 export function drillDownService(sid) {
   const d = window._currentReportData; if (!d) return;
   const s = svc(sid), rows = [];
-  d.filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.serviceId !== sid) return; rows.push({ customer: r.name, tech: staffById(a.techId)?.name || '—', cost: a.cost||0, station: a.station||'', time: new Date(r.checkinTime) }); }));
+  d.filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.serviceId !== sid) return; rows.push({ customer: r.name, tech: staffById(a.techId)?.name || '—', cost: lineCharge(a), station: a.station||'', time: new Date(r.checkinTime) }); }));   // per-service revenue drilldown: comp excluded
   _drill = {
     title: `${s?.label||sid} — Detail`,
     columns: ['Date','Time','Customer','Technician','Station','Cost'],
@@ -2292,7 +2297,7 @@ export function showTxnDetail(recordId) {
   const line = (label, val, o = {}) => `<div class="flex justify-between items-baseline gap-3 py-1.5 ${o.border ? 'border-t border-surface-container-high mt-1 pt-2' : ''}"><span class="text-sm font-body ${o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface-variant'} min-w-0">${_eTxn(label)}</span><span class="text-sm font-body whitespace-nowrap ${o.neg ? 'text-error' : o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface'}">${o.neg ? '-' : ''}${money(val)}</span></div>`;
   const rows = [], drillRows = [];
   const add = (label, val, o) => { rows.push(line(label, val, o)); drillRows.push([label, (o?.neg ? '-' : '') + money(val)]); };
-  (r.assignments || []).forEach(a => add(`${svc(a.serviceId)?.label || a.serviceId || 'Service'}${a.techId ? ' · ' + (staffById(a.techId)?.name || '—') : ''}${a.station ? ' @ ' + a.station : ''}${a.comped ? ' · ' + (a.compReason || 'Comp') : ''}`, a.cost || 0));
+  (r.assignments || []).forEach(a => add(`${svc(a.serviceId)?.label || a.serviceId || 'Service'}${a.techId ? ' · ' + (staffById(a.techId)?.name || '—') : ''}${a.station ? ' @ ' + a.station : ''}${a.comped ? ' · ' + (a.compReason || 'Comp') : ''}`, lineCharge(a)));   // customer-paid itemization: a comp is $0 (labelled Comp above)
   if (!(r.assignments || []).length && !isRefund) (r.services || []).forEach(sid => add(svc(sid)?.label || sid, 0));
   (r.items || []).forEach(it => add(`${cfg().items.find(i => i.id === it.itemId)?.label || 'Item'} × ${it.qty || 1}`, (it.price || 0) * (it.qty || 0)));
   (r.fees || []).forEach(f => add(cfg().fees.find(x => x.id === f.feeId)?.label || 'Fee', f.amount || 0));
@@ -2840,7 +2845,10 @@ export async function confirmRefund() {
   // per-tech billed (negated, scaled for partial refunds) so the Payroll page can show a
   // per-tech Refunds line and — when config.commission_includes_refunds is on — dock pay.
   const origTotal = o.totalCost || refundAmount;
-  const ratio = origTotal > 0 ? refundAmount / origTotal : 1;
+  // ratio = fraction of the customer's payment being refunded, applied to the tech's (comp-included)
+  // billed to dock pay (only when commission_includes_refunds is on). Guard the $0-total case (e.g. a
+  // fully-comped ticket) so a 0 refund can't dock the full billed via the old `: 1` fallback.
+  const ratio = origTotal > 0 ? refundAmount / origTotal : (refundAmount > 0 ? 1 : 0);
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));

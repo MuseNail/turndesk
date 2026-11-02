@@ -2,7 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { canDo, getActiveUser } from '../session.js';
-import { showToast, commitNumpad, ticketTotal, escHtml } from '../utils.js';
+import { showToast, commitNumpad, ticketTotal, lineCharge, escHtml } from '../utils.js';
 import { isAwaitingPrice } from './status.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer, customerNote } from './square-customers.js';
@@ -50,7 +50,7 @@ function _payParts() {
   let svc = 0, items = 0, fees = 0, discount = 0;
   (_pendingPay?.ids || []).forEach(id => {
     const e = queue().find(x => String(x.id) === String(id)); if (!e) return;
-    (e.assignments || []).forEach(a => svc += a.cost || 0);
+    (e.assignments || []).forEach(a => svc += lineCharge(a));   // customer services subtotal: comps $0
     (e.items || []).forEach(i => items += (i.price || 0) * (i.qty || 0));
     (e.fees || []).forEach(f => fees += f.amount || 0);
     discount += e.discount || 0;
@@ -62,7 +62,7 @@ function _payParts() {
 // Fees live on entry.fees (anchor ticket), exactly as before — only the place they're entered
 // changed. Default-ON: each configured fee is auto-applied to the anchor when the pay modal opens.
 const _payParty = () => (_pendingPay?.ids || []).map(id => queue().find(e => String(e.id) === String(id))).filter(Boolean);
-const _entrySvc = e => (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+const _entrySvc = e => (e.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer services base (fees/anchor): comps $0
 const _paySvcSubtotal = () => _payParty().reduce((s, e) => s + _entrySvc(e), 0);
 function _payAnchor() {                 // the ticket the whole-checkout fee attaches to = largest service subtotal
   const party = _payParty(); if (!party.length) return null;
@@ -146,7 +146,7 @@ function payLine(label, amt) {
 }
 function payCustomerBlock(e) {
   const lines = [];
-  (e.assignments || []).forEach(a => { const s = cfg().services.find(x => x.id === a.serviceId); lines.push(payLine(s?.label || 'Service', a.cost || 0)); });
+  (e.assignments || []).forEach(a => { const s = cfg().services.find(x => x.id === a.serviceId); lines.push(payLine((s?.label || 'Service') + (a.comped ? ' · Comp' : ''), lineCharge(a))); });   // comped line shows $0 to the customer
   (e.items || []).forEach(it => { const item = cfg().items.find(x => x.id === it.itemId); lines.push(payLine(`${item?.label || 'Item'} ×${it.qty || 1}`, (it.price || 0) * (it.qty || 0))); });
   (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
   (e.giftcardSales || []).forEach(g => lines.push(payLine(`Gift Card${g.serial ? ' #' + escHtml(g.serial) : ''}${g.to ? ' → ' + escHtml(g.to) : ''}`, +g.amount || 0)));   // sold (liability, not income) — charged here

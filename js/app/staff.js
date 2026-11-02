@@ -472,7 +472,7 @@ function lineHtml(entry, a) {
   return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
     <div class="flex items-center justify-between gap-2 ${stn ? 'mb-2' : 'mb-3'}">
       ${stationHero || `<span class="font-headline font-extrabold text-2xl text-on-surface truncate min-w-0">${esc(label)}</span>`}
-      <span class="flex items-center gap-1 flex-shrink-0">${pricedTag}${statusChip(eff)}</span>
+      <span class="flex items-center gap-1 flex-shrink-0">${a.comped ? '<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" title="Comp — the customer isn’t charged, but your price still counts for your pay" style="background:#fff3d6;color:#8a5a00">Comp</span>' : ''}${pricedTag}${statusChip(eff)}</span>
     </div>
     ${stn ? `<div class="font-headline font-bold text-xl text-on-surface truncate mb-3">${esc(label)}</div>` : ''}
     ${awaiting ? `<div class="flex items-center gap-2 mb-3 rounded-xl px-3 py-2 text-sm font-body" style="background:rgba(107,79,176,.1);color:#534ab7"><span class="material-symbols-outlined" style="font-size:18px">info</span>Front desk marked this done — add the price.</div>` : ''}

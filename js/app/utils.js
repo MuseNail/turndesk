@@ -18,8 +18,15 @@ const _wholeDollars = () => !!getState().config?.numpad_whole_dollars;
 // Used at pay-time, in reports, and by the heal — so a stale cached `totalCost`
 // can never disagree with what was actually rung up. (Refunds have no parts; their
 // stored negative total is authoritative — callers must skip refunds.)
+// A comp keeps its real price (a.cost) — the tech still earns on it — but the CUSTOMER pays $0 for it.
+// lineCharge = what a service line charges the customer (comped → 0); use it for every customer-paid /
+// business-income sum. compedAmount = the business giveaway (the "Comped" report total). Tech-earnings
+// sums (payroll billed/commission, Turns $billed, the staff app) keep raw a.cost so the tech is paid in full.
+export const lineCharge   = a => (a && a.comped) ? 0 : ((a && a.cost) || 0);
+export const compedAmount = a => (a && a.comped) ? ((a && a.cost) || 0) : 0;
+
 export function ticketTotal(r) {
-  const svc   = (r.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const svc   = (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer charge: comps are $0
   const items = (r.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
   const fees  = (r.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
   return Math.max(0, svc + items + fees - (r.discount || 0));

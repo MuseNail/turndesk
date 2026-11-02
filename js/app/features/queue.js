@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, lineCharge, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS, DUP_PAID_WINDOW_MS } from '../config.js';
 import { findDuplicateCheckins } from './dup-guard.js';
 import { staffOnBreakNow } from './breaks.js';
@@ -1040,7 +1040,7 @@ function _applyRowToAssignment(entryId, a, row, isNew) {
   const domStation = row.querySelector('.assign-station')?.value || '';
   const domComped = !!row.querySelector('.assign-comp')?.checked;
   const domCompReason = domComped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
-  const domCost = domComped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
+  const domCost = parseFloat(row.querySelector('.assign-cost')?.value) || 0;   // a comp KEEPS its price (the tech earns on it); comped only zeroes the CUSTOMER charge (lineCharge)
   if (!snap) {   // new (or un-snapshotted) row → write everything, as the original save did
     a.techId = domTech; a.station = domStation; a.comped = domComped; a.compReason = domCompReason; a.cost = domCost;
     a.techPriced = false;   // this price was set by the front desk, not a tech
@@ -1051,7 +1051,7 @@ function _applyRowToAssignment(entryId, a, row, isNew) {
   let changed = false;
   if (domTech !== snap.techId) { a.techId = domTech; changed = true; }
   if (domStation !== snap.station) { a.station = domStation; changed = true; }
-  if (domComped !== snap.comped) { a.comped = domComped; if (domComped) a.techPriced = false; changed = true; }   // a comp voids any tech-entered price
+  if (domComped !== snap.comped) { a.comped = domComped; changed = true; }   // comp is a pure flag now (keeps the price); techPriced provenance is unchanged by comping
   if (domCompReason !== snap.compReason) { a.compReason = domCompReason; changed = true; }
   if (_costCents(domCost) !== snap.cost) { a.cost = domCost; a.techPriced = false; changed = true; }   // FD set this price → no longer tech-entered
   // Front-desk override: entering a real price (or comping) on an awaiting-price service resolves it.
@@ -1079,7 +1079,7 @@ export function refreshOpenAssignFields() {
       const costEl = row && row.querySelector('.assign-cost');
       if (!costEl || costEl === document.activeElement) return;   // never clobber a field the FD is editing
       const storeCents = _costCents(a.cost);
-      if (storeCents !== snap.cost && _costCents(costEl.value) === snap.cost && !a.comped) {
+      if (storeCents !== snap.cost && _costCents(costEl.value) === snap.cost) {   // comped rows now hold a live price too, so heal them like any other
         costEl.value = (a.cost != null && a.cost !== 0) ? a.cost : '';
         snap.cost = storeCents;       // advance the baseline so a later save won't read this as an FD change
         updateGroupTotal();
@@ -1250,14 +1250,13 @@ export function markAwaitingPrice(entryId, serviceId) {
 }
 
 // Comp / No-charge toggle on a service row: marks the service free ON PURPOSE (a Comp or a
-// Fix/redo), which is distinct from "not priced yet" — so it passes validation and the ticket
-// can close out at $0. Disables the cost field and reveals the reason picker; the actual flags
-// (a.comped / a.compReason, cost forced to 0) are committed in saveCurrentGroupTabInputs.
+// Fix/redo), which is distinct from "not priced yet". A comp now KEEPS its price — the tech still
+// earns on it; comp only means the CUSTOMER pays $0. So we leave the cost field enabled + its value
+// and just reveal the reason picker, then recompute the (customer) total, which skips comped rows.
 export function toggleCompRow(cb) {
   const row = cb.closest('[data-service-id]'); if (!row) return;
-  const cost = row.querySelector('.assign-cost'), reason = row.querySelector('.assign-comp-reason');
-  if (cb.checked) { if (cost) { cost.value = ''; cost.disabled = true; cost.classList.add('opacity-50'); } reason?.classList.remove('hidden'); }
-  else { if (cost) { cost.disabled = false; cost.classList.remove('opacity-50'); } reason?.classList.add('hidden'); }
+  const reason = row.querySelector('.assign-comp-reason');
+  if (cb.checked) reason?.classList.remove('hidden'); else reason?.classList.add('hidden');
   updateGroupTotal();
 }
 
@@ -1321,7 +1320,7 @@ export function saveCurrentGroupTabInputs() {
   // Square charge sum each ticket's parts, the party net is unchanged and no migration is
   // needed — an old per-guest ticket just re-consolidates onto one anchor on first edit.
   const party = groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean);
-  const memberSvc = e => (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const memberSvc = e => (e.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer services subtotal (stored totalCost / fee / discount base): comps $0
   const partySvcSubtotal = party.reduce((s, e) => s + memberSvc(e), 0);
 
   const partyItems = [];
@@ -1439,8 +1438,8 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
             <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
-              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
+            <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
+              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
               onfocus="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" onclick="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" oninput="updateGroupTotal()"></div>
         </div>
         <div class="flex items-center gap-2 mt-2">
@@ -1628,8 +1627,8 @@ function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove)
         <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
           <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
         <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-          <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
-            class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
+          <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
+            class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
             onfocus="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" onclick="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" oninput="updateGroupTotal()"></div>
       </div>
       <div class="flex items-center gap-2 mt-2">
@@ -1849,7 +1848,7 @@ function _saveAssignOneList() {
   const noteEl = document.getElementById('assign-txn-note'); if (noteEl) party[0].txnNote = noteEl.value;
 
   // Whole-ticket items / fees / discount → consolidated onto the anchor (same as tabbed).
-  const memberSvc = e => (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const memberSvc = e => (e.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer services subtotal (stored totalCost / fee / discount base): comps $0
   const partySvcSubtotal = party.reduce((s, e) => s + memberSvc(e), 0);
   const partyItems = [];
   document.querySelectorAll('#group-assign-content [data-item-id]').forEach(row => {
@@ -1916,7 +1915,9 @@ export function updateGroupTotal() {
   if (ASSIGN_ONELIST) {
     const _bd = [];
     document.querySelectorAll('#group-assign-content [data-assign-entry]').forEach(sec => {
-      let s = 0; sec.querySelectorAll('.assign-cost').forEach(i => { s += parseFloat(i.value) || 0; });
+      // Live PARTY TOTAL = what the customer pays → skip comped rows (their price stays in the field
+      // for the tech, but the customer isn't charged). Mirrors lineCharge on the stored side.
+      let s = 0; sec.querySelectorAll('.assign-cost').forEach(i => { const row = i.closest('[data-service-id]'); if (row && row.querySelector('.assign-comp')?.checked) return; s += parseFloat(i.value) || 0; });
       partySvc += s;
       const sub = document.getElementById('ga-sub-' + sec.dataset.assignEntry); if (sub) sub.textContent = '$' + s.toFixed(2);
       const e = q().find(x => String(x.id) === sec.dataset.assignEntry);
@@ -1930,9 +1931,9 @@ export function updateGroupTotal() {
       else { bdEl.innerHTML = ''; bdEl.classList.add('hidden'); }
     }
   } else {
-    activeSvc = [...document.querySelectorAll('#group-assign-content .assign-cost')].reduce((a,i)=>a+(parseFloat(i.value)||0),0);
+    activeSvc = [...document.querySelectorAll('#group-assign-content .assign-cost')].reduce((a,i)=>{ const row=i.closest('[data-service-id]'); if (row && row.querySelector('.assign-comp')?.checked) return a; return a+(parseFloat(i.value)||0); },0);
     partySvc = activeSvc;
-    groupAssignEntries.forEach((id,i) => { if (i === activeGroupTab) return; const e = q().find(x => String(x.id) === id); if (e) partySvc += (e.assignments||[]).reduce((s,a)=>s+(a.cost||0),0); });
+    groupAssignEntries.forEach((id,i) => { if (i === activeGroupTab) return; const e = q().find(x => String(x.id) === id); if (e) partySvc += (e.assignments||[]).reduce((s,a)=>s+lineCharge(a),0); });
   }
   const itemTotal = [...document.querySelectorAll('#group-assign-content [data-item-id]')].reduce((sum,row)=>{
     const qty = parseInt(row.querySelector('.item-qty')?.value)||0, price = parseFloat(row.querySelector('.item-price')?.value)||0;

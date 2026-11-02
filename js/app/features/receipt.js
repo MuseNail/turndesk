@@ -6,7 +6,7 @@
 // receipt-roll path only.
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { ticketTotal, escHtml, showToast } from '../utils.js';
+import { ticketTotal, lineCharge, escHtml, showToast } from '../utils.js';
 import { REVIEW_REDIRECT } from '../config.js';
 import { REVIEW_QR_DATAURL } from './review-qr.js';
 import { setLogo } from './photos.js';
@@ -108,7 +108,7 @@ export function printCustomerReceipt(recordId) {
   });
 
   // Money — same source of truth as the rest of the app.
-  const svcTot   = (r.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const svcTot   = (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer subtotal: comps are $0
   const itemsTot = (r.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
   const feesTot  = (r.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
   const subtotal = svcTot + itemsTot + feesTot;

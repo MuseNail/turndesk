@@ -149,6 +149,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.55', items: [
+    { icon: 'volunteer_activism', t: 'Comps now work the right way — the customer pays $0, the tech is still paid', d: 'When a service is comped, the customer isn’t charged for it, but the technician still earns their full price on it (billed and commission) and the business tracks it as a giveaway. Enter the real price as usual, then tick “Comp / No charge” — the price stays for the tech, the ticket total drops by that amount for the customer, and a new “Comped” box on the Reports tab shows the total value given away this period. The old behaviour wiped the price and could overcharge; this fixes it.' },
+  ] },
   { v: 'td-v0.54', items: [
     { icon: 'tune', t: 'Turn board + workflow polish', d: 'A batch of small improvements: the tab order is now Turns · Floor Plan · Queue, the turn number on each board slot is a clear teal pill (an un-priced “?” shows as neutral grey so it’s not mistaken for a count), the technician column on the Turns board can be dragged wider or narrower (remembered per device), the customer visit history now shows which technician did each service, appointments record who booked them, and dragging a seated customer on the floor plan no longer leaves a stray transparent strip.' },
   ] },

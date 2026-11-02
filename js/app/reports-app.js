@@ -13,7 +13,7 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin, scopedKey } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup, throttleWaitMsg } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, throttleWaitMsg, lineCharge } from './utils.js';
 import { APP_VERSION } from './config.js';
 import { setActiveUser, getActiveUser, canDo } from './session.js';
 import { isPaidStatus } from './features/status.js';
@@ -120,8 +120,8 @@ function renderReportsHtml() {
   // Per-staff billed (sorted desc) + service counts.
   const staffInc = {}, staffCnt = {}, svcAgg = {};
   filtered.filter(r => r.status !== 'refund').forEach(r => (r.assignments || []).forEach(a => {
-    if (a.techId) { staffInc[a.techId] = (staffInc[a.techId] || 0) + (a.cost || 0); staffCnt[a.techId] = (staffCnt[a.techId] || 0) + 1; }
-    const sid = a.serviceId || '?'; (svcAgg[sid] = svcAgg[sid] || { n: 0, amt: 0 }); svcAgg[sid].n++; svcAgg[sid].amt += a.cost || 0;
+    if (a.techId) { staffInc[a.techId] = (staffInc[a.techId] || 0) + (a.cost || 0); staffCnt[a.techId] = (staffCnt[a.techId] || 0) + 1; }   // per-tech billed: comp INCLUDED (tech earns)
+    const sid = a.serviceId || '?'; (svcAgg[sid] = svcAgg[sid] || { n: 0, amt: 0 }); svcAgg[sid].n++; svcAgg[sid].amt += lineCharge(a);   // per-service revenue: comp EXCLUDED (business)
   }));
   const techName = id => (cfg().staff || []).find(s => s.id === id)?.name || 'Unknown';
   const svcLabel = id => (cfg().services || []).find(s => s.id === id)?.label || id;
