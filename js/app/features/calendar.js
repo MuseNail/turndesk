@@ -6,7 +6,7 @@ import { withAuth } from '../apptoken.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
 import { breakInstancesForDay, ruleOccurrence } from './breaks.js';
-import { canDo } from '../session.js';
+import { canDo, getActiveUser } from '../session.js';
 
 // Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
 // blank/placeholder → neutral gray. One source of truth for both grid views.
@@ -1304,9 +1304,14 @@ export function calEventClick(e, apptId) {
           : `<textarea onchange="calSaveVisitNote('${_escAttrJs(queueMatch.id)}', this.value)" rows="2" placeholder="Notes for today's visit…" class="${_taCls}">${_escHtml(visitVal)}</textarea>`}
     </div>
   </div>`;
+  // Who booked it + when. createdBy is new (2026-10); appts booked before it have createdAt but no
+  // createdBy — gate on createdBy so we never show a dangling "Booked by —" across the old book.
+  const bookedLine = a.createdBy
+    ? `<p class="text-[11px] font-body text-on-surface-variant mt-1 flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:12px">edit_calendar</span>Booked by ${_escHtml(a.createdBy)}${a.createdAt ? ' · ' + new Date(a.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''}</p>`
+    : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-[10px] font-body font-bold uppercase tracking-widest text-outline mt-1">From the booking</p><p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(when)}</span></p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-[10px] font-body font-bold uppercase tracking-widest text-outline mt-1">From the booking</p><p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}${bookedLine}</div>
     ${notesSection}
     <div class="space-y-2">
       <button onclick="calQuickCheckin('${_escAttrJs(apptId)}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
@@ -1874,6 +1879,7 @@ export async function saveAppt() {
     confirmed: existing ? !!existing.confirmed : false,
     noShow: existing ? !!existing.noShow : false,
     createdAt: existing ? (existing.createdAt || Date.now()) : Date.now(),
+    createdBy: existing ? (existing.createdBy || null) : (getActiveUser()?.name || null),
   };
   const prevStaff = new Set(existing ? (existing.guests||[]).flatMap(g => (g.lines||[]).map(l => l.staffId).filter(Boolean)) : []);
 

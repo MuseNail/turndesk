@@ -149,6 +149,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.54', items: [
+    { icon: 'tune', t: 'Turn board + workflow polish', d: 'A batch of small improvements: the tab order is now Turns · Floor Plan · Queue, the turn number on each board slot is a clear teal pill (an un-priced “?” shows as neutral grey so it’s not mistaken for a count), the technician column on the Turns board can be dragged wider or narrower (remembered per device), the customer visit history now shows which technician did each service, appointments record who booked them, and dragging a seated customer on the floor plan no longer leaves a stray transparent strip.' },
+  ] },
   { v: 'td-v0.53', items: [
     { icon: 'price_check', t: 'Techs can enter a price early without ending the service', d: 'When a technician types in the charge before they’re actually finished, the service no longer flips to “done” — so the front desk won’t think a tech is free when they’re still working. The tech app now has one button that moves forward a step at a time (Start → Save price → Complete), and only the front desk marks a service finished. A small “Price in ✓” tag shows the front desk when a tech has already entered the charge.' },
     { icon: 'sync', t: 'Fixed: a phone left open could miss a newly-assigned customer', d: 'When a tech left the app open and the phone went to sleep, the screen could quietly fall out of sync — so a customer assigned to them wouldn’t show up until they manually refreshed. The app now notices when the phone wakes up (or the moment the tech taps the screen) and reconnects on its own, so new assignments appear without a refresh.' },
@@ -239,7 +242,7 @@ Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav });
 // (Reports | Payroll) is gated by the viewReports role permission (Settings → Role
 // Permissions) — the tab is hidden and direct opens are blocked.
 const NAV_GROUPS = {
-  floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['queue','queue','Queue'], ['floorplan','grid_view','Floor Plan']] },
+  floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['floorplan','grid_view','Floor Plan'], ['queue','queue','Queue']] },
   money:      { navId: 'nav-money',      panels: [['transactions','receipt_long','Transactions'], ['giftcards','card_giftcard','Gift Cards']] },
   reportsgrp: { navId: 'nav-reportsgrp', panels: [['reports','bar_chart','Reports'], ['payroll','payments','Payroll']] },
   // Settings isn't a real group (its tab always opens Settings); 'admin' only renders the

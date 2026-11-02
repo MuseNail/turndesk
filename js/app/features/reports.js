@@ -135,6 +135,24 @@ export function paymentMix(filtered, tipsTotal) {
 // Matched by phone (last-10-digits), falling back to an exact name match when there's no
 // phone. Rendered into the Edit Customer modal. Called from showEditCustomer via window.
 const _digits10 = s => (s || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+// Per-visit "which tech did which service" rows for the customer history card. The pairing is
+// already stored on each record's assignments[]; we just surface it instead of two flat lists.
+// Pure (lookups injected) so it's unit-testable; falls back to the service list when a record has
+// no usable assignments (refunds, legacy/"Add Historical" catch-all rows with blank ids).
+export function _visitLines(assignments, services, svcLabel, techName) {
+  const asg = (assignments || []).filter(a => a && (a.serviceId || a.techId));
+  if (!asg.length) return (services || []).map(sid => ({ service: svcLabel(sid) || sid, tech: '' }));
+  const lines = asg.map(a => ({
+    service: a.serviceId ? (svcLabel(a.serviceId) || a.serviceId) : '',
+    tech: a.techId ? (techName(a.techId) || '') : '',
+  }));
+  // Parity with the old flat list: a ticket service with no matching assignment (legacy/imported
+  // records) is still shown as a service-only line, so a service is never silently dropped.
+  const covered = new Set(asg.map(a => a.serviceId).filter(Boolean));
+  (services || []).forEach(sid => { if (!covered.has(sid)) lines.push({ service: svcLabel(sid) || sid, tech: '' }); });
+  return lines;
+}
+
 export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history') {
   const el = document.getElementById(targetId); if (!el) return;
   const ph = _digits10(phone), nm = (name || '').trim().toLowerCase();
@@ -150,8 +168,11 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
   el.innerHTML = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${visits} visit${visits !== 1 ? 's' : ''} · $${net.toFixed(2)} total spent</div>` + recs.map(r => {
     const dt = new Date(r.checkinTime), isRefund = r.status === 'refund';
     const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const svcs = (r.services || []).map(sid => svc(sid)?.label || sid).join(', ') || '—';
-    const techs = [...new Set((r.assignments || []).filter(a => a.techId).map(a => staffById(a.techId)?.name).filter(Boolean))].join(', ');
+    const lines = _visitLines(r.assignments, r.services, sid => svc(sid)?.label, tid => staffById(tid)?.name);
+    const anyTech = lines.some(l => l.tech);
+    const svcHtml = anyTech
+      ? lines.map(l => `${l.service || '—'}${l.tech ? ' · <span class="text-on-surface font-medium">' + l.tech + '</span>' : ''}`).join('<br>')
+      : (lines.map(l => l.service).filter(Boolean).join(', ') || '—');
     const note = (r.txnNote || r.discountNote || '').trim();
     const amt = isRefund ? `-$${Math.abs(r.totalCost || 0).toFixed(2)}` : `$${(r.totalCost || 0).toFixed(2)}`;
     const waiverBadge = r.waiverId
@@ -159,7 +180,7 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
       : '';
     return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
       <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>
-      <div class="text-[11px] font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
+      <div class="text-[11px] font-body text-on-surface-variant">${svcHtml}</div>
       ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${escHtml(note)}”</div>` : ''}
       ${waiverBadge}
     </div>`;

@@ -515,9 +515,14 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       if (!_selected.has(dragStation)) { _selected.clear(); _selected.add(dragStation); renderFloorPlan(); }
       moveStart = {}; _selected.forEach(id => { const L = layoutFor(id); moveStart[id] = { x: L.x, y: L.y }; });
     } else {
-      const rect = pending.getBoundingClientRect();
-      clone = pending.cloneNode(true);
-      Object.assign(clone.style, { position: 'fixed', zIndex: '9999', pointerEvents: 'none', width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px', opacity: '0.9', transform: 'scale(1.03)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' });
+      // Clone the whole station tile, not the inner .floor-bubble: the bubble is `h-full` with a
+      // transparent background (the tile provides both), so cloning it alone produced a full-viewport-
+      // height transparent strip ("an entire transparent column"). The tile has an explicit height + the
+      // status-tinted fill. A tech avatar / tray bubble has no .floor-station ancestor → clone itself.
+      const src = pending.closest('.floor-station') || pending;
+      const rect = src.getBoundingClientRect();
+      clone = src.cloneNode(true);
+      Object.assign(clone.style, { position: 'fixed', zIndex: '9999', pointerEvents: 'none', margin: '0', width: rect.width + 'px', height: rect.height + 'px', left: rect.left + 'px', top: rect.top + 'px', opacity: '0.9', transform: 'scale(1.03)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' });
       document.body.appendChild(clone);
       pending.style.opacity = '0.4';
       // Dragging a tech: highlight the stations that have a service awaiting a tech.

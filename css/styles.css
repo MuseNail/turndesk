@@ -172,7 +172,7 @@
   @media (max-width: 1024px) {
     #panel-turns .flex-shrink-0[style*="width:380px"] { width: 300px !important; }
     .turns-slot-row .flex-shrink-0 { width: 130px !important; }
-    #turns-tech-grid .w-\[155px\] { width: 130px !important; }
+    /* (The tech column is now user-resizable via --turns-techcol-w; default 155px, drag to narrow.) */
   }
 
   /* ── iPad / tablet (≤1180px) ─────────────────────
@@ -232,6 +232,11 @@
   .turns-draggable:active { cursor: grabbing; }
   .turns-filled-slot { cursor: grab; transition: opacity 0.15s; }
   .turns-filled-slot:active { cursor: grabbing; }
+  /* Resizable tech column: one drag handle at the column's right edge (grid is position:relative). */
+  #turns-tech-grid { position: relative; }
+  .turns-col-resizer { position: absolute; top: 0; bottom: 0; width: 8px; z-index: 6; cursor: col-resize; touch-action: none; }
+  .turns-col-resizer::after { content: ''; position: absolute; top: 8px; bottom: 8px; left: 3px; width: 2px; border-radius: 2px; background: #cdd8d8; opacity: 0; transition: opacity .12s; }
+  .turns-col-resizer:hover::after, .turns-col-resizer:active::after { opacity: 1; background: #1a5252; }
   .turns-drag-ghost { 
     border-radius: 12px; 
     box-shadow: 0 12px 40px rgba(0,0,0,0.25); 

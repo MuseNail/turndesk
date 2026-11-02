@@ -15,6 +15,29 @@ const q   = () => getState().queue;
 const svc = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const isStaffActive = id => !cfg().inactive_staff.includes(id);
+
+// ── Per-device resizable technician column (desktop) ──────────────────────────
+// The tech name/photo column is fixed width; on a wide desktop a long name gets cut off, so the
+// right edge is draggable. Clamped so it can't collapse or swallow the board. Device-local (like
+// the text size) and applied as a CSS var on #panel-turns so a live resize never rebuilds the grid
+// (a rebuild would reset every lane's horizontal scroll).
+const TURNS_TECHCOL_MIN = 120, TURNS_TECHCOL_MAX = 280, TURNS_TECHCOL_DEFAULT = 155;
+export function _clampTechColW(px) {
+  const n = Math.round(Number(px));
+  return Number.isFinite(n) ? Math.max(TURNS_TECHCOL_MIN, Math.min(TURNS_TECHCOL_MAX, n)) : TURNS_TECHCOL_DEFAULT;
+}
+const turnsTechColW = () => _clampTechColW(parseInt(localStorage.getItem('turndesk_turns_techcol_w'), 10) || TURNS_TECHCOL_DEFAULT);
+function _applyTurnsTechColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-techcol-w', turnsTechColW() + 'px'); }
+function setTurnsTechColW(px) { localStorage.setItem('turndesk_turns_techcol_w', String(_clampTechColW(px))); _applyTurnsTechColW(); }
+
+// Turn-number badge style, shared by the live grid + history so the two can't drift: amber half,
+// light-teal bonus, neutral grey for an unpriced "?" (so it never reads as a counted turn), and a
+// solid teal pill for a real turn number (was a faint opacity:0.75 — easy to miss).
+const turnPillStyle = (tt, label) =>
+    tt === 'half'  ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px'
+  : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px'
+  : label === '?'  ? 'background:#e3e8ea;color:#5a6b70;padding:0 5px;border-radius:4px'
+  :                  'background:#1a5252;color:#fff;padding:0 5px;border-radius:4px';
 const activeStaff = () => cfg().staff.filter(s => isStaffActive(s.id));
 
 const setOrder = order => dispatch('config.set', { key: 'turns_order', value: order });
@@ -208,7 +231,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
 
 // ── Per-device "$ billed" totals show/hide (Turns toolbar) ────────────────────
 // Device-local (like the text size) — hide each tech's billed dollar total on a
@@ -431,7 +454,7 @@ export function renderTurnsTechGrid() {
     const turnDisplay = turns.total > 0
       ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
-    const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
+    const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0" style="flex:1">
         <div class="flex items-center gap-1.5 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0">${st.name}</span>${turnDisplay}<span class="turns-billed text-[10px] font-body font-semibold flex-shrink-0" style="color:#1a5252;margin-left:auto">$${billed.toFixed(0)}</span></div>
@@ -484,7 +507,7 @@ export function renderTurnsTechGrid() {
         const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
-            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
+            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel)}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
@@ -523,6 +546,31 @@ export function renderTurnsTechGrid() {
     const delta = (next.getBoundingClientRect().right - row.getBoundingClientRect().left) - row.clientWidth + 12;
     if (delta > 0) row.scrollLeft += delta;                        // reveal just the next box
   }));
+  // Column-resize handle: one draggable strip at the tech column's right edge (grid is
+  // position:relative). Dragging updates the --turns-techcol-w var live (clamped) and persists on
+  // release; stopPropagation keeps it from arming the bubble drag. Re-added each render because
+  // grid.innerHTML above rebuilds the grid (so the prior handle + its listener are discarded).
+  if (rows) {
+    const handle = document.createElement('div');
+    handle.className = 'turns-col-resizer';
+    handle.title = 'Drag to resize the technician column';
+    handle.style.left = (turnsTechColW() - 3) + 'px';
+    handle.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const startX = ev.clientX, startW = turnsTechColW();
+      try { handle.setPointerCapture(ev.pointerId); } catch {}
+      const panel = document.getElementById('panel-turns');
+      const move = e => { const w = _clampTechColW(startW + (e.clientX - startX)); panel?.style.setProperty('--turns-techcol-w', w + 'px'); handle.style.left = (w - 3) + 'px'; };
+      const end = e => {   // pointerup OR pointercancel (interrupted touch) — clean up + persist
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        setTurnsTechColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+    });
+    grid.appendChild(handle);
+  }
 }
 
 export function renderTurnsQueue() {
@@ -920,7 +968,7 @@ function renderTurnsHistoryView() {
     const turnDisplay = total > 0
       ? `<span class="text-sm font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:' + accent}">${total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant">0t</span>`;
-    const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">${photo}
+    const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">${photo}
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${name}</div>
       <div class="flex items-center gap-1.5 mt-0.5">${turnDisplay}${bonus > 0 ? `<span class="text-[10px] text-secondary">+${bonus}b</span>` : ''}</div>
       <div class="turns-billed text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
@@ -944,7 +992,7 @@ function renderTurnsHistoryView() {
       const tap = canAdd ? `onclick="showHistoricalEntryModal('${e.id}')"` : '';
       return `<div class="flex-shrink-0 w-[150px] px-1">
         <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px${outline}">
-          <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
+          <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel)}">${turnLabel}</span>` : ''}</div>
           <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
           <div class="text-[9px] opacity-60">${timeStr}</div>
         </button></div>`;
