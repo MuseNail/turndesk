@@ -565,6 +565,7 @@ export function toggleManualSameContact(idx) {
 }
 
 export function showManualAdd() {
+  window.floorClearPendingSeat?.();   // any builder open retires a stale floor-plan chair target (Wave 2 #3)
   manualGuestCount = 0;
   document.getElementById('manual-guests-container').innerHTML = '';
   addManualGuest();
@@ -683,6 +684,7 @@ function finalizeManualBypass(entries, method, byUser) {
   afterManualFinalize(entries);
 }
 function afterManualFinalize(entries) {
+  window.floorSeatPending?.(entries);   // auto-seat at the tapped floor chair, if any (before close) — Wave 2 #3
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();
   showToast(`${entries.map(e => e.name).join(' & ')} added to queue`);   // xss-ok: showToast → textContent
@@ -814,7 +816,7 @@ export function onDeskHandoffState() {
     const r = handoffResult(cur), entries = _deskWaiting.entries;
     _deskWaiting = null; clearTimeout(_deskWaitTimer);
     document.getElementById('manual-waiting-overlay')?.remove();
-    if (r === 'confirmed') { closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }   // xss-ok: showToast → textContent
+    if (r === 'confirmed') { window.floorSeatPending?.(entries); closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }   // xss-ok: showToast → textContent
     else if (r === 'cancelled') showToast('Customer cancelled at the kiosk — check the details and resend');
     else if (r === 'expired') showToast('Kiosk timed out — try again');
     return;

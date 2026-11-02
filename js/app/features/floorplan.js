@@ -134,6 +134,7 @@ function stationHtml(id, entry) {
   const fs = L.font || 1;
   const live = !!entry && (entryInservice(entry) || entry.status === 'inservice');
   const complete = !!entry && !live && entry.status === 'complete';
+  const emptyLive = !entry && !floorEditMode;   // tappable open chair → check in a walk-in here
   // Empty (or any station while editing the layout) shows the editor's custom color.
   // In the live view, an occupied seat MATCHES the customer's status (C9 palette):
   // TEAL in service, GREEN complete/done (ready to pay), AMBER waiting.
@@ -158,10 +159,11 @@ function stationHtml(id, entry) {
   } else {
     content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${escHtml(stationLabel(id))}</div>`;
   }
-  return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
-    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
+  return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}${emptyLive ? ' fp-empty' : ''}" data-station="${id}"${emptyLive ? ' title="Tap to check in a walk-in here"' : ''}
+    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${emptyLive ? `--fp-accent:${border};cursor:pointer;` : ''}${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
     ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${escHtml(stationLabel(id))}</div>` : ''}
     ${entry && !floorEditMode ? `<span class="material-symbols-outlined fp-grip" style="position:absolute;bottom:1px;right:2px">drag_indicator</span>` : ''}
+    ${emptyLive ? `<span class="material-symbols-outlined fp-checkin-hint" style="position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:${Math.round(15 * fs)}px;color:${border};pointer-events:none">person_add</span>` : ''}
     ${content}
   </div>`;
 }
@@ -215,6 +217,7 @@ export function renderFloorPlan() {
     ? '<span class="material-symbols-outlined" style="font-size:16px">check</span> Done'
     : '<span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout';
   document.getElementById('floorplan-reset-btn')?.classList.toggle('hidden', !floorEditMode);
+  document.getElementById('floorplan-checkin-btn')?.classList.toggle('hidden', floorEditMode);   // live-mode only
   document.getElementById('floorplan-edit-tools')?.classList.toggle('hidden', !floorEditMode);
   const zl = document.getElementById('floorplan-zoom-label'); if (zl) zl.textContent = Math.round(_fpZoom * 100) + '%';
   renderFloorProps();
@@ -365,6 +368,40 @@ function seatCustomer(entryId, stationId) {
   showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);   // xss-ok: showToast → textContent
 }
 
+// ── Check in a walk-in from the Floor Plan (Wave 2 #3) ────────────────────────
+// Tap an open chair → the normal check-in builder opens → once the check-in COMMITS the primary guest
+// is auto-seated at that chair. The tapped chair is remembered in one module var, consumed once at the
+// two real commit points (afterManualFinalize for direct/bypass/takeover, and the kiosk-confirmed branch
+// of onDeskHandoffState). showManualAdd clears it on EVERY open, so a stale chair can never grab a later,
+// unrelated check-in started from any other entry point.
+let _pendingSeatStation = null;
+// Pure seat guard (consume-once lives in floorSeatPending): seat only when a chair is armed, the primary
+// exists, the chair still exists, it isn't taken by someone else, and the guest isn't already checked out.
+export function _planSeat(pending, { stationExists, occupiedByOther, primaryExists, primaryPaid }) {
+  if (!pending || !primaryExists || !stationExists || occupiedByOther || primaryPaid) return { seat: false, station: null };
+  return { seat: true, station: pending };
+}
+export function floorClearPendingSeat() { _pendingSeatStation = null; }
+export function floorCheckIn() { window.showManualAdd?.(); }   // toolbar: unseated add (the open clears any armed chair)
+export function floorCheckInAt(stationId) {
+  // The DOM looked empty when tapped, but a seat can fill across devices — re-check authoritatively.
+  if (collectFloor().byStation[stationId]) { showToast('That seat just filled'); window.showManualAdd?.(); return; }
+  window.showManualAdd?.();          // opens the builder (clears any prior target at its top)…
+  _pendingSeatStation = stationId;   // …then arm THIS chair — order matters so the open's clear doesn't wipe it
+}
+export function floorSeatPending(entries) {
+  const pending = _pendingSeatStation; _pendingSeatStation = null;   // consume-once, no matter the outcome
+  const e0 = entries && entries[0];                                  // party extras stay in the tray
+  const occ = pending ? collectFloor().byStation[pending] : null;
+  const plan = _planSeat(pending, {
+    stationExists:  !!pending && getStations().includes(pending),
+    occupiedByOther: !!occ && String(occ.id) !== String(e0 && e0.id),
+    primaryExists:   !!e0,
+    primaryPaid:     !!e0 && isPaidStatus(e0.status),
+  });
+  if (plan.seat) seatCustomer(e0.id, plan.station);   // reuses seatCustomer's own taken/paid guards
+}
+
 // ── Assign a tech by dropping them on a station ───
 // Stations that have a customer with a service seated here but no tech yet — the valid drop
 // targets when dragging a tech from the staff row.
@@ -500,8 +537,14 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       const techEl = closest(e.target, '.floor-tech');
       if (techEl) { mode = 'tech'; dragTechId = techEl.dataset.techId; pending = techEl; }
       else {
-        const b = closest(e.target, '.floor-bubble'); if (!b) return;
-        mode = 'bubble'; dragEntryId = b.dataset.entryId; pending = b;
+        const b = closest(e.target, '.floor-bubble');
+        if (b) { mode = 'bubble'; dragEntryId = b.dataset.entryId; pending = b; }
+        else {
+          // Empty station (no occupant bubble) → tap to check a walk-in in right at this chair.
+          const st = closest(e.target, '.floor-station');
+          if (st && !st.querySelector('.floor-bubble')) { mode = 'checkinStation'; dragStation = st.dataset.station; pending = st; }
+          else return;
+        }
       }
     }
     startX = e.clientX; startY = e.clientY;
@@ -536,6 +579,7 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       e.preventDefault(); updateMarquee(e);
       return;
     }
+    if (mode === 'checkinStation') return;   // empty-chair tap: never arm a drag (no ghost-clone of the tile)
     if (!dragging) { if (Math.hypot(e.clientX - startX, e.clientY - startY) > THRESH) startDrag(); else return; }
     e.preventDefault();
     if (mode === 'station') {
@@ -569,6 +613,8 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       // Tapping a tech (no drag) opens the exact same tech-status menu as the turns grid.
       // showTechStatusMenu reads event.currentTarget for positioning, so hand it the tech el.
       else if (mode === 'tech' && dragTechId) window.showTechStatusMenu?.({ stopPropagation() {}, currentTarget: pending, clientX: e.clientX, clientY: e.clientY }, dragTechId);
+      // Tap an empty chair → open the check-in builder pre-aimed at this seat.
+      else if (mode === 'checkinStation' && dragStation) floorCheckInAt(dragStation);
       // Build a multi-selection: Shift-click (desktop) OR a plain tap (iPad has no Shift)
       // toggles this station; a plain mouse click selects only this one.
       else if (mode === 'station' && dragStation) {

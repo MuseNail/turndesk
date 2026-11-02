@@ -556,6 +556,11 @@
      draggable things in the live view: occupied seats, the Not-seated tray
      bubbles, and the tech avatars. Display-only; drags hit the parent. */
   .fp-grip { font-size: 14px !important; color: rgba(31,41,55,.38); pointer-events: none; flex-shrink: 0; }
+  /* Empty-chair check-in hint (Wave 2 #3): a faint + that surfaces on hover so the board stays calm at rest. */
+  .fp-checkin-hint { opacity: 0; transition: opacity .12s ease; }
+  .floor-station.fp-empty:hover .fp-checkin-hint { opacity: .55; }
+  /* Ring in the station's OWN accent (set inline as --fp-accent) so it tracks a custom salon theme + dark mode. */
+  .floor-station.fp-empty:hover { outline: 2px dashed var(--fp-accent, #1a5252); outline-offset: 2px; }
 
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }

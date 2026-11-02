@@ -172,6 +172,42 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
     fillCiCustNote(guestIdx, customer.phone);
   }
 }
+
+// ── Check in a looked-up customer ────────────────────────────────────────────
+// Opens the normal manual check-in builder pre-filled with this customer's phone + name, so the
+// front desk doesn't re-type them. Goes THROUGH showManualAdd, so the waiver gate, duplicate-check-in
+// guard, and appointment guard all still apply — the operator just picks the service(s). fillFromCustomer
+// wants {phone, given_name, family_name}; our stored record uses {firstName, lastName, phone} → adapt.
+function _startPrefilledCheckin(c) {
+  const m = document.getElementById('edit-customer-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
+  window.showManualAdd?.();
+  // Let showManualAdd render its first guest card (it also focuses the phone after ~100ms) before filling.
+  setTimeout(() => fillFromCustomer(
+    { id: c.id, phone: c.phone || '', given_name: c.firstName || c.given_name || '', family_name: c.lastName || c.family_name || '' },
+    1, 'manual', 'manual-phone-1', 'manual-first-1', 'manual-last-1'
+  ), 150);
+}
+export function checkInCustomer(doId) {
+  // Look up the DIRECTORY (same source as showEditCustomer/cleanup/merge), not getState().customers —
+  // the directory has the localStorage-cache fallback, so Check-in works even before the DO hydrates.
+  const c = customerDirectory.find(x => String(x.squareId) === String(doId));
+  if (!c) { showToast('Customer not found'); return; }
+  _startPrefilledCheckin(c);
+}
+// From inside the edit-customer modal — read the on-screen fields (so a just-typed correction carries
+// into the check-in). First/last/phone flow straight to the check-in; persist any unsaved edits
+// (email/note) to the record first so they aren't silently dropped when the modal closes.
+export function checkInFromEditCustomer() {
+  const c = {
+    id: document.getElementById('edit-cust-id')?.value || '',
+    firstName: document.getElementById('edit-cust-first')?.value || '',
+    lastName: document.getElementById('edit-cust-last')?.value || '',
+    phone: document.getElementById('edit-cust-phone')?.value || '',
+  };
+  if (typeof _editCustSig === 'function' && _editCustSig() !== _editCustSnapshot) window.saveEditCustomer?.();
+  _startPrefilledCheckin(c);
+}
+
 // Customer note lives as a SIDE PANEL beside the dashboard check-in (#manual-note-panel),
 // not a screen-covering modal: it opens when a returning customer is picked, auto-saves
 // as you type, the Save button saves without closing the check-in, and it closes (after
@@ -407,6 +443,7 @@ export function renderCustomersTab(query) {
       <td class="text-right">${s.visits || '—'}</td>
       <td>${last}</td>
       <td class="text-right">${s.spent ? '$' + s.spent.toFixed(0) : '—'}</td>
+      <td class="text-right"><button onclick="event.stopPropagation(); checkInCustomer('${escAttrJs(c.squareId)}')" title="Check in ${escHtml(name)}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-body font-bold hover:bg-primary/20 transition-colors whitespace-nowrap"><span class="material-symbols-outlined" style="font-size:15px">how_to_reg</span>Check in</button></td>
     </tr>`;
   }).join('');
   const from = filtered.length ? start + 1 : 0, to = start + pageRows.length;
@@ -419,8 +456,8 @@ export function renderCustomersTab(query) {
   host.innerHTML = `
     <div class="text-[11px] font-body text-on-surface-variant mb-2">Showing ${from}–${to} of ${filtered.length} customer${filtered.length !== 1 ? 's' : ''}${q ? ' (filtered)' : ''}</div>
     <div class="overflow-auto max-h-[calc(100vh-240px)]"><table class="data-table w-full text-sm">
-      <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="text-right">Visits</th><th>Last visit</th><th class="text-right">Total</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" class="text-center py-6 text-on-surface-variant">No matches.</td></tr>'}</tbody>
+      <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="text-right">Visits</th><th>Last visit</th><th class="text-right">Total</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="text-center py-6 text-on-surface-variant">No matches.</td></tr>'}</tbody>
     </table></div>
     ${pager}`;
 }
@@ -432,6 +469,7 @@ export function showAddCustomer() {
   const t = document.getElementById('edit-customer-title'); if (t) t.textContent = 'Add Customer';
   const hist = document.getElementById('edit-cust-history'); if (hist) hist.innerHTML = '<div class="text-xs text-on-surface-variant py-2">No visits yet.</div>';
   const del = document.getElementById('edit-cust-delete-btn'); if (del) del.classList.add('hidden');
+  document.getElementById('edit-cust-checkin-btn')?.classList.add('hidden');   // add mode: nothing to check in yet
   _editCustSnapshot = _editCustSig();
   const m = document.getElementById('edit-customer-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -574,6 +612,7 @@ export function showEditCustomer(id) {
   document.getElementById('edit-cust-notes').value     = customerNote(c.phone);   // app-owned manual note, keyed by phone
   const t = document.getElementById('edit-customer-title'); if (t) t.textContent = 'Edit Customer';
   const del = document.getElementById('edit-cust-delete-btn'); if (del) del.classList.remove('hidden');
+  document.getElementById('edit-cust-checkin-btn')?.classList.remove('hidden');
   // Local visit history (derived from transaction records) — kept in reports.js to avoid
   // a circular import; safe no-op if reports hasn't loaded.
   window.renderCustomerHistory?.(c.phone, [c.firstName, c.lastName].filter(Boolean).join(' '));

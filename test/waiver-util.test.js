@@ -91,3 +91,58 @@ test('buildWaiverRecord defaults optIns/bypass safely', () => {
 test('WAIVER_METHODS is the closed set', () => {
   assert.deepEqual(WAIVER_METHODS, ['self-kiosk', 'front-desk-kiosk', 'front-desk-bypass', 'front-desk-takeover']);
 });
+
+// ── waiverMethodLabel + signerLines (Wave 2 #12 — the signer/attestation block) ──
+import { waiverMethodLabel, signerLines } from '../js/app/waiver-util.js';
+
+test('waiverMethodLabel is human-readable + flags a bypass', () => {
+  assert.equal(waiverMethodLabel('self-kiosk', false), 'Signed at the kiosk');
+  assert.equal(waiverMethodLabel('front-desk-kiosk', false), 'Signed at the kiosk (sent from the front desk)');
+  assert.match(waiverMethodLabel('front-desk-bypass', true), /bypass/i);
+  assert.match(waiverMethodLabel('front-desk-takeover', true), /front desk|staff/i);
+  assert.equal(typeof waiverMethodLabel('weird', false), 'string');   // never empty
+});
+
+test('signerLines surfaces the legal facts and skips empties', () => {
+  const w = {
+    signerDisplay: 'Jane D.', signerFullName: 'Jane Doe', signerPhone: '(555) 111-2222',
+    acceptedAt: Date.parse('2026-06-12T17:30:00Z'), waiverVersion: '3',
+    method: 'self-kiosk', deviceId: 'ipad-1', byUser: null, bypassed: false,
+    guests: [{ name: 'Jane Doe' }, { name: 'Mia Doe' }],
+  };
+  const rows = signerLines(w);
+  const label = l => rows.find(r => r.label === l)?.value;
+  assert.ok(rows.length >= 4);
+  assert.match(label('Signed by') || '', /Jane D\./);
+  assert.equal(label('Waiver version'), 'v3');
+  assert.match(label('Method') || '', /kiosk/i);
+  assert.match(label('Guests') || '', /Mia Doe/);   // party is listed
+  assert.equal(rows.find(r => r.label === 'Checked in by'), undefined);   // byUser null → row skipped
+});
+
+test('signerLines marks a bypassed record (no customer signature)', () => {
+  const rows = signerLines({ signerDisplay: 'Al', acceptedAt: 1, waiverVersion: '1', method: 'front-desk-bypass', bypassed: true, byUser: 'Dana' });
+  assert.match(rows.find(r => r.label === 'Status')?.value || '', /bypass/i);
+  assert.equal(rows.find(r => r.label === 'Checked in by')?.value, 'Dana');
+});
+
+import { waiverAttestation, WAIVER_ATTESTATION } from '../js/app/waiver-util.js';
+test('waiverAttestation never asserts a signature on a bypassed record', () => {
+  const byp = waiverAttestation({ bypassed: true, byUser: 'Dana' });
+  assert.doesNotMatch(byp, /electronic signature/i);   // no false attestation
+  assert.match(byp, /no customer signature/i);
+  assert.match(byp, /Dana/);
+});
+test('waiverAttestation on a genuine single signer = the e-sig sentence', () => {
+  assert.equal(waiverAttestation({ bypassed: false, guests: [{ name: 'A' }] }), WAIVER_ATTESTATION);
+});
+test('waiverAttestation notes the party on a multi-guest signature', () => {
+  const s = waiverAttestation({ bypassed: false, guests: [{ name: 'A' }, { name: 'B' }] });
+  assert.match(s, /on behalf of everyone/i);
+});
+test('signerLines uses neutral labels on a bypassed record (not "Signed by")', () => {
+  const rows = signerLines({ signerDisplay: 'Al', acceptedAt: 1, method: 'front-desk-bypass', bypassed: true });
+  assert.ok(rows.find(r => r.label === 'Customer'));
+  assert.equal(rows.find(r => r.label === 'Signed by'), undefined);
+  assert.ok(rows.find(r => r.label === 'Recorded on'));
+});

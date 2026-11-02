@@ -9,7 +9,7 @@ import { showToast, escHtml } from '../utils.js';
 import { salonSlug } from '../apptoken.js';   // R2 keys are per-salon namespaced (the /photos guard rejects a bare key)
 import { canDo } from '../session.js';
 import { notePhoneKey } from './square-customers.js';
-import { waiverActive, buildWaiverRecord, newWaiverId, textHash } from '../waiver-util.js';
+import { waiverActive, buildWaiverRecord, newWaiverId, textHash, signerLines, waiverAttestation } from '../waiver-util.js';
 
 const cfg = () => getState().config || {};
 
@@ -146,8 +146,10 @@ export async function openSignedWaiver(id) {
     const w = list.find(x => x.id === id);
     document.getElementById('waiver-text-modal')?.remove();
     if (!w) { showToast('That signed waiver was not found.'); return; }
-    if (w.source === 'pdf' && w.pdfUrl) { showWaiverPdf(w.pdfUrl, w.pdfName); return; }
-    const header = `Signed by ${w.signerDisplay || w.signerFullName || ''} · v${w.waiverVersion || ''} · ${(() => { try { return new Date(w.acceptedAt).toLocaleString(); } catch { return ''; } })()}\n${'─'.repeat(28)}\n\n`;
+    if (w.source === 'pdf' && w.pdfUrl) { showWaiverPdf(w.pdfUrl, w.pdfName, w); return; }
+    // Signer/attestation block (text mode) — who signed, when, how, consents, checksum — above the text.
+    const block = signerLines(w).map(r => `${r.label}: ${r.value}`).join('\n');
+    const header = `${block}\n\n${waiverAttestation(w)}\n${'─'.repeat(28)}\n\n`;
     showWaiverText(header + (w.text || '(no text stored on this record)'));
   } catch (e) {
     document.getElementById('waiver-text-modal')?.remove();
@@ -155,8 +157,23 @@ export async function openSignedWaiver(id) {
   }
 }
 
-function showWaiverPdf(url, name) {
+function showWaiverPdf(url, name, w) {
   document.getElementById('waiver-text-modal')?.remove();
+  // Signer/attestation strip (only for a SIGNED record — the live preview passes no `w`): the PDF
+  // itself carries no signer identity, so this is where "who signed / when / how" lives in PDF mode.
+  const rows = w ? signerLines(w) : [];
+  // Bypassed strip uses a FIXED light-pink bg, so its text must be fixed-dark too (theme tokens flip in
+  // dark mode → light text on light pink = unreadable). Non-bypassed uses normal theme tokens.
+  const byp = !!(w && w.bypassed);
+  const labelC = byp ? '#8a2b2b' : 'var(--on-surface-variant,#5b606e)';
+  const valueC = byp ? '#4a1515' : 'var(--on-surface,#1a1d27)';
+  const signerStrip = rows.length ? `
+      <div style="padding:10px 16px;border-bottom:1px solid var(--outline,#e5e7eb);background:${byp ? '#fdecec' : 'var(--surface-container,#f6f7f9)'};max-height:34vh;overflow-y:auto">
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px;line-height:1.45;color:${valueC}">
+          ${rows.map(r => `<span style="font-weight:700;color:${labelC};white-space:nowrap">${escHtml(r.label)}</span><span style="word-break:break-word;color:${valueC}">${escHtml(r.value)}</span>`).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:11.5px;line-height:1.45;color:${labelC};font-style:italic">${escHtml(waiverAttestation(w))}</div>
+      </div>` : '';
   const overlay = document.createElement('div');
   overlay.id = 'waiver-text-modal';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483450;display:flex;align-items:center;justify-content:center;background:rgba(20,22,30,.6);padding:16px';
@@ -166,6 +183,7 @@ function showWaiverPdf(url, name) {
         <span style="font-size:15px;font-weight:800;color:var(--on-surface,#1a1d27)">Service waiver${name ? ' · ' + escHtml(name) : ''}</span>
         <button id="wvt-close" aria-label="Close" style="width:32px;height:32px;border:0;border-radius:50%;background:var(--surface-container,#f1f0f4);cursor:pointer;font-size:18px">✕</button>
       </div>
+      ${signerStrip}
       <iframe src="${escHtml(url)}#toolbar=1" style="flex:1;width:100%;border:0" title="Service waiver PDF"></iframe>
       <div style="padding:10px 16px;border-top:1px solid var(--outline,#e5e7eb);display:flex;gap:8px;align-items:center;justify-content:space-between">
         <a href="${escHtml(url)}" target="_blank" rel="noopener" style="font-size:13px;color:var(--primary,#1a5252);font-weight:600">Open in a new tab</a>

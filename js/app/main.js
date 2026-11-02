@@ -149,6 +149,11 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.56', items: [
+    { icon: 'how_to_reg', t: 'Check a customer in straight from their profile', d: 'Looking up a customer now shows a “Check in” button — on each row of the Customers tab and inside their profile. It opens the normal check-in builder already filled in with their name and phone (so the waiver, duplicate-check-in, and appointment guards all still apply); you just pick the service.' },
+    { icon: 'event_seat', t: 'Check a walk-in in right from the Floor Plan', d: 'Tap an empty chair on the Floor Plan to start a check-in aimed at that seat — the guest is seated there automatically once you finish. There’s also a “Check in” button on the Floor Plan toolbar for a walk-in with no seat chosen yet.' },
+    { icon: 'verified_user', t: 'Signed waivers now show who signed and how', d: 'Opening a signed waiver now shows a clear block: who signed, when, the method, what they consented to, and a document checksum — in both the text and PDF views. A record that was recorded without a customer signature is labelled plainly as such, so the history is honest.' },
+  ] },
   { v: 'td-v0.55', items: [
     { icon: 'volunteer_activism', t: 'Comps now work the right way — the customer pays $0, the tech is still paid', d: 'When a service is comped, the customer isn’t charged for it, but the technician still earns their full price on it (billed and commission) and the business tracks it as a giveaway. Enter the real price as usual, then tick “Comp / No charge” — the price stays for the tech, the ticket total drops by that amount for the customer, and a new “Comped” box on the Reports tab shows the total value given away this period. The old behaviour wiped the price and could overcharge; this fixes it.' },
   ] },

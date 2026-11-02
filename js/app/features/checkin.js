@@ -396,6 +396,7 @@ export function kioskHandoffConfirm() {
   // Deterministic waiver id (wv-<nonce>) → an outbox replay overwrites the same key, never duplicates.
   window.acceptWaiverForHandoff?.(entries, { method: 'front-desk-kiosk', byUser: h.byUser || null, id: handoffWaiverId(h.nonce) });
   entries.forEach(e => dispatch('queue.upsert', { entry: e }));
+  window.floorSeatPending?.(entries);   // single-device kiosk: seat at the tapped floor chair (no-op on a separate kiosk — its target is null) — Wave 2 #3
   upsertPartyCustomers(entries);
   window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} checked in (kiosk)`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js)
   dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(h.nonce, 'confirmed', Date.now()) });

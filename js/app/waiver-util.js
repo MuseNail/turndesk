@@ -40,6 +40,56 @@ export function signerDisplayName(firstName, lastName) {
   return l ? (f + ' ' + l[0] + '.').trim() : f;
 }
 
+// ── Signed-waiver signer/attestation block (Wave 2 #12) ──────────────────────
+// The canonical e-signature attestation shown with a signed record (no drawn signature pad — the
+// checked box + the name given at check-in IS the signature, per the check-in UI's statement).
+export const WAIVER_ATTESTATION = 'By checking the agreement box at check-in, the signer provided their electronic signature using the name given at check-in, which binds them to the same extent as a full legal signature.';
+// The attestation shown with a record — but NEVER the affirmative e-signature sentence on a BYPASSED
+// record (no customer signature was captured; stating one would be a false legal attestation). Group
+// check-ins note that the primary accepted on behalf of the whole party.
+export function waiverAttestation(w) {
+  if (w && w.bypassed) return 'No customer signature was captured for this record — it was recorded by staff at check-in' + (w.byUser ? ` (${w.byUser})` : '') + '.';
+  const guests = ((w && w.guests) || []).map(g => g && g.name).filter(Boolean);
+  return WAIVER_ATTESTATION + (guests.length > 1 ? ' The signer accepted on behalf of everyone named above.' : '');
+}
+export function waiverMethodLabel(method, bypassed) {
+  const m = {
+    'self-kiosk': 'Signed at the kiosk',
+    'front-desk-kiosk': 'Signed at the kiosk (sent from the front desk)',
+    'front-desk-bypass': 'Bypassed at the front desk (no customer signature)',
+    'front-desk-takeover': 'Taken over by the front desk (no customer signature)',
+  }[method];
+  if (m) return m;
+  return bypassed ? 'Bypassed (no customer signature)' : (method ? String(method) : 'Signed');
+}
+// Pure: the labeled rows for the signer/attestation block, in display order, empties skipped.
+// Works for both the text viewer and the PDF strip so the content is one source of truth.
+export function signerLines(w) {
+  if (!w) return [];
+  const byp = !!w.bypassed;   // a bypassed record was NOT signed — use neutral labels, not "Signed …"
+  const out = [];
+  const add = (label, value) => { if (value != null && value !== '') out.push({ label, value: String(value) }); };
+  let signer = w.signerDisplay || w.signerFullName || '';
+  if (w.signerFullName && w.signerDisplay && w.signerFullName !== w.signerDisplay) signer += ` (${w.signerFullName})`;
+  add(byp ? 'Customer' : 'Signed by', signer);
+  add('Phone', w.signerPhone);
+  const d = w.acceptedAt ? new Date(w.acceptedAt) : null;
+  add(byp ? 'Recorded on' : 'Signed on', (d && !isNaN(d)) ? d.toLocaleString() : '');
+  add('Waiver version', w.waiverVersion ? 'v' + w.waiverVersion : '');
+  add('Method', waiverMethodLabel(w.method, byp));
+  if (byp) add('Status', '⚠ Bypassed — recorded without a customer signature');
+  add('Checked in by', w.byUser);
+  const guests = (w.guests || []).map(g => g && g.name).filter(Boolean);
+  if (guests.length > 1) add('Guests', guests.join(', '));
+  const consents = [w.optIns && w.optIns.marketing ? 'marketing' : null, w.optIns && w.optIns.media ? 'photo/media' : null].filter(Boolean);
+  if (consents.length) add('Consented to', consents.join(', '));
+  if (w.arbitrationOptOut) add('Arbitration', 'Opted out');
+  add('Device', w.deviceId);
+  if (w.ip) add('IP', w.ip);
+  const fp = w.textHash || w.pdfHash; if (fp) add('Document checksum', fp);   // a drift/consistency checksum, NOT a cryptographic signature
+  return out;
+}
+
 // The feature is active only when enabled, a version exists, AND the active source has
 // content (text OR an uploaded PDF) — otherwise check-in proceeds (never hard-block behind
 // empty terms). `waiver_source` is 'text' (default) or 'pdf'.
