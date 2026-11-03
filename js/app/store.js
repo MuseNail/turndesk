@@ -15,7 +15,7 @@ const CACHE_KEY = 'turndesk_state_cache';
 function emptyConfig() {
   return {
     staff: [], services: [], items: [], fees: [], fd_users: [],
-    schedule: {}, turn_config: {}, bonus_services: [],
+    schedule: {}, turn_config: {}, bonus_services: [], half_services: [],
     hidden_services: [], hidden_dash_services: [], inactive_staff: [],
     logo: null, turns_order: [], turns_break: [], turns_off: [], turns_skips: [],
     role_permissions: {}, photos: {}, square_config: null, station_layout: {}, stations: [], station_categories: [], customer_notes: {},

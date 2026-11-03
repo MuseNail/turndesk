@@ -189,13 +189,16 @@ function renderFloorStaffRow() {
     const avatar = st.photo
       ? `<img src="${st.photo}" draggable="false" style="width:68px;height:68px;box-sizing:border-box;border-radius:50%;object-fit:cover;border:3px solid ${ringC};box-shadow:0 2px 5px rgba(0,0,0,.18)">`
       : `<div style="display:flex;align-items:center;justify-content:center;width:68px;height:68px;box-sizing:border-box;border-radius:50%;background:${ringC}22;border:3px solid ${ringC};color:${ringC};font-family:var(--font-headline);font-weight:700;font-size:26px;box-shadow:0 2px 5px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
-    const turns = getTechTurns(id).total;
+    const techTurns = getTechTurns(id);
+    const turns = techTurns.total;
     const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
     const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:29px;height:29px;padding:0 4px;border-radius:15px;background:#1a5252;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
+    // Bonus-turn count, bottom-left (mirrors the turns badge). Bonus palette matches the turns-grid bonus pill.
+    const bonusBadge = techTurns.bonus > 0 ? `<span title="${techTurns.bonus} bonus turn${techTurns.bonus > 1 ? 's' : ''} today" style="position:absolute;bottom:-3px;left:-3px;min-width:25px;height:23px;padding:0 4px;border-radius:12px;background:#a9d2c7;color:#134b3c;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">+${techTurns.bonus}</span>` : '';
     const nextBadge = (!floorEditMode && id === nextUpId) ? `<span title="Next up" style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:#1a5252;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:2px;box-shadow:0 1px 3px rgba(0,0,0,.25)"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next</span>` : '';
     const grip = floorEditMode ? '' : `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-2px;left:-6px;background:var(--surface-container-lowest,#fff);border-radius:7px;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
-      <div style="position:relative">${avatar}${turnsBadge}${nextBadge}${grip}</div>
+      <div style="position:relative">${avatar}${turnsBadge}${bonusBadge}${nextBadge}${grip}</div>
       <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
       <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;

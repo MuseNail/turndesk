@@ -1217,33 +1217,9 @@ tailwind.config = {
           <div id="kiosk-bypass-section" class="hidden px-5 py-4"></div>
         </div>
 
-        <!-- Leaf: Turn Thresholds -->
+        <!-- Leaf: Turn Rules (built on-demand by renderTurnsSettings) -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <div id="turns-thresh-section" class="hidden px-5 py-4">
-            <div class="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Full Turn minimum ($)</label>
-                <input id="thresh-full" type="number" min="1" step="1"
-                  class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline text-on-surface focus:border-primary outline-none"
-                  placeholder="28">
-                <p class="text-[11px] font-body text-on-surface-variant mt-1">At or above = 1 full turn</p>
-              </div>
-              <div>
-                <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Half Turn minimum ($)</label>
-                <input id="thresh-half" type="number" min="1" step="1"
-                  class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline text-on-surface focus:border-primary outline-none"
-                  placeholder="12">
-                <p class="text-[11px] font-body text-on-surface-variant mt-1">Between half min and full min = half turn. Below half min = bonus</p>
-              </div>
-            </div>
-            <button onclick="saveTurnThresholds()" class="w-full mb-4 btn-primary">Save Thresholds</button>
-
-            <div class="border-t border-surface-container-high pt-4">
-              <div class="font-headline font-semibold text-on-surface mb-1">Always-Bonus Services</div>
-              <p class="text-xs font-body text-on-surface-variant mb-3">These services always count as bonus regardless of price (e.g. add-ons, fees)</p>
-              <div id="bonus-services-list" class="space-y-2"></div>
-            </div>
-          </div>
+          <div id="turns-thresh-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Stations -->

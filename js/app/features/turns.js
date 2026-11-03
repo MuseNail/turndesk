@@ -33,8 +33,9 @@ function setTurnsTechColW(px) { localStorage.setItem('turndesk_turns_techcol_w',
 // Turn-number badge style, shared by the live grid + history so the two can't drift: amber half,
 // light-teal bonus, neutral grey for an unpriced "?" (so it never reads as a counted turn), and a
 // solid teal pill for a real turn number (was a faint opacity:0.75 — easy to miss).
-const turnPillStyle = (tt, label) =>
-    tt === 'half'  ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px'
+const turnPillStyle = (tt, label, estimated) =>
+    estimated      ? 'background:#e3e8ea;color:#5a6b70;padding:0 5px;border-radius:4px'   // provisional (from expected price, not yet real)
+  : tt === 'half'  ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px'
   : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px'
   : label === '?'  ? 'background:#e3e8ea;color:#5a6b70;padding:0 5px;border-radius:4px'
   :                  'background:#1a5252;color:#fff;padding:0 5px;border-radius:4px';
@@ -50,21 +51,103 @@ function saveTurnsHistory() { try { localStorage.setItem(scopedKey('turndesk_tur
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {
-  const defaults = { fullMin: 28, halfMin: 12 };
-  const tc = cfg().turn_config || {};
-  return Object.keys(tc).length ? { ...defaults, ...tc } : defaults;
+  // Each category is its own independent "$X or less" cutoff: a service is a BONUS turn if its
+  // price ≤ bonusMax, a HALF turn if ≤ halfMax (and above the bonus cutoff), else a FULL turn. Half
+  // and bonus toggle on/off independently; bonus always uses its own cutoff even when half is off.
+  const defaults = {
+    bonusMax: 11, halfMax: 27,
+    halfEnabled: true, bonusEnabled: true,
+    halfByCost: true, halfByService: false,
+    bonusByCost: true, bonusByService: true,
+    precedence: 'bonusFirst',
+  };
+  const stored = cfg().turn_config || {};
+  const merged = { ...defaults, ...stored };
+  // Migrate pre-v5.80 installs ({fullMin, halfMin}: old bonus was < halfMin, half was [halfMin, fullMin))
+  // to the new "$X or less" cutoffs, unless the new keys were set explicitly.
+  if (stored.bonusMax == null && stored.halfMin != null) merged.bonusMax = Math.max(1, stored.halfMin - 1);
+  if (stored.halfMax == null && stored.fullMin != null) merged.halfMax = Math.max(merged.bonusMax + 1, stored.fullMin - 1);
+  return merged;
 }
-export function saveTurnConfig(c) { dispatch('config.set', { key: 'turn_config', value: c }); }
-export function isAlwaysBonusService(serviceId) { return cfg().bonus_services.includes(serviceId); }
+// Merge a partial patch over the stored turn_config so a single-setting save never wipes the other
+// turn keys (the key is stored whole). Pure → unit-tested; every writer must pass a PARTIAL patch.
+export function _mergeTurnConfig(stored, patch) { return { ...(stored || {}), ...patch }; }
+export function saveTurnConfig(patch) { dispatch('config.set', { key: 'turn_config', value: _mergeTurnConfig(cfg().turn_config, patch) }); }
+export function isAlwaysBonusService(serviceId) { return (cfg().bonus_services || []).includes(serviceId); }
 export function saveBonusServices(ids) { dispatch('config.set', { key: 'bonus_services', value: ids }); }
+export function isHalfService(serviceId) { return (cfg().half_services || []).includes(serviceId); }
+export function saveHalfServices(ids) { dispatch('config.set', { key: 'half_services', value: ids }); }
+
+// Pure turn classifier (Item D). Honors the half/bonus on-off toggles, the by-cost / by-service
+// methods (both may be active → OR'd), and the owner-selectable precedence. A service-list match
+// classifies even when UNPRICED (so an always-bonus service reads 'bonus' at $0, as before);
+// amount<=0 with no service match → 'unpriced' (not counted). Flags are injected (isBonusSvc/
+// isHalfSvc) so it's testable without app state.
+export function classifyAmount(amount, serviceId, c, flags) {
+  const isBonusSvc = !!(flags && flags.isBonusSvc);
+  const isHalfSvc  = !!(flags && flags.isHalfSvc);
+  const svcBonus  = c.bonusEnabled && c.bonusByService && isBonusSvc;
+  const svcHalf   = c.halfEnabled  && c.halfByService  && isHalfSvc;
+  // "$X or less" cutoffs. The bands are NON-overlapping (half sits strictly above the bonus cutoff),
+  // so bonus always wins the low end and half is "above bonus, up to its own cutoff".
+  const bonusByCostOn = c.bonusEnabled && c.bonusByCost;
+  const costBonus = bonusByCostOn && amount > 0 && amount <= c.bonusMax;
+  const halfLo    = bonusByCostOn ? c.bonusMax : 0;
+  const costHalf  = c.halfEnabled && c.halfByCost && amount > halfLo && amount <= c.halfMax;
+  const costFull  = amount > 0 && !costBonus && !costHalf;   // priced, above the active cutoffs
+  if (amount <= 0 && !svcBonus && !svcHalf) return 'unpriced';
+  const bonus = svcBonus || costBonus;
+  const half  = svcHalf  || costHalf;
+  if (c.precedence === 'highestValue') {
+    if (costFull) return 'full';
+    if (half) return 'half';
+    if (bonus) return 'bonus';
+    return 'full';
+  }
+  if (c.precedence === 'costWins') {
+    if (amount > 0) {
+      if (costBonus) return 'bonus';
+      if (costHalf) return 'half';
+      return 'full';
+    }
+    if (svcBonus) return 'bonus';
+    if (svcHalf) return 'half';
+    return 'unpriced';
+  }
+  // 'bonusFirst' (default): bonus beats half beats full
+  if (bonus) return 'bonus';
+  if (half) return 'half';
+  return 'full';
+}
 
 export function classifyTurn(cost, serviceId) {
-  if (isAlwaysBonusService(serviceId)) return 'bonus';
-  const c = getTurnConfig();
-  if (!cost || cost <= 0) return 'unpriced';
-  if (cost >= c.fullMin) return 'full';
-  if (cost >= c.halfMin) return 'half';
-  return 'bonus';
+  return classifyAmount(cost || 0, serviceId, getTurnConfig(), {
+    isBonusSvc: isAlwaysBonusService(serviceId),
+    isHalfSvc: isHalfService(serviceId),
+  });
+}
+
+// Status-aware class (Item A): a DONE / awaiting-price service (status 'complete') counts even
+// before it's priced, using the service's EXPECTED price (its baseCost) — reclassifying to the real
+// value once a price is entered. Not-complete-and-unpriced → 'unpriced' (not counted, as before),
+// and a complete service with no expected price also stays 'unpriced' (no "provisional full" guess).
+// A comp keeps its real a.cost, so it classifies by that. This NEVER writes a.cost.
+export function turnClassOf(a) {
+  if (!a) return 'unpriced';
+  const priced = (a.cost || 0) > 0;
+  const expected = priced ? a.cost
+    : (a.status === 'complete' ? (svc(a.serviceId)?.baseCost || 0) : 0);
+  return classifyAmount(expected || 0, a.serviceId || '', getTurnConfig(), {
+    isBonusSvc: isAlwaysBonusService(a.serviceId),
+    isHalfSvc: isHalfService(a.serviceId),
+  });
+}
+
+// The grey "~N" provisional cue applies ONLY to a number-bearing (full/half) turn counted from the
+// expected price on a done/awaiting-price service that isn't priced yet — the number may shift when a
+// real price lands. A 'bonus' shows the word "Bonus" (keeps its teal pill), and 'unpriced' shows '?'.
+export function isEstimatedTurn(a, tt) {
+  return (a.cost || 0) === 0 && a.status === 'complete' && (tt === 'full' || tt === 'half');
 }
 
 // The rotation, excluding any ids that are blank or belong to deactivated staff
@@ -111,7 +194,7 @@ export function removeTurnSkip(skipId) {
 export function getTechTurns(techId) {
   let full = 0, half = 0, bonus = 0;
   getTechAllAssignments(techId).forEach(({ assignment: a }) => {
-    const t = classifyTurn(a.cost || 0, a.serviceId || '');
+    const t = turnClassOf(a);
     if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
   });
   full += todaySkips(techId).length;   // each manual skip counts as a full turn
@@ -126,23 +209,32 @@ export function getTechStatusColor(staffId) {
 }
 
 // ── Suggestion engine ─────────────────────────────
+// Can this tech perform this service? An empty (or absent) service menu = does everything.
+export function _techDoesService(st, serviceId) {
+  if (!st) return false;
+  const list = st.services;
+  return !list || list.length === 0 || list.includes(serviceId);
+}
 export function suggestTechForService(serviceId) {
   const order = getActiveTurnsOrder();
   if (order.length === 0) return null;
+  const isBonus = isAlwaysBonusService(serviceId);
   const eligible = order.filter(id => {
     const st = staffById(id);
     if (!st) return false;
     if (cfg().turns_break.includes(id) || cfg().turns_off.includes(id)) return false;
-    if (st.services && st.services.length > 0 && !st.services.includes(serviceId)) return false;
+    if (!_techDoesService(st, serviceId)) return false;   // skills checked FIRST — never suggest a tech who can't do it
     return getActiveTechEntries(id).length === 0;
   });
   if (eligible.length === 0) return null;
-  let best = null, bestTurns = Infinity, bestIdx = Infinity;
-  eligible.forEach(id => {
-    const turns = getTechTurns(id).total, idx = order.indexOf(id);
-    if (turns < bestTurns || (turns === bestTurns && idx < bestIdx)) { best = id; bestTurns = turns; bestIdx = idx; }
+  // Fewest turns → (for a bonus service) fewest bonus turns → rotation order.
+  eligible.sort((a, b) => {
+    const ta = getTechTurns(a), tb = getTechTurns(b);
+    if (ta.total !== tb.total) return ta.total - tb.total;
+    if (isBonus && ta.bonus !== tb.bonus) return ta.bonus - tb.bonus;
+    return order.indexOf(a) - order.indexOf(b);
   });
-  if (!best) return null;
+  const best = eligible[0];
   return { techId: best, techName: staffById(best)?.name || '?' };
 }
 // ── Coordinated per-customer suggestions (one tech per service) ───────────────
@@ -179,25 +271,29 @@ export function suggestTechsForEntry(entry) {
   const eligibleBase = order.filter(id =>
     !cfg().turns_break.includes(id) && !cfg().turns_off.includes(id) && getActiveTechEntries(id).length === 0);
   const used = new Set();
-  const canDo = (id, sid) => { const st = staffById(id); return !!st && !(st.services && st.services.length > 0 && !st.services.includes(sid)); };
-  // mode 'specialist' floats limited bonus techs to the front, 'generalist' to the back.
-  const pick = (sid, mode) => {
+  const canDo = (id, sid) => _techDoesService(staffById(id), sid);
+  // kind 'bonus' = pure fairness rotation (fewest turns → fewest bonus → order). kind 'regular'
+  // keeps generalists (empty menu) floated to the front so the limited-menu techs stay free.
+  const pick = (sid, kind) => {
     const cands = eligibleBase.filter(id => !used.has(id) && canDo(id, sid));
     if (!cands.length) return null;
     cands.sort((a, b) => {
-      if (mode) {
+      const ta = getTechTurns(a), tb = getTechTurns(b);
+      if (kind === 'regular') {
         const la = isLimitedBonusTech(a) ? 1 : 0, lb = isLimitedBonusTech(b) ? 1 : 0;
-        if (la !== lb) return mode === 'specialist' ? lb - la : la - lb;
+        if (la !== lb) return la - lb;   // generalist first
+        return ta.total - tb.total || order.indexOf(a) - order.indexOf(b);
       }
-      return getTechTurns(a).total - getTechTurns(b).total || order.indexOf(a) - order.indexOf(b);
+      // bonus: fewest turns → fewest bonus → order
+      return ta.total - tb.total || ta.bonus - tb.bonus || order.indexOf(a) - order.indexOf(b);
     });
     return cands[0];
   };
-  const assign = (sid, mode) => { const id = pick(sid, mode); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
-  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'specialist'));
+  const assign = (sid, kind) => { const id = pick(sid, kind); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
+  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'bonus'));
   need.filter(sid => !isAlwaysBonusService(sid))
     .sort((a, b) => servicePrefRank(a) - servicePrefRank(b))
-    .forEach(sid => assign(sid, 'generalist'));
+    .forEach(sid => assign(sid, 'regular'));
   return out;
 }
 
@@ -485,10 +581,11 @@ export function renderTurnsTechGrid() {
       if (item) {
         const { entry: e, assignment: a } = item;
         const cost = a.cost || 0;
-        const tt = classifyTurn(cost, a.serviceId || '');
+        const tt = turnClassOf(a);
+        const estimated = isEstimatedTurn(a, tt);   // grey "~N" only on full/half counted from the expected price
         if (tt === 'full') turnCounter += 1; else if (tt === 'half') turnCounter += 0.5;
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
-        const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
+        const turnLabel = tt === 'bonus' ? 'Bonus' : tt === 'unpriced' ? '?' : (estimated ? '~' + turnLabelNum : '' + turnLabelNum);
         // Use the awaiting-price-aware status so a "Done — tech will price" service reads
         // as violet "Awaiting price", not the blue "Done" fill (its raw status is 'complete').
         const ss = effectiveServiceStatus(e, a);
@@ -507,7 +604,7 @@ export function renderTurnsTechGrid() {
         const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
-            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel)}">${turnLabel}</span>` : ''}</div>
+            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel, estimated)}" ${estimated ? 'title="Estimated from the service’s expected price — updates when a real price is entered"' : ''}>${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
@@ -673,12 +770,13 @@ export function openTurnsAssign(techId, slotIndex) {
     e.services.forEach(sid => {
       const a = (e.assignments || []).find(x => x.serviceId === sid);
       const ss = a ? getAssignmentStatus(e, a) : 'waiting';
-      if (ss !== 'waiting' || (a && a.techId === techId)) return;
+      // Only waiting services this tech can actually DO (skills checked) and isn't already on.
+      if (ss !== 'waiting' || (a && a.techId === techId) || !_techDoesService(tech, sid)) return;
       options.push({ entry: e, serviceId: sid, svcLabel: svc(sid)?.label || sid });
     });
   });
   const list = document.getElementById('turns-assign-list');
-  if (options.length === 0) list.innerHTML = '<div class="text-sm font-body text-on-surface-variant text-center py-4">No waiting services to assign</div>';
+  if (options.length === 0) list.innerHTML = `<div class="text-sm font-body text-on-surface-variant text-center py-4">No waiting services ${tech?.name || 'this tech'} can take</div>`;
   else {
     const byCustomer = {};
     options.forEach(o => { const k = String(o.entry.id); if (!byCustomer[k]) byCustomer[k] = { entry: o.entry, svcs: [] }; byCustomer[k].svcs.push(o); });

@@ -7,7 +7,7 @@ import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
-import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices } from './turns.js';
+import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices, isHalfService, saveHalfServices } from './turns.js';
 
 const cfg = () => getState().config;
 
@@ -162,13 +162,17 @@ export function updatePermissionGatedUI() {
   if (permSection && !leafOpen) permSection.classList.add('hidden');
 }
 
-// ── Turn thresholds + bonus services ──────────────
+// ── Turn Rules (configurable half/bonus, by cost and/or service, cutoffs, precedence) ──
 export function saveTurnThresholds() {
-  const fullMin = parseInt(document.getElementById('thresh-full')?.value) || 28;
-  const halfMin = parseInt(document.getElementById('thresh-half')?.value) || 12;
-  if (halfMin >= fullMin) { showToast('Half min must be less than full min.'); return; }
-  saveTurnConfig({ fullMin, halfMin });
-  showToast('Turn thresholds saved ✓');
+  // "$X or less" cutoffs. Read only the inputs that are shown; fall back to the CURRENT stored value
+  // (not a hardcoded default) so saving while one field is hidden can't reset the other.
+  const c = getTurnConfig();
+  const be = document.getElementById('thresh-bonus'), he = document.getElementById('thresh-half');
+  const bonusMax = be ? (parseInt(be.value) || c.bonusMax) : c.bonusMax;
+  const halfMax = he ? (parseInt(he.value) || c.halfMax) : c.halfMax;
+  if (be && he && bonusMax >= halfMax) { showToast('The bonus cutoff must be less than the half cutoff.'); return; }
+  saveTurnConfig({ bonusMax, halfMax });
+  showToast('Cutoffs saved ✓');
 }
 export function renderBonusServicesList() {
   const el = document.getElementById('bonus-services-list');
@@ -176,12 +180,88 @@ export function renderBonusServicesList() {
   el.innerHTML = cfg().services.map(s => { const isBonus = isAlwaysBonusService(s.id); return `<label class="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-surface-container transition-colors ${isBonus?'bg-primary/10 border border-primary/30':'border border-transparent'}"><input type="checkbox" class="w-5 h-5 accent-primary" ${isBonus?'checked':''} onchange="toggleBonusService('${s.id}', this.checked)"><span class="font-body font-semibold text-on-surface text-sm">${s.label}</span><span class="text-[10px] font-body text-outline">${s.abbr}</span>${isBonus?'<span class="ml-auto text-[10px] font-semibold text-primary">Always Bonus</span>':''}</label>`; }).join('');
 }
 export function toggleBonusService(serviceId, checked) {
-  const ids = [...cfg().bonus_services];
+  const ids = [...(cfg().bonus_services || [])];
   if (checked && !ids.includes(serviceId)) ids.push(serviceId);
   else if (!checked) { const i = ids.indexOf(serviceId); if (i > -1) ids.splice(i, 1); }
   saveBonusServices(ids);
   renderBonusServicesList();
   showToast(checked ? 'Marked as always bonus ✓' : 'Removed from always bonus');
+}
+// on/off half & bonus, each by cost and/or by service, + a precedence choice. The whole section
+// re-renders on each flag/precedence change (they show/hide sub-controls); the two service lists
+// keep their own cheap re-render so toggling one service doesn't rebuild the section.
+function _turnMethodChk(label, flag, on, sub) {
+  return `<label class="flex items-center gap-2 py-1 cursor-pointer">
+    <input type="checkbox" class="w-4 h-4 accent-primary" ${on ? 'checked' : ''} onchange="toggleTurnFlag('${flag}', this.checked)">
+    <span class="font-body text-sm text-on-surface">${label}</span>${sub ? `<span class="text-[11px] text-on-surface-variant">${sub}</span>` : ''}
+  </label>`;
+}
+export function toggleTurnFlag(flag, checked) { saveTurnConfig({ [flag]: !!checked }); renderTurnsSettings(); }
+export function setTurnPrecedence(value) { saveTurnConfig({ precedence: value }); renderTurnsSettings(); showToast('Precedence updated ✓'); }
+export function renderHalfServicesList() {
+  const el = document.getElementById('half-services-list');
+  if (!el) return;
+  el.innerHTML = cfg().services.map(s => { const on = isHalfService(s.id); return `<label class="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-surface-container transition-colors ${on?'bg-primary/10 border border-primary/30':'border border-transparent'}"><input type="checkbox" class="w-5 h-5 accent-primary" ${on?'checked':''} onchange="toggleHalfService('${s.id}', this.checked)"><span class="font-body font-semibold text-on-surface text-sm">${s.label}</span><span class="text-[10px] font-body text-outline">${s.abbr}</span>${on?'<span class="ml-auto text-[10px] font-semibold text-primary">Half Turn</span>':''}</label>`; }).join('');
+}
+export function toggleHalfService(serviceId, checked) {
+  const ids = [...(cfg().half_services || [])];
+  if (checked && !ids.includes(serviceId)) ids.push(serviceId);
+  else if (!checked) { const i = ids.indexOf(serviceId); if (i > -1) ids.splice(i, 1); }
+  saveHalfServices(ids);
+  renderHalfServicesList();
+}
+export function renderTurnsSettings() {
+  const el = document.getElementById('turns-thresh-section');
+  if (!el) return;
+  const c = getTurnConfig();
+  const noMethodHint = (enabled, byCost, byService, kind) => (enabled && !byCost && !byService)
+    ? `<p class="text-[11px] font-body text-error mt-1">Pick at least one method, or nothing will count as a ${kind} turn.</p>` : '';
+  // "$X or less = <kind> turn" cutoff, shown inline right under the category's By-cost checkbox.
+  const cutoffRow = (id, val, kind) => `<div class="flex items-center gap-2 mt-1 mb-1 pl-6">
+      <span class="text-sm font-body text-on-surface-variant">$</span>
+      <input id="${id}" type="number" min="1" step="1" value="${val}" onchange="saveTurnThresholds()" class="w-20 border-2 border-surface-container-high bg-transparent rounded-lg px-2 py-1 text-sm font-headline text-on-surface focus:border-primary outline-none">
+      <span class="text-sm font-body text-on-surface-variant">or less = ${kind} turn</span>
+    </div>`;
+  const precOpts = [['bonusFirst', 'Bonus → Half → Full (bonus wins)'], ['highestValue', 'Highest value wins (Full → Half → Bonus)'], ['costWins', 'Price decides (ignore service tags when priced)']];
+  el.innerHTML = `
+    <div class="mb-3">
+      <label class="flex items-center gap-2 cursor-pointer mb-1">
+        <input type="checkbox" class="w-5 h-5 accent-primary" ${c.halfEnabled ? 'checked' : ''} onchange="toggleTurnFlag('halfEnabled', this.checked)">
+        <span class="font-headline font-semibold text-on-surface">Half turns</span>
+      </label>
+      ${c.halfEnabled ? `<div class="pl-7">
+        <div class="text-[11px] text-on-surface-variant mb-1">Count a half turn by:</div>
+        ${_turnMethodChk('Cost', 'halfByCost', c.halfByCost, '')}
+        ${c.halfByCost ? cutoffRow('thresh-half', c.halfMax, 'half') : ''}
+        ${_turnMethodChk('Service', 'halfByService', c.halfByService, '(a chosen list of services)')}
+        ${noMethodHint(c.halfEnabled, c.halfByCost, c.halfByService, 'half')}
+        ${c.halfByService ? `<div class="mt-2"><div class="text-[11px] font-semibold text-outline uppercase tracking-widest mb-1">Half-Turn Services</div><div id="half-services-list" class="space-y-2"></div></div>` : ''}
+      </div>` : `<p class="pl-7 text-[11px] text-on-surface-variant">Off — these services count as full turns.</p>`}
+    </div>
+    <div class="border-t border-surface-container-high pt-3 mb-3">
+      <label class="flex items-center gap-2 cursor-pointer mb-1">
+        <input type="checkbox" class="w-5 h-5 accent-primary" ${c.bonusEnabled ? 'checked' : ''} onchange="toggleTurnFlag('bonusEnabled', this.checked)">
+        <span class="font-headline font-semibold text-on-surface">Bonus turns</span>
+      </label>
+      ${c.bonusEnabled ? `<div class="pl-7">
+        <div class="text-[11px] text-on-surface-variant mb-1">Count a bonus turn by:</div>
+        ${_turnMethodChk('Cost', 'bonusByCost', c.bonusByCost, '')}
+        ${c.bonusByCost ? cutoffRow('thresh-bonus', c.bonusMax, 'bonus') : ''}
+        ${_turnMethodChk('Service', 'bonusByService', c.bonusByService, '(the always-bonus list below)')}
+        ${noMethodHint(c.bonusEnabled, c.bonusByCost, c.bonusByService, 'bonus')}
+        ${c.bonusByService ? `<div class="mt-2"><div class="text-[11px] font-semibold text-outline uppercase tracking-widest mb-1">Always-Bonus Services</div><p class="text-xs font-body text-on-surface-variant mb-2">Always count as bonus regardless of price (e.g. add-ons).</p><div id="bonus-services-list" class="space-y-2"></div></div>` : ''}
+      </div>` : `<p class="pl-7 text-[11px] text-on-surface-variant">Off — these services count as full turns.</p>`}
+    </div>
+    <div class="border-t border-surface-container-high pt-3">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">When rules overlap</label>
+      <select onchange="setTurnPrecedence(this.value)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:border-primary outline-none">
+        ${precOpts.map(([v, l]) => `<option value="${v}" ${c.precedence === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <p class="text-[11px] font-body text-on-surface-variant mt-1">If a service matches more than one rule (e.g. an always-bonus service priced like a full turn), this decides which wins.</p>
+    </div>
+  `;
+  if (c.halfEnabled && c.halfByService) renderHalfServicesList();
+  if (c.bonusEnabled && c.bonusByService) renderBonusServicesList();
 }
 
 // ── Calendar hours (device-local pref) ────────────
@@ -350,7 +430,7 @@ const SETTINGS_NAV = [
     { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true, icon:'lock' },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
-    { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section', icon:'swap_vert' },
+    { label:'Turn Rules', sub:'Half / bonus on-off, by cost or service, cutoffs & precedence', content:'turns-thresh-section', render:'renderTurnsSettings', icon:'swap_vert' },
     { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings', icon:'event_seat' },
     { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true, icon:'event_repeat' },
     { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true, icon:'paid' },
@@ -509,10 +589,6 @@ export function renderSettingsPanel() {
   if (sqInput && cfg().square_config?.locationId) sqInput.value = cfg().square_config.locationId;
   if (sqAppInput && cfg().square_config?.applicationId) sqAppInput.value = cfg().square_config.applicationId;
   window.renderTerminalStatus?.();
-  const c = getTurnConfig();
-  const fi = document.getElementById('thresh-full'), hi = document.getElementById('thresh-half');
-  if (fi) fi.value = c.fullMin;
-  if (hi) hi.value = c.halfMin;
-  renderBonusServicesList();
+  // Turn Rules is a render-leaf now (renderTurnsSettings builds it on open) — no static seeding here.
   settingsNavRoot();
 }
