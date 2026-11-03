@@ -60,6 +60,7 @@ export function showPinModal({ ownerLogin = false } = {}) {
 // business sign-in everywhere else.
 export function logout() {
   const doLogout = () => {
+    window.chatPushOnSignOut?.();   // drop this device's chat-push tag before clearing the session
     setActiveUser(null);
     if (isKioskDevice()) { window.goTo?.('screen-welcome'); showPinModal(); }
     else {
@@ -118,6 +119,10 @@ function _finishPinLogin(user) {
   if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
     setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
   }
+  // Chat notifications: for a dashboard user (not the operator/app-admin), enable push on this device
+  // (auto-ask once per device — the browser only prompts the first time). Delayed so it doesn't stack
+  // on the welcome/cash prompts.
+  if (cu && cu.kind !== 'appadmin') setTimeout(() => window.chatPushOnSignIn?.(), 1600);
 }
 
 // ── First-run manager PIN (brand-new salon) ───────────────────────────────────
@@ -580,6 +585,7 @@ export function deleteFdUser(id) {
 export function toggleUserMenu() {
   const m = document.getElementById('user-menu');
   if (!m) return;
+  const st = document.getElementById('chat-notif-state'); if (st) st.textContent = window.chatNotifOn?.() ? 'On' : 'Off';   // reflect this device's chat-notification state
   m.classList.toggle('hidden');
 }
 export function closeUserMenu() {

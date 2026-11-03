@@ -498,6 +498,10 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:18px">new_releases</span>
             What's new
           </button>
+          <button onclick="toggleChatNotif()" title="Chat notifications on this device" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">notifications</span>
+            Chat notifications<span id="chat-notif-state" class="ml-auto text-xs font-normal text-on-surface-variant">Off</span>
+          </button>
           <div style="height:1px;background:var(--surface-container-high);margin:4px 0"></div>
           <button onclick="logout()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
             <span class="material-symbols-outlined" style="font-size:18px">logout</span>

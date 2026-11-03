@@ -132,6 +132,7 @@ function goTo(screenId, param) {
   }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(screenId)?.classList.add('active');
+  if (screenId !== 'screen-desk') chat.closeChat?.();   // chat is a dashboard overlay — never leave it open over the sign-in/kiosk screens
   window.scrollTo(0, 0);
   if (screenId === 'screen-checkin') {
     session.ui.currentCheckinType = param === 'appointment' ? 'appointment' : 'walkin';
@@ -152,6 +153,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.58', items: [
+    { icon: 'notifications_active', t: 'Chat notifications now work from the front desk', d: 'Front-desk users (including owners/managers, who don’t use the technician app) now get phone/tablet notifications for chat messages sent to them. The first time you sign in, the device asks to allow notifications; after that it just works, and follows whoever’s signed in on that device. Turn it on or off anytime from your account menu (tap your name → “Chat notifications”). Also: the chat window now closes automatically when you sign out or the app returns to the sign-in screen.' },
+  ] },
   { v: 'td-v0.57', items: [
     { icon: 'receipt_long', t: 'Build your own printed price menu', d: 'Settings → Business → Price Menu lets you create a polished, print-ready customer price menu — two pages, grouped into sections, with optional per-service options (pick-one variants) and add-ons, descriptions, and footer notes. Edit it in a tidy list-and-detail editor (type to filter, drag to reorder, “Prints in” to move a service), Preview it in a new tab, and nothing goes live until you tap Save. New salons start from a neutral sample menu to edit. You can also look up any price fast from the header search (“how much is a gel manicure?”).' },
   ] },
@@ -727,6 +731,7 @@ function boot() {
   if (session.getActiveUser()) support.pollSupportUnread();
   setInterval(() => { if (!document.hidden && session.getActiveUser()) support.pollSupportUnread(); }, 3 * 60 * 1000);
   registerServiceWorker();
+  chat.chatPushResync?.();   // silently re-tag this device for the signed-in dashboard user's chat push (never prompts)
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

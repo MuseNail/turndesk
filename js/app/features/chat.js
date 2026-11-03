@@ -18,7 +18,7 @@ import { dispatch } from '../sync.js';
 import { scopedKey } from '../apptoken.js';   // per-salon device-local key (no cross-salon read-state bleed on a shared device)
 import { getActiveUser } from '../session.js';
 import { showToast } from '../utils.js';
-import { PUSH_PROXY } from '../config.js';
+import { PUSH_PROXY, VAPID_PUBLIC_KEY } from '../config.js';
 
 const cfg = () => getState().config;
 const CHAT_CAP = 300;
@@ -244,6 +244,68 @@ function pushNotify(pids, title, text) {
   }).catch(() => {});
 }
 export function chatInputKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendChatMessage(); } }
+
+// ── Chat push on THIS (dashboard) device ──────────────────────────────────────
+// The staff app registers techs for push, but the dashboard never did — so a front-desk user
+// working from the dashboard (incl. an owner/manager, who can't use the staff app) received no
+// chat pushes. Register this device under the signed-in dashboard user's chat pid ('fd:<id>') so
+// DMs / @mentions / channel pings reach the front desk. Re-tags on user switch; dropped on logout.
+// Device-local OFF flag + the browser permission gate it. (The operator/app-admin is excluded.)
+const _CP_IDS = 'turndesk_chat_push_ids';   // pids this device is currently subscribed under
+const _CP_OFF = 'turndesk_chat_push_off';   // '1' = the user turned chat notifications off on this device
+const _cpSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const _lsG = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const _lsS = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const _lsD = k => { try { localStorage.removeItem(k); } catch {} };
+function _cpBytes(b64) { const pad = '='.repeat((4 - (b64.length % 4)) % 4); const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(s); const out = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; }
+async function _cpUnsub(sub, id) { try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, endpoint: sub.endpoint }) }); } catch {} }
+async function _cpSubscribe(pid) {
+  if (!_cpSupported() || Notification.permission !== 'granted' || !pid) return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _cpBytes(VAPID_PUBLIC_KEY) });
+    let prev = []; try { prev = JSON.parse(_lsG(_CP_IDS) || 'null') || []; } catch {}
+    for (const p of prev) if (p !== pid) await _cpUnsub(sub, p);   // a different user signed in on this shared device → drop the old tag
+    const r = await fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: pid, subscription: sub.toJSON() }) });
+    if (r.ok) { _lsS(_CP_IDS, JSON.stringify([pid])); return true; }
+  } catch {}
+  return false;
+}
+async function _cpUnsubAll() {
+  let ids = []; try { ids = JSON.parse(_lsG(_CP_IDS) || 'null') || []; } catch {}
+  if (!ids.length || !_cpSupported()) { _lsD(_CP_IDS); return; }
+  try { const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription(); if (sub) await Promise.all(ids.map(id => _cpUnsub(sub, id))); } catch {}
+  _lsD(_CP_IDS);
+}
+export function chatNotifOn() { return _lsG(_CP_OFF) !== '1' && _cpSupported() && Notification.permission === 'granted'; }
+// Auto-ask on sign-in: for a dashboard user who hasn't turned it off, request permission if not yet
+// decided (prompts once per device), then subscribe under their chat pid. No-op for the operator / if off / denied.
+export async function chatPushOnSignIn() {
+  const u = getActiveUser(); if (!u || u.kind === 'appadmin' || _lsG(_CP_OFF) === '1' || !_cpSupported()) return;
+  if (Notification.permission === 'denied') return;
+  if (Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
+  if (Notification.permission === 'granted') await _cpSubscribe(myPid());
+}
+// Boot resync: SILENT (never prompts) — re-tag this device if permission is already granted.
+export async function chatPushResync() {
+  const u = getActiveUser(); if (!u || u.kind === 'appadmin' || _lsG(_CP_OFF) === '1') return;
+  if (_cpSupported() && Notification.permission === 'granted') await _cpSubscribe(myPid());
+}
+export async function chatPushOnSignOut() { await _cpUnsubAll(); }
+// Account-menu toggle: flips chat notifications for THIS device (requests permission when turning on).
+export async function toggleChatNotif() {
+  if (chatNotifOn()) { _lsS(_CP_OFF, '1'); await _cpUnsubAll(); showToast('Chat notifications off on this device'); }
+  else {
+    _lsD(_CP_OFF);
+    if (!_cpSupported()) { showToast('This device can’t receive notifications'); return; }
+    if (Notification.permission === 'denied') { showToast('Notifications are blocked — turn them on in your browser/site settings, then try again'); return; }
+    if (Notification.permission === 'default') { try { await Notification.requestPermission(); } catch {} }
+    if (Notification.permission === 'granted' && await _cpSubscribe(myPid())) showToast('Chat notifications on for this device ✓');
+    else showToast('Couldn’t turn on notifications — try again');
+  }
+  const st = document.getElementById('chat-notif-state'); if (st) st.textContent = chatNotifOn() ? 'On' : 'Off';
+}
 
 // Manager-only: wipe the chat for everyone (in addition to the automatic 4 AM clear).
 export function clearChat() {
