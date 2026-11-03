@@ -153,6 +153,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.61', items: [
+    { icon: 'table_chart', t: 'Turns board: a cleaner, aligned turn-count column', d: 'Each technician’s turn count, bonus count and billed total now sit in their own column just left of the turn bubbles — lined up the same for every technician instead of squeezed next to the name — and you can drag that column’s edge to resize it. The “next up” highlight no longer nudges the row sideways. (Hide the billed totals from the Turns toolbar as before.)' },
+  ] },
   { v: 'td-v0.60', items: [
     { icon: 'view_sidebar', t: 'Floor plan: technicians moved to a resizable left column', d: 'The technicians are now listed down the left side of the floor plan — photo, name, status, turn count and bonus, like the Turns grid — instead of a row across the bottom, with the floor to the right. Drag the column’s edge to make it wider or narrower (remembered per device). Everything still works: drag a technician onto a chair to assign, tap for the status menu, and the next-up technician is highlighted.' },
   ] },

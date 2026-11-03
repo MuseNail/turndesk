@@ -29,6 +29,15 @@ export function _clampTechColW(px) {
 const turnsTechColW = () => _clampTechColW(parseInt(localStorage.getItem('turndesk_turns_techcol_w'), 10) || TURNS_TECHCOL_DEFAULT);
 function _applyTurnsTechColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-techcol-w', turnsTechColW() + 'px'); }
 function setTurnsTechColW(px) { localStorage.setItem('turndesk_turns_techcol_w', String(_clampTechColW(px))); _applyTurnsTechColW(); }
+// The turn-count column (its own column just left of the turn bubbles) is resizable the same way.
+const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 72;   // fits count / +Nb bonus / $billed stacked
+export function _clampTotalColW(px) {
+  const n = Math.round(Number(px));
+  return Number.isFinite(n) ? Math.max(TURNS_TOTALCOL_MIN, Math.min(TURNS_TOTALCOL_MAX, n)) : TURNS_TOTALCOL_DEFAULT;
+}
+const turnsTotalColW = () => _clampTotalColW(parseInt(localStorage.getItem('turndesk_turns_totalcol_w'), 10) || TURNS_TOTALCOL_DEFAULT);
+function _applyTurnsTotalColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-totalcol-w', turnsTotalColW() + 'px'); }
+function setTurnsTotalColW(px) { localStorage.setItem('turndesk_turns_totalcol_w', String(_clampTotalColW(px))); _applyTurnsTotalColW(); }
 
 // Turn-number badge style, shared by the live grid + history so the two can't drift: amber half,
 // light-teal bonus, neutral grey for an unpriced "?" (so it never reads as a counted turn), and a
@@ -327,7 +336,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); _applyTurnsTotalColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
 
 // ── Per-device "$ billed" totals show/hide (Turns toolbar) ────────────────────
 // Device-local (like the text size) — hide each tech's billed dollar total on a
@@ -550,11 +559,13 @@ export function renderTurnsTechGrid() {
     const turnDisplay = turns.total > 0
       ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
+    // The turn count + billed total live in their own fixed column (turnsCountCol, below); this left
+    // column is just the tech's photo, name, and status.
     const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0" style="flex:1">
-        <div class="flex items-center gap-1.5 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0">${st.name}</span>${turnDisplay}<span class="turns-billed text-[10px] font-body font-semibold flex-shrink-0" style="color:#1a5252;margin-left:auto">$${billed.toFixed(0)}</span></div>
-        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span>${turns.bonus > 0 ? `<span class="text-[10px] text-secondary flex-shrink-0">+${turns.bonus}b</span>` : ''}</div>
+        <div class="leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0;display:block">${st.name}</span></div>
+        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span></div>
       </div></div>`;
 
     const MIN_SLOTS = 5;
@@ -619,13 +630,20 @@ export function renderTurnsTechGrid() {
     if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins, slotH)); }
     const slotHtml = slotArr.join('');
 
-    const rowAccent = isNextUp ? 'border-left:3px solid #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
+    // Inset bar (box-shadow, NOT border-left) so the next-up accent never shifts the row's columns right.
+    const rowAccent = isNextUp ? 'box-shadow:inset 3px 0 0 #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
     const slotRow = `<div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div>`;
     // Per-device separation between the tech box and the turn bubbles (see turnsSep()).
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${rightSide}</div>`;
+    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech),
+    // with the tech's billed $ total stacked beneath the bonus (.turns-billed → hidden by .turns-hide-totals
+    // when totals are off). This column sits OUTSIDE the scrolling slot row.
+    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
+      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}<span class="turns-billed text-xs font-headline font-bold leading-none mt-0.5 flex-shrink-0" style="color:#1a5252">$${billed.toFixed(0)}</span>
+    </div>`;
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';
@@ -667,6 +685,26 @@ export function renderTurnsTechGrid() {
       document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
     });
     grid.appendChild(handle);
+    // Second handle at the turn-count column's right edge (techCol + gap-2(8px) + totalCol).
+    const thandle = document.createElement('div');
+    thandle.className = 'turns-col-resizer';
+    thandle.title = 'Drag to resize the turn-count column';
+    thandle.style.left = (turnsTechColW() + 8 + turnsTotalColW() - 3) + 'px';
+    thandle.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const startX = ev.clientX, startW = turnsTotalColW();
+      try { thandle.setPointerCapture(ev.pointerId); } catch {}
+      const panel = document.getElementById('panel-turns');
+      const move = e => { const w = _clampTotalColW(startW + (e.clientX - startX)); panel?.style.setProperty('--turns-totalcol-w', w + 'px'); thandle.style.left = (turnsTechColW() + 8 + w - 3) + 'px'; };
+      const end = e => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        setTurnsTotalColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+    });
+    grid.appendChild(thandle);
   }
 }
 

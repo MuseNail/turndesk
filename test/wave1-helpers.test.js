@@ -4,7 +4,7 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { _clampTechColW } from '../js/app/features/turns.js';
+import { _clampTechColW, _clampTotalColW } from '../js/app/features/turns.js';
 import { _visitLines } from '../js/app/features/reports.js';
 import { _clampFpTechColW } from '../js/app/features/floorplan.js';
 
@@ -35,6 +35,12 @@ test('_visitLines drops blank catch-all assignments (no serviceId and no techId)
   assert.deepEqual(_visitLines([{ serviceId: '', techId: '' }, { serviceId: 's1', techId: 't1' }], ['s1'], svcLabel, techName),
     [{ service: 'Gel Mani', tech: 'Jane' }]);
 });
+
+// ── _clampTotalColW(px) — turns-board turn-count column: min 44, max 140, default 72 (Muse v5.80/84 port) ──
+test('_clampTotalColW clamps below the minimum', () => { assert.equal(_clampTotalColW(10), 44); });
+test('_clampTotalColW clamps above the maximum', () => { assert.equal(_clampTotalColW(999), 140); });
+test('_clampTotalColW passes a valid width through (rounded)', () => { assert.equal(_clampTotalColW(90.6), 91); });
+test('_clampTotalColW falls back to the default on a non-number', () => { assert.equal(_clampTotalColW('x'), 72); });
 
 // ── _clampFpTechColW(px) — floor-plan tech column: min 140, max 320, default 185 (Muse v5.82 port) ──
 test('_clampFpTechColW clamps below the minimum', () => { assert.equal(_clampFpTechColW(50), 140); });
