@@ -153,6 +153,12 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.62', items: [
+    { icon: 'search', t: 'Find a setting from the header search', d: 'The search box at the top now also finds Settings screens — type “waiver”, “commission”, “price menu”, etc. and jump straight there (you only see the ones your role can open).' },
+    { icon: 'event_seat', t: 'Waiting list shows the full customer card', d: 'On the Floor Plan, guests who aren’t seated yet now appear as full mini-cards (name, wait time, and each service with its technician) instead of a plain name chip, so you can read the waiting list at a glance. Drag one onto a chair to seat them as before.' },
+    { icon: 'notifications', t: 'Appointment reminders stack and scroll', d: 'When several appointment reminders pop up at once they now stack in a tidy, scrollable list (soonest first) with a “scroll for more” hint, instead of stacking off the screen.' },
+    { icon: 'view_sidebar', t: 'Floor technician column lines up with the floor', d: 'The technician column on the Floor Plan now aligns to the top of your layout and spaces the technicians evenly down the side.' },
+  ] },
   { v: 'td-v0.61', items: [
     { icon: 'table_chart', t: 'Turns board: a cleaner, aligned turn-count column', d: 'Each technician’s turn count, bonus count and billed total now sit in their own column just left of the turn bubbles — lined up the same for every technician instead of squeezed next to the name — and you can drag that column’s edge to resize it. The “next up” highlight no longer nudges the row sideways. (Hide the billed totals from the Turns toolbar as before.)' },
   ] },

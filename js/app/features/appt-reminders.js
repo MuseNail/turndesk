@@ -55,17 +55,47 @@ export function checkApptReminders() {
   if (changed) saveFired(fired);
 }
 
-function showApptBanner(a, L) {
+// Scrollable inner stack so AT MOST ~3 reminders show at once (the rest scroll). pointer-events live on
+// THIS card-sized wrapper (not the full-width host), so the top nav underneath stays clickable.
+const REMINDER_MAXH = 250;   // ≈ 3 cards worth; overflow scrolls
+function reminderStack() {
+  const host = document.getElementById('appt-reminder-banners'); if (!host) return null;
+  let stack = document.getElementById('appt-reminder-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'appt-reminder-stack';
+    stack.style.cssText = `pointer-events:auto;display:flex;flex-direction:column;gap:8px;max-height:${REMINDER_MAXH}px;overflow-y:auto;max-width:96vw;scrollbar-width:thin`;
+    host.appendChild(stack);
+  }
+  return stack;
+}
+// Show a "Scroll for more" hint when the stack overflows (the thin scrollbar alone is easy to miss on iPad).
+function updateReminderMore() {
   const host = document.getElementById('appt-reminder-banners'); if (!host) return;
+  const stack = document.getElementById('appt-reminder-stack');
+  let more = document.getElementById('appt-reminder-more');
+  const overflow = stack && stack.scrollHeight > stack.clientHeight + 2;
+  if (overflow) {
+    if (!more) { more = document.createElement('div'); more.id = 'appt-reminder-more'; more.style.cssText = 'pointer-events:none;font-size:11px;font-weight:700;color:#1a5252;background:#fff;border-radius:999px;padding:3px 12px;box-shadow:0 2px 8px rgba(0,0,0,.22)'; host.appendChild(more); }
+    more.textContent = 'Scroll for more reminders ↓';
+  } else if (more) { more.remove(); }
+}
+
+function showApptBanner(a, L) {
+  const stack = reminderStack(); if (!stack) return;
   const el = document.createElement('div');
-  el.style.cssText = 'pointer-events:auto;display:flex;align-items:center;gap:12px;background:#1a5252;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.28);width:340px;max-width:96vw;box-sizing:border-box;font-family:Inter,sans-serif';
+  el.dataset.startMs = String(a.startMs || 0);
+  el.style.cssText = 'pointer-events:auto;display:flex;align-items:center;gap:12px;background:#1a5252;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.28);width:700px;max-width:96vw;box-sizing:border-box;font-family:Inter,sans-serif;flex-shrink:0';
   el.innerHTML = `<span class="material-symbols-outlined" style="font-size:22px;flex-shrink:0">notifications_active</span>`
-    + `<div style="min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(a.name)} — appointment in ${_leadLabel(L)}</div>`
+    + `<div style="min-width:0;flex:1"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(a.name)} — appointment in ${_leadLabel(L)}</div>`
     + `<div style="font-size:12px;opacity:.85">Starts ${_fmtTime(a.startMs)}</div>`
     + `${(a.svc || a.techName) ? `<div style="font-size:11.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc([a.svc, a.techName].filter(Boolean).join(' · '))}</div>` : ''}</div>`
     + `<button style="flex-shrink:0;background:#fff;color:#1a5252;border:none;border-radius:8px;padding:7px 16px;font-weight:700;font-size:13px;cursor:pointer">OK</button>`;
-  el.querySelector('button').onclick = () => el.remove();
-  host.appendChild(el);
+  el.querySelector('button').onclick = () => { el.remove(); updateReminderMore(); };
+  // Keep the SOONEST appointment on top (most time-critical always among the visible three).
+  const before = [...stack.children].find(c => Number(c.dataset.startMs) > (a.startMs || 0));
+  stack.insertBefore(el, before || null);
+  updateReminderMore();
 }
 
 // ── Settings: lead-time toggles (rendered into #appt-reminder-settings) ──────────

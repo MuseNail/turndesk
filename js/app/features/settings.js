@@ -492,6 +492,7 @@ function _settingsItemRow(it, subText) {
 
 export function settingsNavRoot() {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsNavRoot()); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsNavRoot()); return; }
   _settingsView = 'root'; _settingsCat = null;
   window.refreshBillingFlags?.();   // fire-and-forget — the Billing entry appears on the next nav render once the flag is on
   _hideAllSettingsSections();
@@ -504,20 +505,44 @@ export function settingsNavRoot() {
   _setSettingsHeader('Settings', 'Configure app behavior and customer options', false);
 }
 
+// One permission predicate for a settings leaf — reused by the category list, the in-panel search,
+// AND the header global-search Settings group, so "who sees what" has a single source of truth.
+export function settingsLeafVisible(it) {
+  if (it.hidden) return false;
+  const role = getActiveUser()?.role;
+  if (it.adminOnly && role !== 'admin') return false;
+  if (it.adminOrManager && !['admin', 'manager'].includes(role)) return false;
+  if (it.perm && !canDo(it.perm)) return false;
+  return true;
+}
+// Pure: filter the settings nav by a query + a visibility predicate → flat result rows (projected to
+// just what a result row renders). Pure (predicate injected) so it's unit-testable without app state.
+export function _settingsSearchRows(nav, query, visible) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+  const out = [];
+  (nav || []).forEach(g => (g.items || []).forEach(it => {
+    if (!visible(it)) return;
+    if ((it.label + ' ' + (it.sub || '') + ' ' + g.title).toLowerCase().includes(q))
+      out.push({ label: it.label, sub: it.sub || '', cat: g.title, content: it.content || null, action: it.action || null, icon: it.icon || 'settings' });
+  }));
+  return out;
+}
+// Consumed by the header global search (search.js) to surface Settings as results (same perm filter).
+export function searchSettings(query) { return _settingsSearchRows(SETTINGS_NAV, query, settingsLeafVisible); }
+
 // Live filter across the whole settings tree → jump straight to any leaf.
 export function filterSettings(q) {
+  // Switching views via the search box with an unsaved inline-catalog row open → guard it (parity with the
+  // nav chokepoints). Inert unless a catalog row is dirty; the search box is also hidden inside leaf views.
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => filterSettings(q)); return; }
   const query = (q || '').trim().toLowerCase();
   document.getElementById('settings-search-clear')?.classList.toggle('hidden', !query);
   const results = document.getElementById('settings-results');
   const root = document.getElementById('settings-root');
   if (!query) { if (results) { results.classList.add('hidden'); results.innerHTML = ''; } root?.classList.remove('hidden'); return; }
   _settingsCat = null;   // searching resets category context so Back returns to the root
-  const isAdmin = getActiveUser()?.role === 'admin';
-  const matches = [];
-  SETTINGS_NAV.forEach(g => g.items.forEach(it => {
-    if (it.hidden || (it.adminOnly && !isAdmin) || (it.perm && !canDo(it.perm))) return;
-    if ((it.label + ' ' + (it.sub || '') + ' ' + g.title).toLowerCase().includes(query)) matches.push({ ...it, cat: g.title });
-  }));
+  const matches = _settingsSearchRows(SETTINGS_NAV, query, settingsLeafVisible);
   root?.classList.add('hidden');
   document.getElementById('settings-category')?.classList.add('hidden');
   if (!results) return;
@@ -529,19 +554,20 @@ export function filterSettings(q) {
 export function clearSettingsSearch() { const i = document.getElementById('settings-search'); if (i) { i.value = ''; filterSettings(''); i.focus(); } }
 export function settingsOpenCategory(catId) {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenCategory(catId)); return; }   // defense-in-depth (unreachable from a leaf view today)
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsOpenCategory(catId)); return; }
   const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
   _settingsView = 'cat'; _settingsCat = catId;
   _hideAllSettingsSections();
   document.getElementById('settings-root')?.classList.add('hidden');
-  const isAdmin = getActiveUser()?.role === 'admin';
   const list = document.getElementById('settings-category');
-  const items = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin) && (!it.perm || canDo(it.perm)));
+  const items = g.items.filter(settingsLeafVisible);
   list.innerHTML = items.length === 0 ? '<p class="text-sm font-body text-on-surface-variant px-1 py-3">Your role doesn’t have access to these settings.</p>' : items.map(it => _settingsItemRow(it)).join('');
   list.classList.remove('hidden');
   _setSettingsHeader(g.title, g.desc, true);
 }
 export function settingsOpenLeaf(contentId) {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenLeaf(contentId)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsOpenLeaf(contentId)); return; }
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
   if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
@@ -565,6 +591,7 @@ export function settingsOpenLeaf(contentId) {
 }
 export function settingsBack() {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsBack()); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsBack()); return; }
   if (_settingsView === 'leaf' && _settingsCat) settingsOpenCategory(_settingsCat);
   else settingsNavRoot();
 }

@@ -126,6 +126,17 @@ function _gsSearch(qstr) {
     })) });
   } catch {}
 
+  // Settings (jump straight into a Settings screen). searchSettings applies the SAME permission
+  // filter the Settings panel uses, so a user never sees a setting their role can't open.
+  try {
+    const setts = (window.searchSettings?.(ql) || []).slice(0, 6);
+    if (setts.length) out.push({ label: 'Settings', icon: 'tune', rows: setts.map(s => ({
+      title: esc(s.label),
+      sub: esc(s.cat + (s.sub ? ' · ' + s.sub : '')),
+      go: `gsGo('setting','${escAttrJs(s.content || ('action|' + s.action))}')`,
+    })) });
+  } catch {}
+
   return out;
 }
 
@@ -135,6 +146,12 @@ export function gsGo(kind, a) {
   // Respect an open unsaved price-menu editor before jumping away (mirrors showDashPanel's guard).
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => gsGo(kind, a)); return; }
   if (kind === 'price') { window.openPriceMenu?.(); return; }   // show the full printed menu
+  if (kind === 'setting') {
+    // Action-type leaves (e.g. Customer Directory) navigate to their OWN target — go there directly,
+    // no Settings hop (avoids a visible flash to Settings and away). Content leaves open the leaf.
+    if (a.startsWith('action|')) { window[a.slice(7)]?.(); return; }
+    window.showDashPanel?.('settings'); setTimeout(() => window.settingsOpenLeaf?.(a), 60); return;
+  }
   if (kind === 'cust')  { window.showEditCustomer?.(a); return; }
   if (kind === 'queue') { window.showDashPanel?.('queue'); window.showGroupAssignModal?.(a); return; }
   if (kind === 'txn')   { window.showDashPanel?.('transactions'); window.selectRangeDay?.(a); return; }

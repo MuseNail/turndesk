@@ -38,6 +38,7 @@ function stationsInRect(x1, y1, x2, y2) {
 }
 
 const GAP = 10;
+const FP_MAX_ROW_GAP = 40;   // cap the tech-column row spacing so a few techs on a tall floor don't splay to the extremes
 // Per-category default tile size + accent color now live in config.station_categories
 // (categoryDef). catDims/catColor read from there with a safe fallback so the floor
 // plan keeps working even for a station whose category was removed.
@@ -107,11 +108,11 @@ function _techAvatar(tech, fs) {
 }
 // ALL of the customer's services (this seat's + others + still-waiting), each as a row:
 // status dot + tech avatar + service · tech · $ , with the elapsed▸avg badge on the line below.
-function custLines(e, stationId, fs = 1) {
+function custLines(e, stationId, fs = 1, maxLines = Infinity, noTiming = false) {
   const assigns = e.assignments || [];
   const sids = [...new Set([...(e.services || []), ...assigns.map(a => a.serviceId)])];
   const dotPx = Math.round(9 * fs);
-  return sids.map(sid => {
+  const lines = sids.map(sid => {
     const a = assigns.find(x => x.serviceId === sid);
     const status = a ? getAssignmentStatus(e, a) : 'waiting';
     if (a && isPaidStatus(status)) return '';   // drop a paid line (whole entry leaves the floor when all paid)
@@ -121,10 +122,40 @@ function custLines(e, stationId, fs = 1) {
     const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
       ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.comped ? ' · Comp' : (a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : '')}${t ? '' : ' · Wait'}</span>
     </div>`;
-    const sti = a ? serviceTimeInfo(a) : null;
+    // Tray cards pass noTiming so each service is one compact line (the elapsed▸avg sub-row would push a
+    // busy card past its fixed height and clip the "+N more" chip).
+    const sti = (!noTiming && a) ? serviceTimeInfo(a) : null;
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';
     return main + stiHtml;
-  }).filter(Boolean).join('');
+  }).filter(Boolean);
+  // maxLines caps the tray's fixed-height cards (seated tiles pass no cap). Overflow collapses to "+N more".
+  if (lines.length > maxLines) {
+    const shown = lines.slice(0, maxLines);
+    shown.push(`<div style="font-size:${Math.round(9.5 * fs)}px;font-weight:700;color:#52606d;padding-left:${Math.round(3 * fs)}px">+${lines.length - maxLines} more</div>`);
+    return shown.join('');
+  }
+  return lines.join('');
+}
+
+// Waiting-guest tray card (Item 2): the FULL bubble — name + wait time + each service + tech/Wait — so
+// the not-seated strip reads like a seated tile at a glance. Fixed card height + overflow:hidden; 3+
+// services collapse to "+N more". Keeps .floor-bubble + data-entry-id + .fp-grip so drag-to-seat is
+// UNCHANGED. (TD's tray wraps rather than horizontally scrolls, so cards flow to the next line.)
+const TRAY_CARD_H = 72;
+function trayBubbleHtml(e) {
+  const inserv = entryInservice(e);
+  const bg = inserv ? '#cfe0e0' : '#ffe9c4', border = inserv ? '#2a7a4f' : '#d4860a';
+  const letter = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : '';
+  return `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1.5 flex-shrink-0" data-entry-id="${e.id}" style="width:162px;height:${TRAY_CARD_H}px;box-sizing:border-box;overflow:hidden;background:${bg};border:1px solid ${border};color:#1f2937">
+    <div class="flex items-center gap-1" style="min-width:0">
+      <span class="material-symbols-outlined fp-grip" style="font-size:15px">drag_indicator</span>
+      ${letter}
+      <div class="font-semibold truncate" style="font-size:11px;flex:1;min-width:0;line-height:1.2">${escHtml(e.name)}</div>
+      <span class="flex-shrink-0" style="font-size:9px;color:#52606d" data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span>
+      ${cardNotePreview(e.phone, e.txnNote, { iconOnly: true, visitOnly: true, fontSize: 10 })}
+    </div>
+    <div class="overflow-hidden leading-tight" style="margin-top:3px">${custLines(e, null, 1, 2, true)}</div>
+  </div>`;
 }
 
 function stationHtml(id, entry) {
@@ -231,7 +262,7 @@ function renderFloorStaffRow() {
     const grip = `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-5px;left:-7px;background:var(--surface-container-lowest,#fff);border-radius:6px;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
     const isNext = id === nextUpId;
     const statusChip = `<div style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${isNext ? 'Next up' : c.label}</div>`;
-    return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5 mb-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
+    return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
       <div style="position:relative;flex-shrink:0">${avatar}${grip}</div>
       <div class="min-w-0" style="flex:1">
         <div class="truncate" style="font-size:13px;font-weight:700;color:var(--md-on-surface)">${escHtml(st.name.split(' ')[0])}</div>
@@ -275,13 +306,13 @@ export function renderFloorPlan() {
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(trayBubbleHtml).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
-  let maxRight = 0, maxBottom = 0;
+  let maxRight = 0, maxBottom = 0, minTop = Infinity;
   const stationIds = getStations();
-  stationIds.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); });
+  stationIds.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); minTop = Math.min(minTop, L.y); });
   const cw = maxRight + GAP, ch = maxBottom + GAP;
   const stationsHtml = stationIds.map(id => stationHtml(id, byStation[id] || null)).join('');
   if (floorEditMode) {
@@ -306,6 +337,24 @@ export function renderFloorPlan() {
     grid.style.overflow = 'hidden';
     grid.style.height = (ch * s) + 'px';
     grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px;transform-origin:top left;transform:translateX(${offsetX}px) scale(${s})">${stationsHtml}</div>`;
+    // Match the tech column to the DRAWN floor: align its top to the first tile (margin-top) and spread
+    // the rows down to span the floor's rendered height — but never open a gap wider than FP_MAX_ROW_GAP
+    // (a few techs cluster near the top instead of splaying top-to-bottom). Rows carry no own margin now;
+    // the column owns the spacing (gap). Reads station_layout only.
+    const staff = document.getElementById('floorplan-staff-row');
+    if (staff) {
+      staff.style.height = ''; staff.style.justifyContent = ''; staff.style.marginTop = '';
+      staff.style.display = 'flex'; staff.style.flexDirection = 'column'; staff.style.gap = '0px';
+      if (stationIds.length && Number.isFinite(minTop) && staff.children.length) {
+        const rowsH = staff.scrollHeight;                                      // sum of row heights (gap 0)
+        const N = staff.children.length;
+        const floorTop = minTop * s, floorH = (maxBottom - minTop) * s;
+        staff.style.marginTop = floorTop + 'px';
+        staff.style.gap = (N >= 2 && floorH > rowsH) ? Math.min((floorH - rowsH) / (N - 1), FP_MAX_ROW_GAP) + 'px' : '6px';
+      } else {
+        staff.style.gap = '6px';
+      }
+    }
   }
 }
 
