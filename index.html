@@ -541,8 +541,10 @@ tailwind.config = {
           </div>
         </div>
         <div id="floorplan-props" class="hidden bg-surface-container rounded-xl px-4 py-3 mb-3"></div>
-        <div id="floorplan-grid" style="position:relative"></div>
-        <div id="floorplan-staff-row" class="mt-4"></div>
+        <div id="floorplan-body" class="flex items-start gap-2 relative">
+          <div id="floorplan-staff-row" class="flex-shrink-0 relative" style="width:var(--fp-techcol-w,185px)"></div>
+          <div id="floorplan-grid" style="position:relative;flex:1;min-width:0"></div>
+        </div>
       </div>
 
       <!-- ── QUEUE PANEL ── -->

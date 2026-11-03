@@ -153,6 +153,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.60', items: [
+    { icon: 'view_sidebar', t: 'Floor plan: technicians moved to a resizable left column', d: 'The technicians are now listed down the left side of the floor plan — photo, name, status, turn count and bonus, like the Turns grid — instead of a row across the bottom, with the floor to the right. Drag the column’s edge to make it wider or narrower (remembered per device). Everything still works: drag a technician onto a chair to assign, tap for the status menu, and the next-up technician is highlighted.' },
+  ] },
   { v: 'td-v0.59', items: [
     { icon: 'swap_vert', t: 'Turn rules are now yours to set', d: 'Settings → Business → Turn Rules lets you decide exactly what counts as a half turn and a bonus turn: turn each on or off, count by price (“$X or less”) and/or by a chosen list of services, and pick which rule wins when they overlap. The defaults match how turns counted before, so nothing changes until you change it.' },
     { icon: 'schedule', t: 'A done service counts its turn right away', d: 'When a service is marked done but not priced yet, it now counts toward the technician’s turns immediately using the service’s expected price, shown with a small “~” until the real price is entered (then it settles to the exact number). No more waiting for the price to see who’s up.' },

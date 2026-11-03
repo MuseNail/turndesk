@@ -168,42 +168,81 @@ function stationHtml(id, entry) {
   </div>`;
 }
 
-// Display-only row of today's staff (active rotation) with their status color code,
-// centered under the floor. Reuses the turns-grid colors so it matches.
+// ── Resizable tech column (the left-hand roster, styled like the turns-grid tech column) ──
+const FP_TECHCOL_MIN = 140, FP_TECHCOL_MAX = 320, FP_TECHCOL_DEFAULT = 185;
+export function _clampFpTechColW(px) {
+  const n = Math.round(Number(px));
+  return Number.isFinite(n) ? Math.max(FP_TECHCOL_MIN, Math.min(FP_TECHCOL_MAX, n)) : FP_TECHCOL_DEFAULT;
+}
+const fpTechColW = () => _clampFpTechColW(parseInt(localStorage.getItem('turndesk_fp_techcol_w'), 10) || FP_TECHCOL_DEFAULT);
+function _applyFpTechColW() { document.getElementById('panel-floorplan')?.style.setProperty('--fp-techcol-w', fpTechColW() + 'px'); }
+function setFpTechColW(px) { localStorage.setItem('turndesk_fp_techcol_w', String(_clampFpTechColW(px))); _applyFpTechColW(); }
+// Drag handle at the right edge of the tech column (lives in #floorplan-body; re-scales the floor on release).
+function _ensureFpResizer() {
+  const body = document.getElementById('floorplan-body'); if (!body) return;
+  let h = body.querySelector('.fp-col-resizer');
+  if (floorEditMode) { if (h) h.style.display = 'none'; return; }   // no resize while arranging stations
+  if (!h) {
+    h = document.createElement('div');
+    h.className = 'fp-col-resizer turns-col-resizer';   // reuse the turns-grid resizer look
+    h.title = 'Drag to resize the technician column';
+    body.appendChild(h);
+    h.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const startX = ev.clientX, startW = fpTechColW();
+      try { h.setPointerCapture(ev.pointerId); } catch {}
+      const panel = document.getElementById('panel-floorplan');
+      const move = e => { const w = _clampFpTechColW(startW + (e.clientX - startX)); panel?.style.setProperty('--fp-techcol-w', w + 'px'); h.style.left = w + 'px'; };
+      const end = e => {
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
+        setFpTechColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+        renderFloorPlan();   // re-scale the floor canvas to the new width
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+    });
+  }
+  h.style.display = '';
+  h.style.left = fpTechColW() + 'px';
+}
+
+// Today's staff (active rotation) as a VERTICAL left-hand column, each row styled like the turns-grid
+// tech column (photo + name + status + turn count + bonus). Each row keeps .floor-tech + data-tech-id
+// so the pointer-drag system (drag onto a station to assign; tap for the status menu) works unchanged.
+// Hidden while editing the layout so arranging stations keeps the full width.
 function renderFloorStaffRow() {
   const el = document.getElementById('floorplan-staff-row'); if (!el) return;
+  if (floorEditMode) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
   const ids = getActiveTurnsOrder();
-  if (!ids.length) { el.innerHTML = ''; return; }
-  // Next walk-in: the available tech (live "Available") with the fewest turns; tie → first in order.
+  if (!ids.length) { el.innerHTML = '<div class="text-[11px] font-body text-on-surface-variant italic p-2">No technicians in the rotation.</div>'; return; }
+  // Next walk-in: the available tech with the fewest turns; tie → first in order.
   let nextUpId = null, _nuTurns = Infinity;
   for (const id of ids) { if (getTechStatusColor(id).label !== 'Available') continue; const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
-  const bubbles = ids.map(id => {
+  el.innerHTML = ids.map(id => {
     const st = staffById(id); if (!st) return '';
     const c = getTechStatusColor(id);
-    // Off's near-white fill needs a visible ring/initial color.
-    const ringC = c.bg === '#f3f4f6' ? '#c2c8ce' : c.bg;
-    // Live view: each tech is draggable onto a station to assign them to a service there that
-    // has a seat but no tech yet (handled by the pointer-drag system below). Not in edit mode.
-    const drag = floorEditMode ? '' : 'floor-tech';
-    // Outline + soft transparent fill in the status color (photos keep the colored ring).
+    const ringC = c.bg === '#f3f4f6' ? '#c2c8ce' : c.bg;   // Off's near-white fill needs a visible ring
     const avatar = st.photo
-      ? `<img src="${st.photo}" draggable="false" style="width:68px;height:68px;box-sizing:border-box;border-radius:50%;object-fit:cover;border:3px solid ${ringC};box-shadow:0 2px 5px rgba(0,0,0,.18)">`
-      : `<div style="display:flex;align-items:center;justify-content:center;width:68px;height:68px;box-sizing:border-box;border-radius:50%;background:${ringC}22;border:3px solid ${ringC};color:${ringC};font-family:var(--font-headline);font-weight:700;font-size:26px;box-shadow:0 2px 5px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
+      ? `<img src="${st.photo}" draggable="false" style="width:40px;height:40px;box-sizing:border-box;border-radius:50%;object-fit:cover;border:2px solid ${ringC}">`
+      : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;box-sizing:border-box;border-radius:50%;background:${ringC}22;border:2px solid ${ringC};color:${ringC};font-family:var(--font-headline);font-weight:700;font-size:16px">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
     const techTurns = getTechTurns(id);
     const turns = techTurns.total;
     const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
-    const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:29px;height:29px;padding:0 4px;border-radius:15px;background:#1a5252;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
-    // Bonus-turn count, bottom-left (mirrors the turns badge). Bonus palette matches the turns-grid bonus pill.
-    const bonusBadge = techTurns.bonus > 0 ? `<span title="${techTurns.bonus} bonus turn${techTurns.bonus > 1 ? 's' : ''} today" style="position:absolute;bottom:-3px;left:-3px;min-width:25px;height:23px;padding:0 4px;border-radius:12px;background:#a9d2c7;color:#134b3c;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">+${techTurns.bonus}</span>` : '';
-    const nextBadge = (!floorEditMode && id === nextUpId) ? `<span title="Next up" style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:#1a5252;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:2px;box-shadow:0 1px 3px rgba(0,0,0,.25)"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next</span>` : '';
-    const grip = floorEditMode ? '' : `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-2px;left:-6px;background:var(--surface-container-lowest,#fff);border-radius:7px;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
-    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
-      <div style="position:relative">${avatar}${turnsBadge}${bonusBadge}${nextBadge}${grip}</div>
-      <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
-      <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
+    const grip = `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-5px;left:-7px;background:var(--surface-container-lowest,#fff);border-radius:6px;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
+    const isNext = id === nextUpId;
+    const statusChip = `<div style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${isNext ? 'Next up' : c.label}</div>`;
+    return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5 mb-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
+      <div style="position:relative;flex-shrink:0">${avatar}${grip}</div>
+      <div class="min-w-0" style="flex:1">
+        <div class="truncate" style="font-size:13px;font-weight:700;color:var(--md-on-surface)">${escHtml(st.name.split(' ')[0])}</div>
+        ${statusChip}
+      </div>
+      <div class="flex flex-col items-center flex-shrink-0" style="min-width:34px">
+        <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t</span>
+        ${techTurns.bonus > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${techTurns.bonus}b</span>` : ''}
+      </div>
     </div>`;
   }).join('');
-  el.innerHTML = `<div class="flex flex-wrap items-start justify-center gap-3 pt-3 border-t border-surface-container-high">${bubbles}</div>`;
 }
 
 export function renderFloorPlan() {
@@ -211,7 +250,9 @@ export function renderFloorPlan() {
   if (!grid) return;
   const { byStation, unplaced } = collectFloor();
   _fpLetters = partyLetterMap(q());
+  _applyFpTechColW();          // set the tech-column width var BEFORE the grid reads its (flex-allocated) clientWidth
   renderFloorStaffRow();
+  _ensureFpResizer();
 
   const modeLabel = document.getElementById('floorplan-mode-label');
   if (modeLabel) modeLabel.textContent = floorEditMode ? 'Editing layout — drag to move, tap to select, then style below' : 'Live';

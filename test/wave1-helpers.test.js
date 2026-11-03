@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { _clampTechColW } from '../js/app/features/turns.js';
 import { _visitLines } from '../js/app/features/reports.js';
+import { _clampFpTechColW } from '../js/app/features/floorplan.js';
 
 const svcLabel = id => ({ s1: 'Gel Mani', s2: 'Pedi' }[id]);
 const techName = id => ({ t1: 'Jane', t2: 'Bob' }[id]);
@@ -34,3 +35,9 @@ test('_visitLines drops blank catch-all assignments (no serviceId and no techId)
   assert.deepEqual(_visitLines([{ serviceId: '', techId: '' }, { serviceId: 's1', techId: 't1' }], ['s1'], svcLabel, techName),
     [{ service: 'Gel Mani', tech: 'Jane' }]);
 });
+
+// ── _clampFpTechColW(px) — floor-plan tech column: min 140, max 320, default 185 (Muse v5.82 port) ──
+test('_clampFpTechColW clamps below the minimum', () => { assert.equal(_clampFpTechColW(50), 140); });
+test('_clampFpTechColW clamps above the maximum', () => { assert.equal(_clampFpTechColW(999), 320); });
+test('_clampFpTechColW passes a valid width through (rounded)', () => { assert.equal(_clampFpTechColW(200.4), 200); });
+test('_clampFpTechColW falls back to the default on a non-number', () => { assert.equal(_clampFpTechColW('nope'), 185); });
