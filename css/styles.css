@@ -562,6 +562,12 @@
   /* Ring in the station's OWN accent (set inline as --fp-accent) so it tracks a custom salon theme + dark mode. */
   .floor-station.fp-empty:hover { outline: 2px dashed var(--fp-accent, #1a5252); outline-offset: 2px; }
 
+  /* ── Tech-status popup: Available / Not-available column headers (light + dark) ── */
+  .tsm-hdr-yes { color: #0f6e56; }
+  .tsm-hdr-no  { color: #a32d2d; }
+  html[data-appearance="dark"] .tsm-hdr-yes { color: #5dcaa5; }
+  html[data-appearance="dark"] .tsm-hdr-no  { color: #f09595; }
+
   /* ── Services / Items page-draft editor (Settings → Services, Retail Items) ── */
   .cat-row { transition: box-shadow .15s, background-color .15s; }
   .cat-invalid { outline: 2px solid var(--error,#ba1a1a); outline-offset: 1px; background: rgba(186,26,26,.06); }

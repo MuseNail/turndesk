@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.64', items: [
+    { icon: 'sticky_note_2', t: 'Notes & preferences on each technician', d: 'Tap a technician (on the Turns board or Floor Plan) to open their card — now a wider popup with three columns: the services they can do (green ✓), the ones they can’t (red ✗), and a Notes / Preferences list. Managers can add, edit, and remove notes (e.g. “prefers pedicures”, “leaves at 4”); everyone else sees them read-only. Notes sync across devices and are merged safely, so two people jotting different notes never overwrite each other.' },
+  ] },
   { v: 'td-v0.63', items: [
     { icon: 'edit_note', t: 'Edit your Services & Retail Items right in the list', d: 'Settings → Services and Retail Items now edit in place — change a name, abbreviation, price, or description on any row, add new ones, and drag (or use the up/down arrows) to reorder. Make all your changes, then tap Save once to apply them. If you try to leave with unsaved edits, the app asks whether to save, discard, or keep editing. Services also got a description field. (The old pop-up Add/Edit Service box is gone — it’s all inline now.)' },
   ] },

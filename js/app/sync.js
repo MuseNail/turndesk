@@ -315,6 +315,10 @@ export function dispatch(op, payload) {
   // Entry-level patches (e.g. the staff visit note) — stamp at the payload level (a patch has no
   // full entry to stamp) so the DO can reject a stale replay that would revert a newer patch.
   if (op === 'queue.entryPatch' && payload) { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
+  // Staff field-merge (e.g. tech notes) — device-stamped so the DO's device-scoped guard rejects a stale
+  // SAME-device replay without dropping a cross-device edit; it merges { id, fields } so it never ships
+  // (and so never clobbers) the whole staff array the way a config.set would.
+  if (op === 'staff.patch' && payload) { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   // Stamp the salon this write belongs to, so a replay can never send it to another salon
   // (isForeignWrite guard) — the per-write half of the cross-salon isolation.

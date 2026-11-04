@@ -4,7 +4,7 @@ import './setup-globals.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getState } from '../js/app/store.js';
-import { suggestTechForService, suggestTechsForEntry, _techDoesService } from '../js/app/features/turns.js';
+import { suggestTechForService, suggestTechsForEntry, _techDoesService, _techServiceSplit } from '../js/app/features/turns.js';
 
 const now = new Date().toISOString();
 const A = (techId, serviceId, cost, status = 'paid') => ({ techId, serviceId, cost, status, assignedAt: Date.now() });
@@ -70,4 +70,21 @@ test('suggestTechsForEntry routes a bonus service to the fewest-turns tech (skil
   });
   const sug = suggestTechsForEntry(getState().queue.find(e => e.id === 'w1'));
   assert.equal(sug.wax.techId, 't2');   // t2 has fewer total turns (0 < 1)
+});
+
+// ── _techServiceSplit(st, catalog) → { available, unavailable } (v5.84 tech-bubble 3 columns) ──
+const CAT = [{ id: 's1', label: 'Gel' }, { id: 's2', label: 'Pedi' }, { id: 's3', label: 'Wax' }];
+test('_techServiceSplit: empty/absent menu → everything available, nothing unavailable', () => {
+  assert.deepEqual(_techServiceSplit({ services: [] }, CAT), { available: CAT, unavailable: [] });
+  assert.deepEqual(_techServiceSplit({}, CAT), { available: CAT, unavailable: [] });
+});
+test('_techServiceSplit: a listed menu splits by the catalog, preserving catalog order', () => {
+  const r = _techServiceSplit({ services: ['s2'] }, CAT);
+  assert.deepEqual(r.available.map(s => s.id), ['s2']);
+  assert.deepEqual(r.unavailable.map(s => s.id), ['s1', 's3']);
+});
+test('_techServiceSplit: an unknown service id in the menu is ignored (not in the catalog)', () => {
+  const r = _techServiceSplit({ services: ['s1', 'gone'] }, CAT);
+  assert.deepEqual(r.available.map(s => s.id), ['s1']);
+  assert.deepEqual(r.unavailable.map(s => s.id), ['s2', 's3']);
 });

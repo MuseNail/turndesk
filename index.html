@@ -2495,22 +2495,32 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      TECH STATUS MENU (click on tech photo)
 ═══════════════════════════════════════════════ -->
-<div id="tech-status-menu" class="fixed z-[60] hidden bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4 w-72" style="min-width:240px;max-height:calc(100vh - 24px);overflow-y:auto">
-  <div class="flex items-center justify-between mb-3 gap-2">
-    <div class="flex items-center gap-3 min-w-0">
+<div id="tech-status-menu" class="fixed z-[60] hidden bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4" style="width:min(760px, calc(100vw - 24px));max-height:calc(100vh - 24px);overflow-y:auto">
+  <button onclick="closeTechStatusMenu()" class="absolute top-3 right-3 text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+  <div class="flex items-center gap-4 mb-3">
+    <div class="flex flex-col items-center gap-2 flex-shrink-0">
       <div id="tech-status-menu-photo" class="flex-shrink-0"></div>
-      <h3 class="font-headline font-bold text-on-surface truncate" id="tech-status-menu-name">Tech Name</h3>
+      <h3 class="font-headline font-bold text-on-surface text-center" id="tech-status-menu-name" style="word-break:break-word">Tech Name</h3>
     </div>
-    <button onclick="closeTechStatusMenu()" class="text-on-surface-variant hover:text-on-surface flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+    <div class="flex flex-col items-start gap-2">
+      <button onclick="setTechBreak(false)" id="tsm-available" class="py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#2a7a4f;color:#fff;width:116px">Available</button>
+      <button onclick="setTechBreak(true)" id="tsm-break" class="py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f5c870;color:#3a2800;width:116px">On Break</button>
+      <button onclick="setTechOff()" id="tsm-off" class="py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f3f4f6;color:#6b7280;width:116px">Off</button>
+    </div>
   </div>
-  <div class="flex gap-2 mb-3">
-    <button onclick="setTechBreak(false)" id="tsm-available" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#2a7a4f;color:#fff">Available</button>
-    <button onclick="setTechBreak(true)" id="tsm-break" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f5c870;color:#3a2800">On Break</button>
-    <button onclick="setTechOff()" id="tsm-off" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f3f4f6;color:#6b7280">Off</button>
-  </div>
-  <div class="border-t border-surface-container-high pt-2">
-    <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Services Today</div>
-    <div id="tech-status-menu-services" class="text-xs font-body text-on-surface-variant space-y-0.5"></div>
+  <div class="flex flex-wrap gap-3">
+    <div class="flex-1 border-t border-surface-container-high pt-2" style="min-width:150px">
+      <div class="text-[10px] font-body font-semibold uppercase tracking-widest mb-1 tsm-hdr-yes">Available</div>
+      <div id="tech-status-menu-services" class="text-xs font-body text-on-surface-variant" style="column-count:2;column-gap:14px;max-height:min(52vh,420px);overflow-y:auto"></div>
+    </div>
+    <div class="flex-1 border-t border-surface-container-high pt-2" style="min-width:150px">
+      <div class="text-[10px] font-body font-semibold uppercase tracking-widest mb-1 tsm-hdr-no">Not Available</div>
+      <div id="tsm-svc-no" class="text-xs font-body text-on-surface-variant" style="column-count:2;column-gap:14px;max-height:min(52vh,420px);overflow-y:auto"></div>
+    </div>
+    <div class="flex-1 border-t border-surface-container-high pt-2" style="min-width:150px">
+      <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Notes / Preferences</div>
+      <div id="tsm-notes-list"></div>
+    </div>
   </div>
 </div>
 

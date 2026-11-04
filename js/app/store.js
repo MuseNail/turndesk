@@ -8,6 +8,7 @@
 
 import { scopedKey } from './apptoken.js';   // per-salon key isolation (apptoken has no imports → no cycle)
 import { idbGet, idbSet, idbAvailable } from './idbcache.js';
+import { applyNotePatch, normalizeNotesList, notesMirror } from './staff-notes-util.js';
 
 const CACHE_KEY = 'turndesk_state_cache';
 
@@ -208,6 +209,37 @@ export function applyChange(op, payload, seq) {
       if (e.status === 'paid' || e.status === 'done') return;   // don't let a stale device touch a closed ticket
       const patch = payload.patch || {};
       for (const k of Object.keys(patch)) e[k] = patch[k];
+      break;
+    }
+    case 'staff.patch': {
+      // Field-merge onto ONE staff entry in config.staff by id (e.g. tech notes), so a note write can't
+      // clobber a concurrent whole-array profile/payroll edit. Sibling of queue.entryPatch, for config.staff.
+      const arr = state.config.staff;
+      if (!Array.isArray(arr)) return;
+      const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+      if (i < 0) return;
+      const cur = arr[i];
+      // Device-scoped stale-patch guard (mirrors entryPatch/assignmentPatch): reject only a SAME-device
+      // older replay; a cross-device edit always applies. Marker lives on _notesAt/_notesBy, never the
+      // staff object's own fields, so it can't collide with anything the profile editor writes.
+      if (typeof payload.updatedAt === 'number' && typeof cur._notesAt === 'number' &&
+          payload.updatedBy && payload.updatedBy === cur._notesBy && payload.updatedAt < cur._notesAt) return;
+      const fields = payload.fields || {};
+      arr[i] = { ...cur, ...fields };
+      if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+      break;
+    }
+    case 'staff.notePatch': {
+      // Per-note merge (add/edit/remove by id) onto ONE staff entry's notesList, so two devices adding
+      // DIFFERENT notes both survive (vs staff.patch's whole-value replace). Mirrors to st.notes for
+      // old-client back-compat. No cfgmeta bump — notes yield to a whole-array profile write, same as staff.patch.
+      const arr = state.config.staff;
+      if (!Array.isArray(arr)) return;
+      const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+      if (i < 0) return;
+      const cur = arr[i];
+      const list = applyNotePatch(normalizeNotesList(cur), payload.action, payload.note);
+      arr[i] = { ...cur, notesList: list, notes: notesMirror(list) };
       break;
     }
     case 'queue.remove':  removeById(state.queue, payload.id); break;

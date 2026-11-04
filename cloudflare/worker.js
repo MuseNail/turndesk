@@ -1,5 +1,6 @@
 import { slugify, validateSignupRequest } from './signup-util.js';
 import { validateDemoRequest } from './demo-util.js';
+import { applyNotePatch, normalizeNotesList, notesMirror } from './staff-notes-util.js';
 import {
   validateTicketInput, validateReplyInput, ticketKey, newTicketId,
   buildTicket, applyReply, markRead, ticketVisibleToSalon, sanitizeTicketForSalon,
@@ -2724,6 +2725,41 @@ export class TurnDeskDO {
           for (const k of Object.keys(patch)) e[k] = patch[k];
           if (typeof payload.updatedAt === 'number') { e._patchedAt = payload.updatedAt; e._patchedBy = payload.updatedBy || null; }
           await this.state.storage.put('queue:' + payload.entryId, e);
+          break;
+        }
+        case 'staff.patch': {
+          // Field-merge onto ONE staff entry in config:staff by id (e.g. tech notes). The DO runs serially,
+          // so this read-modify-write is atomic: a note patch merges into the CURRENT stored array and can
+          // never clobber a concurrent whole-array profile/payroll config.set. It deliberately does NOT bump
+          // cfgmeta:staff — bumping it could reject a slightly-older-but-unsynced profile config.set and lose
+          // a payroll edit; a note is the lower-stakes side, so it yields to a later whole-array write.
+          const arr = await this.state.storage.get('config:staff');
+          if (!Array.isArray(arr)) break;
+          const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+          if (i < 0) break;
+          const cur = arr[i];
+          // Device-scoped stale-patch guard (same rule as entryPatch): reject only a stale SAME-device replay.
+          if (typeof payload.updatedAt === 'number' && typeof cur._notesAt === 'number' &&
+              payload.updatedBy && payload.updatedBy === cur._notesBy &&
+              payload.updatedAt < cur._notesAt) { stale = true; break; }
+          arr[i] = { ...cur, ...(payload.fields || {}) };
+          if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+          await this.state.storage.put('config:staff', arr);
+          break;
+        }
+        case 'staff.notePatch': {
+          // Per-note merge (add/edit/remove by id) onto ONE staff entry's notesList. The DO runs
+          // serially, so this read-modify-write is atomic: two devices adding DIFFERENT notes both
+          // survive (vs staff.patch's whole-value replace). Mirrors to st.notes for old-client
+          // back-compat. Like staff.patch it does NOT bump cfgmeta:staff — notes yield to a profile write.
+          const arr = await this.state.storage.get('config:staff');
+          if (!Array.isArray(arr)) break;
+          const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+          if (i < 0) break;
+          const cur = arr[i];
+          const list = applyNotePatch(normalizeNotesList(cur), payload.action, payload.note);
+          arr[i] = { ...cur, notesList: list, notes: notesMirror(list) };
+          await this.state.storage.put('config:staff', arr);
           break;
         }
         case 'queue.remove':
