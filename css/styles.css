@@ -562,6 +562,15 @@
   /* Ring in the station's OWN accent (set inline as --fp-accent) so it tracks a custom salon theme + dark mode. */
   .floor-station.fp-empty:hover { outline: 2px dashed var(--fp-accent, #1a5252); outline-offset: 2px; }
 
+  /* ── Services / Items page-draft editor (Settings → Services, Retail Items) ── */
+  .cat-row { transition: box-shadow .15s, background-color .15s; }
+  .cat-invalid { outline: 2px solid var(--error,#ba1a1a); outline-offset: 1px; background: rgba(186,26,26,.06); }
+  .cat-drop-before { box-shadow: 0 -3px 0 0 var(--primary,#1a5252) inset; }
+  .cat-drop-after  { box-shadow: 0 3px 0 0 var(--primary,#1a5252) inset; }
+  .cat-grip { transition: background-color .12s; }
+  .cat-grip:hover { background: var(--surface-container,#eceaf0); }
+  .cat-grip:active { cursor: grabbing; background: var(--surface-container-high,#e2e1e6); }
+
   /* ── Price menu editor (Settings → Price Menu) ───────────────────────── */
   .pm-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
   .pm-filter { flex:1; min-width:150px; }

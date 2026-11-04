@@ -81,7 +81,7 @@ const MODAL_CLOSERS = [
   ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
   ['turns-assign-modal', turns.closeTurnsAssignModal], ['turns-tech-modal', turns.closeTurnsTechModal],
   ['split-merge-modal', queue.closeSplitMergeModal], ['edit-services-modal', queue.closeEditServicesModal],
-  ['service-modal', catalog.closeServiceModal], ['staff-modal', staff.closeStaffModal],
+  ['staff-modal', staff.closeStaffModal],
   ['staff-photo-modal', photos.closeStaffPhotoModal], ['schedule-picker', staff.closeSchedulePicker], ['week-fill-modal', staff.closeWeekFill],
   ['edit-checkin-modal', queue.closeEditCheckin], ['customer-dir-modal', sqCust.closeCustomerDir],
   ['edit-customer-modal', sqCust.closeEditCustomer], ['photo-crop-modal', photos.closePhotoCrop],
@@ -124,6 +124,7 @@ function setupBackHandler() {
 function goTo(screenId, param) {
   // Unsaved-changes guard (price-menu editor) — a screen change (incl. the OS back gesture) while editing.
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => goTo(screenId, param)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => goTo(screenId, param)); return; }
   closeAllModals();   // a screen change never leaves a modal orphaned over the new screen
   const prevScreen = document.querySelector('.screen.active')?.id;
   if (prevScreen && prevScreen !== screenId && !_navBack) {
@@ -153,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.63', items: [
+    { icon: 'edit_note', t: 'Edit your Services & Retail Items right in the list', d: 'Settings → Services and Retail Items now edit in place — change a name, abbreviation, price, or description on any row, add new ones, and drag (or use the up/down arrows) to reorder. Make all your changes, then tap Save once to apply them. If you try to leave with unsaved edits, the app asks whether to save, discard, or keep editing. Services also got a description field. (The old pop-up Add/Edit Service box is gone — it’s all inline now.)' },
+  ] },
   { v: 'td-v0.62', items: [
     { icon: 'search', t: 'Find a setting from the header search', d: 'The search box at the top now also finds Settings screens — type “waiver”, “commission”, “price menu”, etc. and jump straight there (you only see the ones your role can open).' },
     { icon: 'event_seat', t: 'Waiting list shows the full customer card', d: 'On the Floor Plan, guests who aren’t seated yet now appear as full mini-cards (name, wait time, and each service with its technician) instead of a plain name chip, so you can read the waiting list at a glance. Drag one onto a chair to seat them as before.' },
@@ -306,6 +310,7 @@ function renderDashSubnav(grp, activePanel) {
 function showDashPanel(panel) {
   // Unsaved-changes guard (price-menu editor) — intercept a tab switch while editing; re-invoke on Save/Discard.
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => showDashPanel(panel)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => showDashPanel(panel)); return; }
   if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Your role doesn’t have permission to view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {

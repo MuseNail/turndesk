@@ -1423,11 +1423,15 @@ tailwind.config = {
                 <button onclick="toggleAllDashServices()" class="text-primary underline">Toggle Dashboard</button>
               </div>
               <div class="flex gap-2">
-                <button onclick="showAddService()" class="btn-primary">
+                <button onclick="showAddService()" class="btn-secondary">
                   <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Service
+                </button>
+                <button id="services-save-btn" onclick="catalogSavePage('service')" disabled style="opacity:0.5;pointer-events:none" class="btn-primary">
+                  <span class="material-symbols-outlined" style="font-size:16px">save</span> <span class="cat-save-lbl">Save</span>
                 </button>
               </div>
             </div>
+            <p class="text-xs font-body text-on-surface-variant mb-2">Edit, add, or reorder services, then tap <strong>Save</strong> once to apply all changes. Check-in and Dashboard switches save on their own.</p>
             <div id="services-merged-list" class="space-y-2"></div>
           </div>
         </div>
@@ -1435,10 +1439,16 @@ tailwind.config = {
         <!-- Leaf: Retail Items -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="items-section" class="hidden px-5 py-4">
+            <div class="flex items-center justify-end gap-2 mb-3">
+              <button onclick="addItemRow()" class="btn-secondary">
+                <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Item
+              </button>
+              <button id="items-save-btn" onclick="catalogSavePage('item')" disabled style="opacity:0.5;pointer-events:none" class="btn-primary">
+                <span class="material-symbols-outlined" style="font-size:16px">save</span> <span class="cat-save-lbl">Save</span>
+              </button>
+            </div>
+            <p class="text-xs font-body text-on-surface-variant mb-2">Edit, add, or reorder your retail items, then tap <strong>Save</strong> once to apply all changes.</p>
             <div id="settings-items-list" class="space-y-2"></div>
-            <button onclick="addItemRow()" class="mt-3 flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-              <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Item
-            </button>
           </div>
         </div>
 
@@ -1944,40 +1954,21 @@ tailwind.config = {
 </div>
 
 
-<!-- ═══════════════════════════════════════════════
-     SERVICE EDIT MODAL
-═══════════════════════════════════════════════ -->
-<div id="service-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
-    <div class="flex items-center justify-between mb-5">
-      <h2 id="service-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Service</h2>
-      <button onclick="closeServiceModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+<!-- (Service editing is now inline in Settings → Services; the old Add/Edit modal was retired in the catalog-editor batch.) -->
+
+<!-- Unsaved-changes guard for the page-level Services / Retail Items editor (catalog's own; mirrors the price-menu one) -->
+<div id="catalog-unsaved-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/50" style="display:none">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 text-center">
+    <div class="w-14 h-14 rounded-full bg-secondary-container flex items-center justify-center mx-auto mb-4">
+      <span class="material-symbols-outlined text-secondary" style="font-size:28px;font-variation-settings:'FILL' 1">edit_note</span>
     </div>
-    <div class="space-y-4">
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Service Name</label>
-        <input id="service-name-input" type="text" placeholder="e.g. Gel Manicure"
-          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Abbreviation (shown on button)</label>
-        <input id="service-abbr-input" type="text" maxlength="4" placeholder="e.g. GM"
-          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Base Cost (suggested price)</label>
-        <div class="relative">
-          <span class="absolute left-0 bottom-2 text-outline-variant font-body">$</span>
-          <input id="service-base-cost-input" type="number" min="0" step="0.01" placeholder="0.00"
-            class="w-full border-b-2 border-surface-container-high bg-transparent py-2 pl-4 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
-        </div>
-        <p class="text-[11px] font-body text-on-surface-variant mt-1">Shown as a greyed-out suggestion in Assign & Price. Staff must still enter a price manually.</p>
-      </div>
+    <h2 class="text-xl font-headline font-bold text-on-surface mb-2">Unsaved changes</h2>
+    <p class="text-sm font-body text-on-surface-variant mb-6">You have unsaved edits on this page. Save them, discard them, or keep editing?</p>
+    <div class="flex flex-col gap-2.5">
+      <button onclick="catalogUnsavedSave()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save and continue</button>
+      <button onclick="catalogUnsavedDiscard()" class="w-full border-2 border-error text-error hover:bg-error/10 py-3 rounded-xl font-headline font-bold transition-all">Discard changes</button>
+      <button onclick="catalogUnsavedStay()" class="w-full border-2 border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-bold transition-all">Keep editing</button>
     </div>
-    <input type="hidden" id="service-edit-id">
-    <button onclick="saveService()" class="w-full mt-6 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
-      Save Service
-    </button>
   </div>
 </div>
 
