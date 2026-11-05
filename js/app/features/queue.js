@@ -233,6 +233,15 @@ function renderQueueHistoryView(list, empty) {
 }
 
 // ── Render ────────────────────────────────────────
+// Queue display order: by status group, then WITHIN the Paid group by checkout time (paidAt) MOST-RECENT
+// first (N1 — the just-checked-out guest sits on top); every other group stays oldest-check-in first.
+// Pure + unit-tested. paidAt falls back to checkinTime for tickets paid before paidAt was stamped.
+export function queueDisplayCmp(a, b, order, isPaidStatus) {
+  const g = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+  if (g) return g;
+  if (isPaidStatus(a.status)) return (b.paidAt || +new Date(b.checkinTime)) - (a.paidAt || +new Date(a.checkinTime));
+  return new Date(a.checkinTime) - new Date(b.checkinTime);
+}
 let _partyLetters = new Map();   // groupId → A/B/C tag for the current queue render
 export function renderQueue() {
   const list = document.getElementById('queue-list');
@@ -245,7 +254,7 @@ export function renderQueue() {
   let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => ui.currentFilter === 'paid' ? isPaidStatus(e.status) : e.status === ui.currentFilter);
   if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => !isPaidStatus(e.status));
   const order = { waiting: 0, inservice: 1, complete: 2, paid: 3, done: 3 };
-  filtered.sort((a,b) => order[a.status] - order[b.status] || new Date(a.checkinTime) - new Date(b.checkinTime));
+  filtered.sort((a, b) => queueDisplayCmp(a, b, order, isPaidStatus));
 
   if (filtered.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
@@ -402,7 +411,7 @@ export function updateStatus(id, status) {
     applyEntryStatus(entry);
   } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
-  if (entry.status === 'paid' && !wasPaid) window.logAudit?.('Payment', `${entry.name || '—'} · $${ticketTotal(entry).toFixed(2)}`);   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106)
+  if (entry.status === 'paid' && !wasPaid) { window.logAudit?.('Payment', `${entry.name || '—'} · $${ticketTotal(entry).toFixed(2)}`); entry.paidAt = Date.now(); }   // xss-ok: logAudit detail → escaped at the audit view (audit.js:106) · N1: paidAt = checkout time orders the Paid group
   // R6: when a ticket is paid, commit any recorded gift-card use (log the redemption + draw down
   // the app balance, tied to this ticket). Idempotent. The Square charge is unaffected.
   if (entry.status === 'paid' && entry.giftcardRedemptions && entry.giftcardRedemptions.length) window.gcSyncTicket?.(String(entry.id), entry.giftcardRedemptions);

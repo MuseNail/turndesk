@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.72', items: [
+    { icon: 'sort', t: 'Paid customers sort by checkout time', d: 'In the Queue tab, the “Paid Today” list now shows customers in the order they checked out — the most recent checkout on top — instead of by when they checked in. So whoever you just rang up sits right at the top. The other groups (Waiting, In Service, Complete) are unchanged.' },
+  ] },
   { v: 'td-v0.71', items: [
     { icon: 'drag_pan', t: 'Smarter drag-to-assign on the Turns board', d: 'Drag a waiting guest onto a technician and you now pick which of THAT guest’s services goes to them — so when two people in the same party both have “Manicure,” picking one no longer fills in the other. If the guest has only one service it just assigns. Drag a guest who’s already with one technician onto another to MOVE a service over (it asks which one). You get a quick heads-up if the technician is on break, doesn’t usually do that service, or it’s already done — all in one confirm. Already-paid services stay put. Reordering a technician’s own turns is unchanged.' },
   ] },
