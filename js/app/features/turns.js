@@ -71,6 +71,7 @@ export function getTurnConfig() {
     bonusByCost: true, bonusByService: true,
     precedence: 'bonusFirst',
     countOnAssign: true,   // count a turn as soon as a customer is assigned (any status), via the base price
+    dedicatedBonusCounters: false,   // v5.91: show the first ≤3 always-bonus services as their own per-tech counters
   };
   const stored = cfg().turn_config || {};
   const merged = { ...defaults, ...stored };
@@ -86,6 +87,29 @@ export function _mergeTurnConfig(stored, patch) { return { ...(stored || {}), ..
 export function saveTurnConfig(patch) { dispatch('config.set', { key: 'turn_config', value: _mergeTurnConfig(cfg().turn_config, patch) }); }
 export function isAlwaysBonusService(serviceId) { return (cfg().bonus_services || []).includes(serviceId); }
 export function saveBonusServices(ids) { dispatch('config.set', { key: 'bonus_services', value: ids }); }
+// v5.91: the first ≤3 always-bonus services (deduped, live-only, bonus_services order) that get their
+// own dedicated per-tech counter. Deduped so a repeated id can never double-count the display subtraction.
+export function getDedicatedBonusServices() {
+  const svcById = new Map((cfg().services || []).map(s => [s.id, s]));
+  const out = [];
+  for (const id of new Set(cfg().bonus_services || [])) {
+    const s = svcById.get(id); if (!s) continue;
+    // Prefer the service's own abbr; a service with none (legacy — new ones require it) falls back to a
+    // short 4-char code from the label rather than a truncated long name.
+    const abbr = (s.abbr || '').trim() || (s.label || '').trim().slice(0, 4) || '?';
+    out.push({ id, abbr, label: s.label || s.abbr || id });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+// The general "+Nb" bonus a tech shows when dedicated counters are on: all bonus MINUS the dedicated
+// add-ons. One source of truth so the turns board and the floor roster can never drift. dedSum ≤ bonus
+// by construction (deduped ids), so the clamp is defensive, never load-bearing.
+export function generalBonusCount(techTurns, dedServices) {
+  const ded = techTurns.dedicated || {};   // harden against a caller that passes a non-live-tally object
+  const dedSum = (dedServices || []).reduce((s, x) => s + (ded[x.id] || 0), 0);
+  return Math.max(0, (techTurns.bonus || 0) - dedSum);
+}
 export function isHalfService(serviceId) { return (cfg().half_services || []).includes(serviceId); }
 export function saveHalfServices(ids) { dispatch('config.set', { key: 'half_services', value: ids }); }
 
@@ -207,13 +231,19 @@ export function removeTurnSkip(skipId) {
 
 export function getTechTurns(techId) {
   let full = 0, half = 0, bonus = 0, unknown = 0;
+  // Per-serviceId tally of bonus turns, set-agnostic (every bonus turn keyed by its service). The
+  // display reads only the ≤3 dedicated services out of this; keeping it uncapped decouples the count
+  // from the "which 3" logic and keeps Σ(dedicated over the 3) ≤ bonus by construction.
+  const dedicated = {};
   getTechAllAssignments(techId).forEach(({ assignment: a }) => {
     const t = turnClassOf(a);
-    if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
+    if (t === 'full') full++;
+    else if (t === 'half') half += 0.5;
+    else if (t === 'bonus') { bonus++; if (a.serviceId) dedicated[a.serviceId] = (dedicated[a.serviceId] || 0) + 1; }
     else if (t === 'unpriced') unknown++;   // assigned but can't be counted yet (no base/typed price) → "?" on the board
   });
   full += todaySkips(techId).length;   // each manual skip counts as a full turn
-  return { full, half, bonus, total: full + half, unknown };
+  return { full, half, bonus, total: full + half, unknown, dedicated };
 }
 
 // ── Item 3: don't recommend a tech holding a still-waiting (assigned, not-started) customer ──
@@ -561,6 +591,12 @@ export function renderTurnsTechGrid() {
   // (≤5 → 76px, 6–7 → 66px, 8+ → 56px) so a busy day shows more techs without scrolling.
   const slotH = order.length <= 5 ? 76 : order.length <= 7 ? 66 : 56;
 
+  // v5.91: dedicated per-service bonus counters — resolved ONCE per render (not per tech).
+  // Gated on bonus-by-service (the rule that makes these services bonus): off → no column, no dead zeros.
+  const _tc = getTurnConfig();
+  const dedServices = getDedicatedBonusServices();
+  const showDedicated = _tc.dedicatedBonusCounters && _tc.bonusEnabled && _tc.bonusByService && dedServices.length > 0;
+
   const rows = order.map(staffId => {
     const st = staffById(staffId);
     if (!st) return '';
@@ -600,6 +636,7 @@ export function renderTurnsTechGrid() {
       <div class="min-w-0" style="flex:1">
         <div class="leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0;display:block">${st.name}</span></div>
         <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span></div>
+        <div class="turns-billed text-[11px] font-headline font-bold leading-none mt-0.5" style="color:#1a5252">$${billed.toFixed(0)}</div>
       </div></div>`;
 
     const MIN_SLOTS = 5;
@@ -671,13 +708,31 @@ export function renderTurnsTechGrid() {
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech),
-    // with the tech's billed $ total stacked beneath the bonus (.turns-billed → hidden by .turns-hide-totals
-    // when totals are off). This column sits OUTSIDE the scrolling slot row.
+    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech).
+    // The tech's billed $ total now lives under the tech name (in techCol), not here. This column sits
+    // OUTSIDE the scrolling slot row. When dedicated counters are on, the dedicated add-ons leave the
+    // general "+Nb" (counted in their own column instead) — generalBonusCount is the single source
+    // shared with the floor roster.
+    // Only show a service's counter for a tech who actually does it (empty menu = does everything).
+    // The SAME filtered list drives the column AND the "+Nb" subtraction, so a service the tech doesn't
+    // do can never silently remove a (manually-assigned) bonus turn from their general +Nb.
+    const techDed = showDedicated ? dedServices.filter(s => _techDoesService(st, s.id)) : [];
+    const dedCounts = techDed.map(s => turns.dedicated[s.id] || 0);
+    const generalBonus = showDedicated ? generalBonusCount(turns, techDed) : turns.bonus;
     const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
-      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}<span class="turns-billed text-xs font-headline font-bold leading-none mt-0.5 flex-shrink-0" style="color:#1a5252">$${billed.toFixed(0)}</span>
+      ${turnDisplay}${generalBonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${generalBonus}b</span>` : ''}
     </div>`;
-    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}</div>`;
+    // Dedicated add-on counter column (right of the turn count): one line per add-on, "ABBR N" — the
+    // 3 services stacked. Same bonus color (text-secondary) as the "+Nb" it split from; a zero reads greyed.
+    const bonusDedicatedCol = showDedicated
+      ? `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-r border-surface-container-high px-0.5 gap-0.5" style="width:52px">
+          ${techDed.map((s, i) => `<div class="flex items-baseline justify-center gap-1 leading-none" title="${escHtml(s.label)} — bonus add-on">
+            <span class="text-[9px] font-body font-semibold uppercase tracking-wide text-outline-variant truncate" style="max-width:28px">${escHtml(s.abbr)}</span>
+            <span class="text-sm font-headline font-bold leading-none ${dedCounts[i] > 0 ? 'text-secondary' : 'text-outline-variant'}">${dedCounts[i]}</span>
+          </div>`).join('')}
+        </div>`
+      : '';
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${bonusDedicatedCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';

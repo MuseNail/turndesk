@@ -11,7 +11,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment } from './turns.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment, getDedicatedBonusServices, getTurnConfig, generalBonusCount, _techDoesService } from './turns.js';
 import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
 
@@ -270,6 +270,10 @@ function renderFloorStaffRow() {
   const _availForNext = _dropHolders(ids.filter(id => getTechStatusColor(id).label === 'Available'), techHasPendingAssignment);
   let nextUpId = null, _nuTurns = Infinity;
   for (const id of _availForNext) { const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
+  // v5.91: when dedicated bonus counters are on, keep the roster's "+Nb" in step with the turns board —
+  // the dedicated add-ons leave the general bonus here too (the per-service breakdown stays board-only).
+  const _tc = getTurnConfig();
+  const _dedBonus = (_tc.dedicatedBonusCounters && _tc.bonusEnabled && _tc.bonusByService) ? getDedicatedBonusServices() : [];
   el.innerHTML = ids.map(id => {
     const st = staffById(id); if (!st) return '';
     const c = getTechStatusColor(id);
@@ -294,7 +298,7 @@ function renderFloorStaffRow() {
       </div>
       <div class="flex flex-col items-center flex-shrink-0" style="min-width:34px">
         <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t${techTurns.unknown > 0 ? '<span title="Has assigned service(s) with no price yet" style="color:#b0612a">?</span>' : ''}</span>
-        ${techTurns.bonus > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${techTurns.bonus}b</span>` : ''}
+        ${(() => { const gb = _dedBonus.length ? generalBonusCount(techTurns, _dedBonus.filter(s => _techDoesService(st, s.id))) : techTurns.bonus; return gb > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${gb}b</span>` : ''; })()}
       </div>
     </div>`;
   }).join('');

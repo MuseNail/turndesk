@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.69', items: [
+    { icon: 'tag', t: 'Separate counters for your add-on services', d: 'New in Settings → Business → Turn Rules: “Separate counters for always-bonus add-ons.” Turn it on and the Turns board shows the first three always-bonus services (e.g. wax, lashes, brows) as their own per-technician tallies next to the turn count — those add-ons come out of the general “+b” total and get their own column, shown only for technicians who actually do that service. Off by default; turn counting itself is unchanged. Also: each technician’s billed-today total now reads under their name on the board.' },
+  ] },
   { v: 'td-v0.68', items: [
     { icon: 'person_search', t: 'Who’s-next skips a technician already holding a waiting guest', d: 'When the app suggests the next technician (in Assign & Price and the “Next up” badge on the Turns board and Floor Plan), it now skips anyone who already has a customer assigned but not yet started — so a waiting guest doesn’t get piled onto a tech who’s about to be busy. If every available tech is already holding someone, it falls back to the full list so there’s always a next-up.' },
     { icon: 'event_upcoming', t: 'Technicians see their next appointment on the Now screen', d: 'The technician app’s “Now” view shows the next upcoming appointment right at the top — time, guest, and services — so techs don’t have to flip to the Appointments tab. Tap it to open the full tab.' },

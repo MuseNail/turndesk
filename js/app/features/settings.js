@@ -7,7 +7,7 @@ import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
-import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices, isHalfService, saveHalfServices } from './turns.js';
+import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices, isHalfService, saveHalfServices, getDedicatedBonusServices } from './turns.js';
 
 const cfg = () => getState().config;
 
@@ -177,7 +177,15 @@ export function saveTurnThresholds() {
 export function renderBonusServicesList() {
   const el = document.getElementById('bonus-services-list');
   if (!el) return;
-  el.innerHTML = cfg().services.map(s => { const isBonus = isAlwaysBonusService(s.id); return `<label class="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-surface-container transition-colors ${isBonus?'bg-primary/10 border border-primary/30':'border border-transparent'}"><input type="checkbox" class="w-5 h-5 accent-primary" ${isBonus?'checked':''} onchange="toggleBonusService('${s.id}', this.checked)"><span class="font-body font-semibold text-on-surface text-sm">${s.label}</span><span class="text-[10px] font-body text-outline">${s.abbr}</span>${isBonus?'<span class="ml-auto text-[10px] font-semibold text-primary">Always Bonus</span>':''}</label>`; }).join('');
+  // When the dedicated-counter feature is on, show which services currently have their own counter
+  // (the first ≤3) so "first 3" isn't a hidden, uncontrollable artifact.
+  const dedOn = getTurnConfig().dedicatedBonusCounters;
+  const dedPos = new Map(getDedicatedBonusServices().map((s, i) => [s.id, i + 1]));
+  el.innerHTML = cfg().services.map(s => {
+    const isBonus = isAlwaysBonusService(s.id);
+    const counter = dedOn && dedPos.has(s.id) ? `<span class="ml-auto text-[10px] font-semibold text-on-primary bg-primary rounded-full px-2 py-0.5">Counter ${dedPos.get(s.id)}</span>` : (isBonus ? '<span class="ml-auto text-[10px] font-semibold text-primary">Always Bonus</span>' : '');
+    return `<label class="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-surface-container transition-colors ${isBonus?'bg-primary/10 border border-primary/30':'border border-transparent'}"><input type="checkbox" class="w-5 h-5 accent-primary" ${isBonus?'checked':''} onchange="toggleBonusService('${s.id}', this.checked)"><span class="font-body font-semibold text-on-surface text-sm">${s.label}</span><span class="text-[10px] font-body text-outline">${s.abbr}</span>${counter}</label>`;
+  }).join('');
 }
 export function toggleBonusService(serviceId, checked) {
   const ids = [...(cfg().bonus_services || [])];
@@ -257,6 +265,13 @@ export function renderTurnsSettings() {
         ${_turnMethodChk('Service', 'bonusByService', c.bonusByService, '(the always-bonus list below)')}
         ${noMethodHint(c.bonusEnabled, c.bonusByCost, c.bonusByService, 'bonus')}
         ${c.bonusByService ? `<div class="mt-2"><div class="text-[11px] font-semibold text-outline uppercase tracking-widest mb-1">Always-Bonus Services</div><p class="text-xs font-body text-on-surface-variant mb-2">Always count as bonus regardless of price (e.g. add-ons).</p><div id="bonus-services-list" class="space-y-2"></div></div>` : ''}
+        <div class="mt-3 pt-2 border-t border-surface-container-high/60">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="w-5 h-5 accent-primary" ${c.dedicatedBonusCounters ? 'checked' : ''} onchange="toggleTurnFlag('dedicatedBonusCounters', this.checked)">
+            <span class="font-body font-semibold text-on-surface text-sm">Separate counters for always-bonus add-ons</span>
+          </label>
+          <p class="pl-7 text-[11px] font-body text-on-surface-variant mt-0.5">Shows the first 3 services in the list above as their own per-tech counters next to the turn count, and keeps them out of the “+b” total.${!c.bonusByService ? ' <span style="color:#b0612a">Turn on “Count a bonus turn by: Service” above for these to count.</span>' : ''}</p>
+        </div>
       </div>` : `<p class="pl-7 text-[11px] text-on-surface-variant">Off — these services count as full turns.</p>`}
     </div>
     <div class="border-t border-surface-container-high pt-3">

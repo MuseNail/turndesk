@@ -14,6 +14,7 @@ const DEF = {
   bonusByCost: true, bonusByService: true,
   precedence: 'bonusFirst',
   countOnAssign: true,
+  dedicatedBonusCounters: false,
 };
 const f = (isBonusSvc = false, isHalfSvc = false) => ({ isBonusSvc, isHalfSvc });
 
@@ -195,7 +196,7 @@ test('getTechTurns tallies priced, expected-price (done-unpriced), comped and al
     E('e5', { serviceId: 'svAB', cost: 0, status: 'inservice' }),          // always-bonus unpriced -> bonus
   ];
   const t = getTechTurns('t1');
-  assert.deepEqual(t, { full: 3, half: 0, bonus: 1, total: 3, unknown: 1 });   // e3 (no base price) is unknown "?"
+  assert.deepEqual(t, { full: 3, half: 0, bonus: 1, total: 3, unknown: 1, dedicated: { svAB: 1 } });   // e3 (no base price) is unknown "?"
   getState().queue = [];
   getState().config.services = [];
   getState().config.bonus_services = [];
