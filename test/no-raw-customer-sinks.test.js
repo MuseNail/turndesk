@@ -48,8 +48,9 @@ const PERSON_FIELD = /\b(?:e|entry|m|target|held|r|x|rec|row|g|c|cust|customer|g
 const BARE_VAR = /\$\{\s*(?:note|primary|customer|firstName|lastName|groupLabel|grp)\b/;
 // Genuine HTML-escapers: utils escHtml/escAttrJs (& < > " [+ \ ']), calendar _escHtml/_escAttrJs, the
 // per-file &<>-only aliases (_tEsc/_eTxn/esc/_esc — safe ONLY in text contexts), and known-safe wrappers
-// (cardNotePreview escapes internally; fmt/localDateStr format Dates, never HTML).
-const ESCAPER = /(escHtml|escAttrJs|escapeHtml|_tEsc|_eTxn|_cEsc|_esc|esc|cardNotePreview|fmt|localDateStr)\s*\(/;
+// (cardNotePreview + preferredTechBadgeHtml escape internally — their phone arg is only a lookup key, the
+// only rendered field (the tech name) is escHtml'd; fmt/localDateStr format Dates, never HTML).
+const ESCAPER = /(escHtml|escAttrJs|escapeHtml|_tEsc|_eTxn|_cEsc|_esc|esc|cardNotePreview|preferredTechBadgeHtml|fmt|localDateStr)\s*\(/;
 
 test('no raw person-controlled fields interpolated into HTML without an escaper (F4)', () => {
   const offenders = [];

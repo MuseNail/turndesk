@@ -10,7 +10,7 @@ import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentSta
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { getBubblePrefs } from './bubble-prefs.js';
-import { cardNotePreview } from './square-customers.js';
+import { cardNotePreview, preferredTechIdFor, preferredTechBadgeHtml } from './square-customers.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -321,6 +321,25 @@ function isLimitedBonusTech(id) {
   return list.length > 0 && list.some(s => isAlwaysBonusService(s));
 }
 
+// W2-4 preferred-tech NUDGE (pure core). The caller has already confirmed `prefId` is ELIGIBLE
+// (checked-in, not off/break, free, passed dropHolders). Given the customer's still-needed services,
+// returns the ONE { techId, serviceId } to hand the preferred tech first, or null (no nudge → pure
+// fairness). `canDo(sid)` = can the preferred tech do sid. If the preferred tech is a limited-bonus
+// specialist and the customer needs a bonus service they can do, hand them THAT (so pre-assigning them
+// a regular line doesn't strand a bonus service only they can take); otherwise their highest-preference
+// doable service. Never changes turn counts — only which tech is suggested.
+export function nudgeDecision(prefId, need, { canDo, isBonusSvc, isLimitedBonus, prefRank }) {
+  if (!prefId) return null;
+  const doable = (need || []).filter(sid => canDo(sid));
+  if (!doable.length) return null;
+  const byPref = arr => [...arr].sort((a, b) => prefRank(a) - prefRank(b));
+  if (isLimitedBonus) {
+    const bonus = doable.filter(isBonusSvc);
+    if (bonus.length) return { techId: prefId, serviceId: byPref(bonus)[0] };
+  }
+  return { techId: prefId, serviceId: byPref(doable)[0] };
+}
+
 // For ONE customer: suggest a DIFFERENT tech for each still-waiting, unassigned
 // service. Bonus services route to the specialists first; regular services then go
 // out in preference order, the most-preferred to the fewest-turns tech, preferring
@@ -360,8 +379,22 @@ export function suggestTechsForEntry(entry) {
     return cands[0];
   };
   const assign = (sid, kind) => { const id = pick(sid, kind); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
-  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'bonus'));
-  need.filter(sid => !isAlwaysBonusService(sid))
+  // W2-4 nudge: if this customer has an explicit preferred tech who is ELIGIBLE right now, hand them
+  // one of the customer's needed services first; the fairness passes below fill the rest. Only reorders
+  // suggestions — turn counts are untouched, and an ineligible preferred tech silently falls back.
+  let needList = need;
+  const prefId = preferredTechIdFor(entry.phone);
+  if (prefId && eligibleBase.includes(prefId)) {
+    const nd = nudgeDecision(prefId, needList, {
+      canDo: sid => canDo(prefId, sid),
+      isBonusSvc: isAlwaysBonusService,
+      isLimitedBonus: isLimitedBonusTech(prefId),
+      prefRank: servicePrefRank,
+    });
+    if (nd) { used.add(nd.techId); out[nd.serviceId] = { techId: nd.techId, techName: staffById(nd.techId)?.name || '?' }; needList = needList.filter(s => s !== nd.serviceId); }
+  }
+  needList.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'bonus'));
+  needList.filter(sid => !isAlwaysBonusService(sid))
     .sort((a, b) => servicePrefRank(a) - servicePrefRank(b))
     .forEach(sid => assign(sid, 'regular'));
   return out;
@@ -906,7 +939,7 @@ export function renderTurnsQueue() {
     const bgTint = _es==='inservice' ? 'rgba(42,122,79,0.10)' : _es==='awaiting' ? 'rgba(107,79,176,0.12)' : _es==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
-        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
+        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${preferredTechBadgeHtml(e.phone, { fontSize: 10, iconOnly: true })}${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
   }
   waitingList.innerHTML = waiting.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one waiting</div>' : waiting.map(buildCard).join('');
   const activeCards = [...complete, ...inservice];   // completed (awaiting payment) at the top, then in-service

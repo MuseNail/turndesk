@@ -17,7 +17,7 @@ import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssign
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { getBubblePrefs } from './bubble-prefs.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview, flushAllManualCustNotes } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview, flushAllManualCustNotes, preferredTechIdFor, preferredTechBadgeHtml, preferredTechName } from './square-customers.js';
 import { lastVisitsCompact, buildCombinedRecords } from './reports.js';
 
 const cfg   = () => getState().config;
@@ -291,6 +291,8 @@ function _ordinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n
 
 function buildQueueRow(e) {
   const { hideTime, hideTech, hideSvc } = getBubblePrefs();   // W2-6 per-user bubble-info toggles
+  const prefId = preferredTechIdFor(e.phone);          // W2-4 explicit preferred tech (for de-duping the auto "usually w/")
+  const prefBadge = preferredTechBadgeHtml(e.phone);   // "★ Prefers X" — shown even on a first visit
   const t = new Date(e.checkinTime);
   const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const serviceLabels = e.services.map(sid => svc(sid)?.label || sid).join(', ') || '—';
@@ -305,7 +307,11 @@ function buildQueueRow(e) {
     const visitNum = _vh.visits + (isPaidStatus(e.status) ? 0 : 1);
     if (visitNum >= 2) {
       visitBadge = `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold" style="background:#8fd4d3;color:#0f3d3d" title="Returning customer">★ ${_ordinal(visitNum)} visit</span>`;
-      const techName = _vh.usualTechId ? (staffById(_vh.usualTechId)?.name || '') : '';
+      // Drop the auto "usually w/" name only when the explicit "★ Prefers" badge is ACTUALLY showing for
+      // the same tech (owner wants BOTH when they differ); keep the $ lifetime bit regardless. Gating on
+      // prefBadge (not prefId) means a deactivated preferred tech — whose ★ badge is hidden — still shows
+      // "usually w/", so the card never loses both.
+      const techName = (_vh.usualTechId && !(prefBadge && _vh.usualTechId === prefId)) ? (staffById(_vh.usualTechId)?.name || '') : '';
       const bits = [];
       if (_vh.totalSpent > 0) bits.push(`$${_vh.totalSpent.toFixed(0)} lifetime`);
       if (techName) bits.push(`usually w/ ${techName}`);
@@ -373,7 +379,7 @@ function buildQueueRow(e) {
     <div class="queue-row ${cardBg} rounded-xl py-1.5 px-3 border flex items-stretch gap-1.5" data-id="${id}" style="${leftEdge}">
       <div class="flex-grow min-w-0 py-1 cursor-pointer" onclick="showGroupAssignModal('${id}')" title="Assign & Price">
         <div class="flex items-center gap-1 flex-wrap leading-tight">
-          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${visitBadge}${groupTag ? ' ' + groupTag : ''}
+          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${escHtml(e.name)}</span>${prefBadge}${visitBadge}${groupTag ? ' ' + groupTag : ''}
           ${apptBadge}${totalDisplay}
           ${timeEl}
         </div>
@@ -620,6 +626,15 @@ function _assignGuestNotesHtml(e, recs, seenKeys) {
     <div><span class="${lab}">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></span><textarea class="ga-visitnote ${taCls}" oninput="assignGuestVisitNoteInput('${e.id}')" placeholder="e.g., design on ring fingers…" style="height:90px">${escHtml(e.txnNote || '')}</textarea></div>
   </div>`;
 }
+// W2-4: "— None —" + active staff, for the per-guest preferred-tech picker.
+const _prefTechOptions = sel => '<option value="">— None —</option>' + activeStaff().slice().sort(byName).map(s => `<option value="${s.id}"${sel === s.id ? ' selected' : ''}>${escHtml(s.name)}</option>`).join('');
+const _prefTechSelectHtml = idx => `<select id="manual-preftech-${idx}" onchange="manualPrefTechInput(${idx})" class="${_MANUAL_TA}" style="padding:8px 10px">${_prefTechOptions('')}</select>`;
+// Same-contact guest shares the primary's phone → one customer, one preference. Show it read-only here
+// (editing happens on the primary) so the picker never contradicts the "★ Prefers" badge on the card.
+function _prefTechSharedHtml(phone) {
+  const nm = preferredTechName(phone);
+  return `<div class="w-full rounded-lg border border-dashed border-surface-container-high px-2.5 text-sm font-body text-on-surface-variant" style="padding:8px 10px">${nm ? '★ Prefers ' + escHtml(nm) : 'No preference'} <span class="italic text-outline">· shared with primary</span></div>`;
+}
 function manualGuestBoxHtml(idx) {
   const lab = 'text-[11px] font-body font-semibold text-primary uppercase tracking-widest block mb-1';
   return `<div id="manual-box-${idx}" class="manual-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
@@ -627,7 +642,9 @@ function manualGuestBoxHtml(idx) {
       <span id="manual-box-name-${idx}" class="font-headline font-semibold text-on-surface text-sm truncate">Guest ${idx}</span>
       <span id="manual-box-phone-${idx}" class="text-[11px] font-body text-on-surface-variant flex-shrink-0"></span>
     </div>
-    <label class="${lab}" style="margin-top:10px">Customer note</label>
+    <label class="${lab}" style="margin-top:10px">Preferred tech <span class="text-outline normal-case tracking-normal">· optional</span></label>
+    <div id="manual-preftech-slot-${idx}" data-same="0">${_prefTechSelectHtml(idx)}</div>
+    <label class="${lab}" style="margin-top:11px">Customer note</label>
     <div id="manual-custnote-slot-${idx}" data-same="0">${_custNoteEditableHtml(idx)}</div>
     <label class="${lab}" style="margin-top:11px">Last 3 visits</label>
     <div id="manual-history-${idx}" class="overflow-y-auto" style="height:124px"></div>
@@ -673,7 +690,22 @@ export function updateManualGuestBox(idx, records) {
     }
   }
   const h = document.getElementById(`manual-history-${idx}`); if (h) h.innerHTML = _manualHistoryHtml(c.phone, [c.first, c.last].filter(Boolean).join(' '), records);
+  // W2-4 preferred-tech picker: same-contact guest → read-only (the preference is the primary's, keyed
+  // to the shared phone). Otherwise pre-fill from the saved preference WHILE UNTOUCHED, so a known
+  // customer's pick shows on phone entry without stomping a manual choice. An inactive saved tech isn't
+  // an option → shows blank, but the touched gate means an untouched picker never writes, so it's kept.
+  const ptSlot = document.getElementById(`manual-preftech-slot-${idx}`);
+  if (ptSlot) {
+    const want = same ? '1' : '0';
+    if (ptSlot.dataset.same !== want) { ptSlot.dataset.same = want; ptSlot.innerHTML = same ? _prefTechSharedHtml(c.phone) : _prefTechSelectHtml(idx); }
+    else if (same) { ptSlot.innerHTML = _prefTechSharedHtml(c.phone); }   // keep the shared view current as the primary's pref resolves
+    if (!same) {
+      const pt = document.getElementById(`manual-preftech-${idx}`);
+      if (pt && pt.dataset.touched !== '1') pt.value = (c.phone ? (preferredTechIdFor(c.phone) || '') : '');
+    }
+  }
 }
+export function manualPrefTechInput(idx) { const el = document.getElementById(`manual-preftech-${idx}`); if (el) el.dataset.touched = '1'; }
 // Refresh every open box from ONE combined-records pass (so same-contact boxes track the primary too).
 function updateAllManualBoxes() {
   const recs = buildCombinedRecords();
@@ -793,6 +825,12 @@ function collectManualEntries() {
     const visitNote = document.getElementById(`manual-visit-note-${i}`)?.value.trim() || '';
     const entry = { id: newEntryId(), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
     if (visitNote) entry.txnNote = visitNote;   // per-visit note → carried to the record + history
+    // W2-4: stamp the preferred-tech TRI-STATE on the entry (so it survives the kiosk hand-off
+    // serialization; ensureCustomerInStore reads it). Only when the picker was explicitly touched:
+    // a tech id = set, '' ("— None —") = clear (null); untouched = leave (key absent). Same-contact
+    // guests have a disabled picker → never stamped (one preference per shared phone).
+    const ptEl = document.getElementById(`manual-preftech-${i}`);
+    if (ptEl && !ptEl.disabled && ptEl.dataset.touched === '1') entry.preferredTechId = ptEl.value || null;
     // Appointment + chosen tech → pre-assign that tech to each service (remembered on
     // the check-in). Blank tech leaves it unassigned (no assignments created here).
     if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
@@ -1907,6 +1945,7 @@ function _renderAssignOneList() {
         <input type="tel" value="${escHtml(e.phone||'')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
           class="ga-phone text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
         <button onclick="openCustomerFromAssign('${e.id}')" title="Edit customer" class="w-7 h-7 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">person_edit</span></button>
+        ${preferredTechBadgeHtml(e.phone, { fontSize: 11 })}
         ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
       </div>
       ${rows}

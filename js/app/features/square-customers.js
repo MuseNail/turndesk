@@ -17,6 +17,50 @@ const cfg = () => getState().config;
 export const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
 const isPhoneKey   = key => /^\d{7,15}$/.test(key);
 export const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
+
+// ── W2-4 preferred tech (explicit, set at check-in, stored on the customer entity) ────
+// Pure: resolve a phone to the preferred tech id across same-phone customer records. Duplicate
+// records sharing a phone are common (the dedup tool exists for them), so prefer a record that
+// actually has a preference set, not just the first array match.
+export function resolvePreferredTechId(customers, phone, keyFn) {
+  const pk = keyFn(phone);
+  if (!pk) return null;
+  const withPref = (customers || []).find(c => keyFn(c.phone) === pk && c.preferredTechId);
+  return withPref ? withPref.preferredTechId : null;
+}
+// Render-path lookup: a phone-key→preferredTechId Map memoized on store.rev, so the badge/nudge don't
+// re-scan the whole directory per queue row / turns card on every broadcast + 1s timer tick (mirrors
+// reports.js _visitIndex). resolvePreferredTechId stays the pure core for tests.
+let _prefIdxRev = -1, _prefIdx = new Map();
+function _prefIndex() {
+  const st = getState();
+  if (st.rev !== _prefIdxRev) {
+    _prefIdx = new Map();
+    for (const c of (st.customers || [])) { const pk = notePhoneKey(c.phone); if (pk && c.preferredTechId && !_prefIdx.has(pk)) _prefIdx.set(pk, c.preferredTechId); }
+    _prefIdxRev = st.rev;
+  }
+  return _prefIdx;
+}
+export const preferredTechIdFor = phone => { const pk = notePhoneKey(phone); return pk ? (_prefIndex().get(pk) || null) : null; };
+// Resolve a phone to the preferred tech's FIRST name, or '' if none / removed / deactivated.
+export function preferredTechName(phone) {
+  const id = preferredTechIdFor(phone);
+  if (!id) return '';
+  const st = (cfg().staff || []).find(s => s.id === id);
+  if (!st || (cfg().inactive_staff || []).includes(id)) return '';
+  return (st.name || '').trim().split(/\s+/)[0] || st.name || 'tech';
+}
+// "★ Prefers <first name>" pill (tinted text star to match the returning-customer badge; the app's
+// standard amber). '' when no preference OR the preferred tech was removed/deactivated. `iconOnly` = a
+// bare ★ (name in the tooltip) for cramped cards like the turns tray. Distinct from the auto "usually w/".
+export function preferredTechBadgeHtml(phone, opts = {}) {
+  const first = preferredTechName(phone);
+  if (!first) return '';
+  const fs = opts.fontSize || 10;
+  const base = `background:#faedcf;color:#9a6b00;font-size:${fs}px;line-height:1.3`;
+  if (opts.iconOnly) return `<span class="inline-flex items-center rounded-full font-body font-semibold flex-shrink-0" style="${base};padding:1px 5px" title="Prefers ${escHtml(first)}">★</span>`;
+  return `<span class="inline-flex items-center gap-0.5 rounded-full font-body font-semibold flex-shrink-0" style="${base};padding:1px 6px" title="Preferred technician">★ Prefers ${escHtml(first)}</span>`;
+}
 // Compact note indicator for a customer card (turn board / floor tile / queue row): prefers the
 // visit note, falls back to the permanent customer note; the tooltip carries both in full. Editing
 // still happens by tapping the card (opens Assign & Price, which has both editors). '' when neither.
@@ -111,7 +155,9 @@ export async function importCustomersFromSquare() {
     const pk = notePhoneKey(c.phone);
     const match = byId.has(String(c.id)) ? have.find(x => String(x.id) === String(c.id)) : (pk ? byPhone.get(pk) : null);
     if (match) updated++; else added++;
-    return { id: match ? match.id : c.id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email, squareId: c.id, createdAt: match?.createdAt || Date.now() };
+    // Spread ...match FIRST so a re-import (advertised as safe to re-run) never wipes additive fields
+    // like preferredTechId — bulkUpsert is a whole-object replace in the store + DO.
+    return { ...(match || {}), id: match ? match.id : c.id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email, squareId: c.id, createdAt: match?.createdAt || Date.now() };
   });
   // Send in BULK chunks with a yield between each — one apply (saveCache + re-render) per chunk
   // instead of per customer, so a big directory can't freeze the tab. Each chunk is also one
@@ -518,6 +564,17 @@ export async function deleteSquareCustomer(id) {
 // Merge = keep one profile, delete the rest. (Square has no merge API; notes/history are phone-keyed
 // so the surviving profile keeps everything.) Returns the count successfully removed.
 export async function mergeCustomers(keepId, removeIds) {
+  // Preserve the explicit preferred tech onto the KEPT profile before the deletes: unlike notes/history
+  // it lives on the customer ENTITY, so deleting the record that holds it would silently drop it.
+  try {
+    const custs = getState().customers || [];
+    const match = (c, key) => c && (String(c.id) === String(key) || String(c.squareId) === String(key));
+    const keep = custs.find(c => match(c, keepId));
+    if (keep && !keep.preferredTechId) {
+      const donor = (removeIds || []).map(id => custs.find(c => match(c, id))).find(c => c && c.preferredTechId);
+      if (donor) dispatch('customer.upsert', { customer: { ...keep, preferredTechId: donor.preferredTechId } });
+    }
+  } catch {}
   let removed = 0;
   for (const id of (removeIds || [])) { if (id && id !== keepId && await deleteSquareCustomer(id)) removed++; }
   return removed;
@@ -674,7 +731,9 @@ export async function saveEditCustomer() {
     } catch (e) { /* best-effort; DO is the source of truth */ }
   }
 
-  dispatch('customer.upsert', { customer: { id, firstName: first, lastName: last, phone, email, squareId: sqLink, createdAt: existing?.createdAt || Date.now() } });
+  // Spread ...existing FIRST so additive fields (preferredTechId, any future field) survive — a
+  // customer.upsert is a WHOLE-OBJECT replace in the store + DO, so a scratch-built object would wipe them.
+  dispatch('customer.upsert', { customer: { ...(existing || {}), id, firstName: first, lastName: last, phone, email, squareId: sqLink, createdAt: existing?.createdAt || Date.now() } });
 
   // Manual note → app-owned synced store, keyed by phone (kept out of Square's note).
   const phoneKey = notePhoneKey(phone);
@@ -757,6 +816,10 @@ export function ensureCustomerInStore(entry, squareLink, opts = {}) {
   if (!pk) return null;   // no phone → can't key reliably (Square also skips these)
   const parts = entry.name.trim().split(/\s+/);
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
+  // W2-4: the preferred-tech pick rides on the ENTRY (set at the desk, survives the kiosk hand-off
+  // serialization). TRI-STATE: own key present with an id = set; present with null = clear; ABSENT = leave.
+  const hasPref = Object.prototype.hasOwnProperty.call(entry, 'preferredTechId');
+  const prefVal = entry.preferredTechId ?? null;   // id or null (cleared)
   const existing = (getState().customers || []).find(c => notePhoneKey(c.phone) === pk);
   if (existing) {
     // No name churn by default (shared phones). opts.updateName = an explicit, confirmed
@@ -769,11 +832,12 @@ export function ensureCustomerInStore(entry, squareLink, opts = {}) {
       const email = (entry.email || '').trim();
       if (email && email !== (existing.email || '')) patch.email = email;
     }
+    if (hasPref && prefVal !== (existing.preferredTechId ?? null)) patch.preferredTechId = prefVal;
     if (Object.keys(patch).length) dispatch('customer.upsert', { customer: { ...existing, ...patch } });
     return existing.id;
   }
   const id = 'cust-' + pk;
-  dispatch('customer.upsert', { customer: { id, firstName, lastName, phone: entry.phone, email: (entry.email || '').trim(), squareId: squareLink || null, createdAt: Date.now() } });
+  dispatch('customer.upsert', { customer: { id, firstName, lastName, phone: entry.phone, email: (entry.email || '').trim(), squareId: squareLink || null, createdAt: Date.now(), ...(hasPref && prefVal ? { preferredTechId: prefVal } : {}) } });
   return id;
 }
 
