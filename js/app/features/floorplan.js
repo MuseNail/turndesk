@@ -11,8 +11,8 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
-import { serviceTimeInfo } from './servicetime.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries } from './turns.js';
+import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
@@ -141,7 +141,26 @@ function custLines(e, stationId, fs = 1, maxLines = Infinity, noTiming = false) 
 // the not-seated strip reads like a seated tile at a glance. Fixed card height + overflow:hidden; 3+
 // services collapse to "+N more". Keeps .floor-bubble + data-entry-id + .fp-grip so drag-to-seat is
 // UNCHANGED. (TD's tray wraps rather than horizontally scrolls, so cards flow to the next line.)
-const TRAY_CARD_H = 72;
+const TRAY_CARD_H = 72, TRAY_BOX_H = 104;
+// Item 2b: pick which of a tech's in-service services to time on their floor card — the longest-running
+// one (by live elapsed, so a paused/resumed service with banked time wins). Pure + injected (liveMsOf).
+export function pickTechTimingAssignment(entries, techId, liveMsOf) {
+  let best = null, bestMs = -1;
+  for (const e of (entries || [])) {
+    for (const a of (e.assignments || [])) {
+      if (a.techId === techId && a.status === 'inservice') {
+        const ms = liveMsOf ? liveMsOf(a) : 0;
+        if (ms > bestMs) { bestMs = ms; best = a; }
+      }
+    }
+  }
+  return best;
+}
+// Tap-chevron scroll for the waiting tray (reliable on touch, where the drag-to-seat bubbles capture a swipe).
+export function floorTrayScroll(dir) {
+  const row = document.querySelector('#floorplan-tray .floor-tray-row');
+  if (row) row.scrollBy({ left: dir * Math.max(140, row.clientWidth * 0.7), behavior: 'smooth' });
+}
 function trayBubbleHtml(e) {
   const inserv = entryInservice(e);
   const bg = inserv ? '#cfe0e0' : '#ffe9c4', border = inserv ? '#2a7a4f' : '#d4860a';
@@ -261,12 +280,15 @@ function renderFloorStaffRow() {
     const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
     const grip = `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-5px;left:-7px;background:var(--surface-container-lowest,#fff);border-radius:6px;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
     const isNext = id === nextUpId;
+    const timed = pickTechTimingAssignment(getActiveTechEntries(id), id, liveAssignmentMs);
+    const sti = timed ? serviceTimeInfo(timed) : null;
+    const timerHtml = sti && sti.live ? `<div style="font-size:9px;font-weight:700;line-height:1.1;color:${sti.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sti.text}</div>` : '';
     const statusChip = `<div style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${isNext ? 'Next up' : c.label}</div>`;
     return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
       <div style="position:relative;flex-shrink:0">${avatar}${grip}</div>
       <div class="min-w-0" style="flex:1">
         <div class="truncate" style="font-size:13px;font-weight:700;color:var(--md-on-surface)">${escHtml(st.name.split(' ')[0])}</div>
-        ${statusChip}
+        ${statusChip}${timerHtml}
       </div>
       <div class="flex flex-col items-center flex-shrink-0" style="min-width:34px">
         <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t</span>
@@ -299,14 +321,24 @@ export function renderFloorPlan() {
 
   const tray = document.getElementById('floorplan-tray');
   if (tray) {
-    // Always render the tray box in live mode (even when empty) so the grid below
-    // doesn't jump when guests get added/seated. Only hide it while editing layout.
+    // Constant-height tray (both states share the height so the grid never jumps). Waiting guests sit
+    // on ONE non-wrapping row that scrolls sideways: each bubble is shrink-0 (so the row overflows
+    // instead of squishing), with tap chevrons + an edge fade shown only when it actually overflows
+    // (a drag-to-seat bubble captures a swipe, so the chevrons are the reliable scroll).
     if (floorEditMode) tray.innerHTML = '';
-    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
+    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:${TRAY_BOX_H}px;box-sizing:border-box;display:flex;align-items:center">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
-    else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
+    else {
+      tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:${TRAY_BOX_H}px;box-sizing:border-box">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(trayBubbleHtml).join('')}</div></div>`;
+      <div class="floor-tray-wrap" style="position:relative">
+        <button type="button" onclick="floorTrayScroll(-1)" class="floor-tray-chev floor-tray-chev-l" title="Scroll left"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
+        <div class="floor-tray-row flex gap-1.5" style="overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:thin">${unplaced.map(trayBubbleHtml).join('')}</div>
+        <button type="button" onclick="floorTrayScroll(1)" class="floor-tray-chev floor-tray-chev-r" title="Scroll right"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
+      </div></div>`;
+      const _trow = tray.querySelector('.floor-tray-row');
+      if (_trow && _trow.scrollWidth > _trow.clientWidth + 2) _trow.closest('.floor-tray-wrap')?.classList.add('has-overflow');
+    }
   }
 
   grid.style.position = 'relative';

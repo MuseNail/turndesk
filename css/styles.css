@@ -562,6 +562,22 @@
   /* Ring in the station's OWN accent (set inline as --fp-accent) so it tracks a custom salon theme + dark mode. */
   .floor-station.fp-empty:hover { outline: 2px dashed var(--fp-accent, #1a5252); outline-offset: 2px; }
 
+  /* Waiting-tray horizontal-scroll affordances — only shown when the single row overflows
+     (the floor bubbles are drag-to-seat, so a touch swipe can't reliably pan; the chevrons do). */
+  .floor-tray-chev {
+    display: none; position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+    width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 50%;
+    background: var(--surface-container-lowest, #fff); color: var(--md-on-surface, #1f2937);
+    box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+  }
+  .floor-tray-chev-l { left: -4px; }
+  .floor-tray-chev-r { right: -4px; }
+  .floor-tray-wrap.has-overflow .floor-tray-chev { display: flex; }
+  .floor-tray-wrap.has-overflow::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--surface-container, #eceff1));
+  }
+
   /* ── Tech-status popup: Available / Not-available column headers (light + dark) ── */
   .tsm-hdr-yes { color: #0f6e56; }
   .tsm-hdr-no  { color: #a32d2d; }

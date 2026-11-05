@@ -139,18 +139,35 @@ const _digits10 = s => (s || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1')
 // already stored on each record's assignments[]; we just surface it instead of two flat lists.
 // Pure (lookups injected) so it's unit-testable; falls back to the service list when a record has
 // no usable assignments (refunds, legacy/"Add Historical" catch-all rows with blank ids).
-export function _visitLines(assignments, services, svcLabel, techName) {
+export function _visitLines(assignments, services, svcLabel, techName, chargeOf) {
+  const ch = a => (chargeOf ? chargeOf(a) : null);   // per-service $ only when the caller injects a chargeOf
   const asg = (assignments || []).filter(a => a && (a.serviceId || a.techId));
-  if (!asg.length) return (services || []).map(sid => ({ service: svcLabel(sid) || sid, tech: '' }));
+  if (!asg.length) return (services || []).map(sid => ({ service: svcLabel(sid) || sid, tech: '', charge: null, comped: false }));
   const lines = asg.map(a => ({
     service: a.serviceId ? (svcLabel(a.serviceId) || a.serviceId) : '',
     tech: a.techId ? (techName(a.techId) || '') : '',
+    charge: ch(a),
+    comped: !!a.comped,
   }));
   // Parity with the old flat list: a ticket service with no matching assignment (legacy/imported
   // records) is still shown as a service-only line, so a service is never silently dropped.
   const covered = new Set(asg.map(a => a.serviceId).filter(Boolean));
-  (services || []).forEach(sid => { if (!covered.has(sid)) lines.push({ service: svcLabel(sid) || sid, tech: '' }); });
+  (services || []).forEach(sid => { if (!covered.has(sid)) lines.push({ service: svcLabel(sid) || sid, tech: '', charge: null, comped: false }); });
   return lines;
+}
+
+// The full, reconciling per-visit breakdown — services (via _visitLines) + items + fees − discount.
+// `total` is the record's ALREADY-reconciled totalCost (buildCombinedRecords set it to ticketTotal for
+// parts-bearing rows; legacy/part-less rows keep their stored total), NOT a fresh recompute —
+// recomputing would zero a legacy row with a real total but no reconstructable parts.
+export function _visitBreakdown(r, { svcLabel, techName, itemLabel, feeLabel, chargeOf }) {
+  return {
+    serviceLines: _visitLines(r.assignments, r.services, svcLabel, techName, chargeOf),
+    items: (r.items || []).map(it => ({ label: itemLabel(it), qty: it.qty || 0, amount: (it.price || 0) * (it.qty || 0) })),
+    fees: (r.fees || []).map(f => ({ label: feeLabel(f), amount: f.amount || 0 })),
+    discount: r.discount || 0,
+    total: r.totalCost || 0,
+  };
 }
 
 export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history') {
@@ -168,11 +185,33 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
   el.innerHTML = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${visits} visit${visits !== 1 ? 's' : ''} · $${net.toFixed(2)} total spent</div>` + recs.map(r => {
     const dt = new Date(r.checkinTime), isRefund = r.status === 'refund';
     const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const lines = _visitLines(r.assignments, r.services, sid => svc(sid)?.label, tid => staffById(tid)?.name);
-    const anyTech = lines.some(l => l.tech);
-    const svcHtml = anyTech
-      ? lines.map(l => `${l.service || '—'}${l.tech ? ' · <span class="text-on-surface font-medium">' + l.tech + '</span>' : ''}`).join('<br>')
-      : (lines.map(l => l.service).filter(Boolean).join(', ') || '—');
+    // Itemized reconciling breakdown when the record has priced parts; else the simple one-line list
+    // (refunds + legacy/"Add Historical" rows with no reconstructable parts). The card header already
+    // shows the visit total, so these rows itemize it (services + items + fees − discount = total).
+    const hasParts = (r.assignments || []).some(a => a && ((a.cost || 0) > 0 || a.comped)) || (r.items || []).length > 0 || (r.fees || []).length > 0;
+    let bodyHtml;
+    if (!isRefund && hasParts) {
+      const bd = _visitBreakdown(r, {
+        svcLabel: sid => svc(sid)?.label, techName: tid => staffById(tid)?.name,
+        itemLabel: it => cfg().items.find(x => x.id === it.itemId)?.label || it.label || 'Item',
+        feeLabel: f => cfg().fees.find(x => x.id === f.feeId)?.label || f.label || 'Fee',
+        chargeOf: lineCharge,
+      });
+      const money = n => '$' + (n || 0).toFixed(2);
+      const row = (left, right) => `<div class="flex items-baseline justify-between gap-2"><span>${left}</span><span class="flex-shrink-0">${right}</span></div>`;
+      bodyHtml = [
+        ...bd.serviceLines.map(l => row(`${l.service || '—'}${l.tech ? ' · <span class="text-on-surface font-medium">' + l.tech + '</span>' : ''}`, l.charge == null ? '—' : (l.comped ? '$0 · comp' : money(l.charge)))),
+        ...bd.items.map(i => row(`${i.label} ×${i.qty}`, money(i.amount))),
+        ...bd.fees.map(f => row(f.label, money(f.amount))),
+        bd.discount > 0 ? row('Discount', '−' + money(bd.discount)) : '',
+      ].filter(Boolean).join('');
+    } else {
+      const lines = _visitLines(r.assignments, r.services, sid => svc(sid)?.label, tid => staffById(tid)?.name);
+      const anyTech = lines.some(l => l.tech);
+      bodyHtml = anyTech
+        ? lines.map(l => `${l.service || '—'}${l.tech ? ' · <span class="text-on-surface font-medium">' + l.tech + '</span>' : ''}`).join('<br>')
+        : (lines.map(l => l.service).filter(Boolean).join(', ') || '—');
+    }
     const note = (r.txnNote || r.discountNote || '').trim();
     const amt = isRefund ? `-$${Math.abs(r.totalCost || 0).toFixed(2)}` : `$${(r.totalCost || 0).toFixed(2)}`;
     const waiverBadge = r.waiverId
@@ -180,7 +219,7 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
       : '';
     return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
       <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>
-      <div class="text-[11px] font-body text-on-surface-variant">${svcHtml}</div>
+      <div class="text-[11px] font-body text-on-surface-variant space-y-0.5 mt-0.5">${bodyHtml}</div>
       ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${escHtml(note)}”</div>` : ''}
       ${waiverBadge}
     </div>`;

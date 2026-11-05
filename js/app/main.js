@@ -154,6 +154,11 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.65', items: [
+    { icon: 'timer', t: 'Live service timer on each floor technician', d: 'Each technician on the Floor Plan now shows a live timer for the service they’re currently working, in the same elapsed ▸ ~average style as the customer cards — so you can see at a glance who’s running long.' },
+    { icon: 'view_week', t: 'Waiting list stays one tidy row', d: 'The not-seated waiting list on the Floor Plan is now a single fixed-height row that scrolls sideways (tap the ‹ › chevrons when it overflows) instead of wrapping and pushing the floor down — the floor no longer jumps as guests come and go.' },
+    { icon: 'receipt_long', t: 'Itemized breakdown in a customer’s visit history', d: 'A customer’s past visits now show the full breakdown — each service (with technician and price), items, fees and discount — that adds up to the visit total, instead of just a service list. Comped lines show “$0 · comp”.' },
+  ] },
   { v: 'td-v0.64', items: [
     { icon: 'sticky_note_2', t: 'Notes & preferences on each technician', d: 'Tap a technician (on the Turns board or Floor Plan) to open their card — now a wider popup with three columns: the services they can do (green ✓), the ones they can’t (red ✗), and a Notes / Preferences list. Managers can add, edit, and remove notes (e.g. “prefers pedicures”, “leaves at 4”); everyone else sees them read-only. Notes sync across devices and are merged safely, so two people jotting different notes never overwrite each other.' },
   ] },
