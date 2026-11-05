@@ -1513,7 +1513,7 @@ function renderTurnsHistoryView() {
 }
 
 // ── Export (CSV + PDF) — the currently-viewed day (today or a history date) ────
-const _statusWord = ss => isPaidStatus(ss) ? 'Paid' : ss === 'complete' ? 'Complete' : ss === 'inservice' ? 'In service' : 'Waiting';
+const _statusWord = ss => isPaidStatus(ss) ? 'Paid' : ss === 'complete' ? 'Done' : ss === 'inservice' ? 'In service' : 'Waiting';
 // Roll an assignment list (+ today's skips) into a per-tech summary + per-turn detail.
 function _turnRowsFromItems(items, skips, isHistory) {
   const merged = [

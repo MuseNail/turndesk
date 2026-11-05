@@ -127,10 +127,10 @@ export function staffServiceAction(a, fieldPrice) {
   if (status === 'paid' || status === 'done')        return { mode: 'none' };   // finalized line → no button (never reactivate a sale)
   if (status === 'waiting')                          return { mode: 'start',    label: 'Start',      fn: 'staffStart',    style: 'primary' };
   if (status === 'inservice') {
-    if (a && a.comped)                               return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
+    if (a && a.comped)                               return { mode: 'complete', label: 'Done',       fn: 'staffComplete', style: 'primary' };
     const saved = (a && a.cost) || 0;
     const eff = fieldPrice == null ? saved : fieldPrice;   // an empty/cleared field keeps the saved price (no forced re-type)
-    if (saved > 0 && eff === saved)                  return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
+    if (saved > 0 && eff === saved)                  return { mode: 'complete', label: 'Done',       fn: 'staffComplete', style: 'primary' };
     return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'primary' };   // nothing saved yet, or field edited to a NEW amount
   }
   if (status === 'complete')                         return { mode: 'reopen',   label: 'Reopen',     fn: 'staffReopen',   style: 'outline' };

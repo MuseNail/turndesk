@@ -156,6 +156,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.78', items: [
+    { icon: 'check_circle', t: 'A finished service now reads “Done” everywhere', d: 'The in-progress-service label that used to say “Complete” in a few places (the Queue group heading, the Assign & Price status button, the Turns report, the technician app, and the Calendar badge) now says “Done” — matching the status dot that already said “Done.” Nothing about how it works changed, just the wording is consistent now.' },
+  ] },
   { v: 'td-v0.77', items: [
     { icon: 'event_seat', t: 'Assign a tech & seat right at check-in', d: 'When you check someone in, each service you pick for them now has its own “tech” and “seat” picker. Choose a tech and that service arrives already assigned to them (and to a seat, if you pick one) — it counts their turn right away, just like assigning in Assign & Price. Leave it blank and it’s unassigned exactly like before, so nothing changes for a normal walk-in. A few touches: the seat picker turns on once you pick a tech, a seat that’s already taken shows “(occupied)” (you can still override), and the tech list is your checked-in technicians. This replaces the old single “Appointment → one tech” picker with a per-service one that works for every check-in.' },
   ] },

@@ -215,7 +215,7 @@ function renderQueueHistoryView(list, empty) {
   const entries = recs.length ? recs : (snapshot || []);
   if (entries.length === 0) { list.innerHTML = banner + '<div class="text-center py-12 text-on-surface-variant text-sm font-body">No queue records saved for this day.</div>'; return; }
   const badge = { waiting:'badge-waiting', inservice:'badge-inservice', complete:'badge-complete', paid:'badge-done', done:'badge-done' };
-  const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'complete', label:'Complete' }, { key:'paid', label:'Paid' } ];
+  const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'complete', label:'Done' }, { key:'paid', label:'Paid' } ];
   const row = e => {
     const techs = [...new Set((e.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name).filter(Boolean))].join(', ');
     const svcs = (e.services||[]).map(sid => svc(sid)?.label || sid).join(', ') || '—';
@@ -264,7 +264,7 @@ export function renderQueue() {
     const groups = [
       { key: 'waiting',   label: 'Waiting',    color: 'text-secondary' },
       { key: 'inservice', label: 'In Service', color: 'text-primary' },
-      { key: 'complete',  label: 'Complete',   color: 'text-primary' },
+      { key: 'complete',  label: 'Done',       color: 'text-primary' },
       { key: 'paid',      label: 'Paid Today', color: 'text-outline' },
     ];
     list.innerHTML = groups.map(g => {
@@ -403,7 +403,7 @@ function buildQueueRow(e) {
         ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="${sStart}"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
         ${e.status === 'inservice' ? `
           <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="${sBackWait}"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
-          <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="${sComplete}"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
+          <button onclick="tryAdvanceStatus('${id}','complete')" title="Done" class="${btnCls}" style="${sComplete}"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
         ${e.status === 'complete' ? `
           <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="${sBackSvc}"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           ${ticketTotal(e) > 0
@@ -1545,7 +1545,7 @@ export function toggleCompRow(cb) {
 // Waiting). Warns first. Not offered from Paid (use the whole-ticket Reopen instead).
 export function revertServiceStatus(entryId, serviceId, prevStatus) {
   if (document.getElementById('group-assign-modal')?.style.display === 'flex') saveCurrentGroupTabInputs();
-  const label = { waiting:'Waiting', inservice:'In Service', complete:'Complete' }[prevStatus] || prevStatus;
+  const label = { waiting:'Waiting', inservice:'In Service', complete:'Done' }[prevStatus] || prevStatus;
   showWarnModal('Move status back?', `This moves ${svc(serviceId)?.label || 'this service'} back to "${label}". Use this only to correct a mistake.`, () => {
     const e = q().find(x => String(x.id) === String(entryId)); if (!e) return;
     setAssignmentStatus(e, serviceId, prevStatus, true);   // isRevert → restore the pre-mistake status timer
@@ -1699,7 +1699,7 @@ export function renderGroupAssignContent() {
     const est = isAwaitingPrice(a) ? 'awaiting' : st;
     const sug = !a.techId ? (_sugMap[sid] || null) : null;
     const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', awaiting:'background:#6b4fb0;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[est] || 'background:#f5c870;color:#3a2800';
-    const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', awaiting:'Awaiting price', paid:'Paid', done:'Paid' }[est] || 'Waiting';
+    const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', awaiting:'Awaiting price', paid:'Paid', done:'Paid' }[est] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', awaiting:'paid', paid:'waiting', done:'waiting' }[est];
     // Correct an accidental status change (e.g. marked In Service by mistake). Not offered
     // from Paid — un-doing a finalized sale goes through the whole-ticket Reopen flow.

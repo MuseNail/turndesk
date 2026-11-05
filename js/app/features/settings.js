@@ -592,8 +592,15 @@ export function settingsOpenLeaf(contentId) {
   if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsOpenLeaf(contentId)); return; }
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
-  if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
-  if (item?.perm && !canDo(item.perm)) { showToast(`Your role doesn’t have access to ${item.label}.`); return; }
+  // Single source of truth for access (settingsLeafVisible) — the nav + search already filter on it;
+  // here we add the specific per-reason toast when it says no, so a future role-rule change is one spot.
+  if (item && !settingsLeafVisible(item)) {
+    const role = getActiveUser()?.role;
+    if (item.adminOnly && role !== 'admin') showToast('Admin only.');
+    else if (item.adminOrManager && !['admin', 'manager'].includes(role)) showToast('Admins & managers only.');
+    else if (item.perm && !canDo(item.perm)) showToast(`Your role doesn’t have access to ${item.label}.`);
+    return;
+  }
   _settingsView = 'leaf';
   _hideAllSettingsSections();
   document.getElementById('settings-root')?.classList.add('hidden');

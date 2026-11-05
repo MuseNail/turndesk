@@ -143,8 +143,10 @@ function _gsSearch(qstr) {
 // Result tap → jump. One dispatcher keeps the inline onclicks tiny and safe.
 export function gsGo(kind, a) {
   closeGlobalSearch();
-  // Respect an open unsaved price-menu editor before jumping away (mirrors showDashPanel's guard).
+  // Respect an open unsaved editor (price-menu / Services-Items catalog) before jumping away —
+  // mirrors showDashPanel, so a Customer/Appointment jump doesn't skip the guard the other jumps get.
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => gsGo(kind, a)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => gsGo(kind, a)); return; }
   if (kind === 'price') { window.openPriceMenu?.(); return; }   // show the full printed menu
   if (kind === 'setting') {
     // Action-type leaves (e.g. Customer Directory) navigate to their OWN target — go there directly,
