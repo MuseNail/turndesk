@@ -944,8 +944,8 @@ tailwind.config = {
               <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="turns-date-btn-val">Today</span>
             </button>
             <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button id="turns-csv-btn" onclick="exportTurnsCSV()" title="Export this day as CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button id="turns-pdf-btn" onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
           <div class="flex items-center gap-3">
             <!-- Add/Remove technicians button -->
@@ -968,6 +968,36 @@ tailwind.config = {
             <button onclick="showManualAdd()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
             </button>
+            <!-- iPad-only (≤1194px): collapses Appointments/Totals/Off-techs/CSV/PDF into one menu.
+                 The WRAPPER is hidden on desktop (so it adds no flex gap); reveal is in the ≤1194 CSS block. -->
+            <span id="turns-more-wrap" style="position:relative">
+              <button id="turns-more-btn" onclick="toggleTurnsMoreMenu()" title="More turns options" class="btn-secondary">
+                <span class="material-symbols-outlined" style="font-size:16px">more_horiz</span> More
+              </button>
+              <div id="turns-more-menu" style="position:absolute;right:0;top:44px;z-index:61;min-width:232px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;padding:6px 0">
+                <button onclick="toggleTurnsApptStrip();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">event_upcoming</span>
+                  Appointments <span id="tmore-appts-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
+                </button>
+                <button onclick="toggleTurnsTotals();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">payments</span>
+                  Totals <span id="tmore-totals-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
+                </button>
+                <button onclick="toggleTurnsHideOff();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">group</span>
+                  Off techs <span id="tmore-off-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
+                </button>
+                <div style="height:1px;background:var(--surface-container-high);margin:4px 0"></div>
+                <button onclick="exportTurnsCSV();closeTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">table_view</span>
+                  Export CSV
+                </button>
+                <button onclick="exportTurnsPDF();closeTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">picture_as_pdf</span>
+                  Export PDF
+                </button>
+              </div>
+            </span>
           </div>
         </div>
 

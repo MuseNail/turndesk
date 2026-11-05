@@ -156,6 +156,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.80', items: [
+    { icon: 'more_horiz', t: 'A tidier Turns toolbar on iPad', d: 'On tablets, the Turns tab toolbar is now a single clean row. The view switcher, date arrows, Technicians, and New Entry stay out front; Appointments, Totals, Off-techs, and the CSV/PDF exports moved into a “⋯ More” menu (the three view options show “Shown/Hidden” so you can tell their setting at a glance). The board also tucks up flush under the slimmer header. Nothing changes on a desktop or laptop.' },
+  ] },
   { v: 'td-v0.79', items: [
     { icon: 'tablet', t: 'A cleaner, shorter header on iPad', d: 'On tablets the top bar is now slimmer and less crowded, so the main tabs no longer get cut off. Chat, the Customer-screen button, and a Help & feedback shortcut moved into the menu behind your profile photo — and if you have unread chats or help replies, a small red number shows on your photo so you never miss them. Search, your tabs, the sync dot, and the version/reload badge all stay right where they were. Nothing changes on a desktop or laptop.' },
   ] },

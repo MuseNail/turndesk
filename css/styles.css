@@ -180,6 +180,10 @@
      utility can leak these onto desktop (>1194px). The ≤1194 block reveals them. */
   #acct-unread-badge { display: none !important; }
   #user-menu .tablet-only { display: none; }   /* id+class outranks Tailwind .flex (cf. the .hidden note below) */
+  /* Turns toolbar "⋯ More" overflow (v6.06) — hidden on desktop; the WRAPPER is the hidden element so
+     it leaves no flex gap. Revealed only in the ≤1194 block. id-only display so Tailwind can't leak it. */
+  #turns-more-wrap { display: none !important; }
+  #turns-more-menu { display: none !important; }
 
   /* ── iPad / tablet (≤1194px) ─────────────────────
      1194 (not 1180) so an 11" iPad is covered in BOTH orientations — 11" Pro
@@ -208,6 +212,12 @@
     #conn-text { display: none !important; }
     /* The menu gained rows — let it scroll on a short landscape / Stage Manager window */
     #user-menu { max-height: calc(100dvh - 56px) !important; overflow-y: auto !important; }
+    /* Turns toolbar (v6.06): collapse the secondary controls into "⋯ More" so the toolbar is one row. */
+    #turns-more-wrap { display: inline-flex !important; }
+    #turns-csv-btn, #turns-pdf-btn, #turns-appts-toggle, #turns-totals-toggle, #turns-hideoff-toggle { display: none !important; }
+    #turns-more-menu.open { display: block !important; }
+    /* v6.05 left .dash-head sticking at top:62px while the header is 48px on tablet — a 14px gap. Tuck it flush. */
+    .dash-head { top: 48px !important; }
   }
 
   /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤834px) ──

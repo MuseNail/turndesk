@@ -554,6 +554,36 @@ function applyTurnsApptStripVisibility() {
   // +12 is the strip's bottom margin (mb-3).
   if (panel) { const extra = (!hide && strip) ? strip.offsetHeight + 12 : 0; panel.style.setProperty('--turns-offset', (186 + extra) + 'px'); }
 }
+
+// ── Turns toolbar "⋯ More" overflow (iPad ≤1194px) ────────────────────────────
+// On tablet the secondary toolbar controls collapse into one menu that reuses the
+// existing toggle/export handlers. It mirrors live state by reading the module vars
+// DIRECTLY — the three localStorage flags have different default rules, so a uniform
+// re-parse would mis-show Totals as hidden on a fresh device.
+export function renderTurnsMoreMenu() {
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('tmore-appts-state',  _turnsApptShow   ? 'Shown'  : 'Hidden');
+  set('tmore-totals-state', _turnsTotalsShow ? 'Shown'  : 'Hidden');
+  set('tmore-off-state',    _turnsHideOff    ? 'Hidden' : 'Shown');   // _turnsHideOff true = off-techs HIDDEN
+}
+export function toggleTurnsMoreMenu() {
+  const m = document.getElementById('turns-more-menu');
+  if (!m) return;
+  if (m.classList.toggle('open')) renderTurnsMoreMenu();   // re-click closes; opening re-mirrors state
+}
+export function closeTurnsMoreMenu() {
+  document.getElementById('turns-more-menu')?.classList.remove('open');
+}
+// Dismiss on an outside tap — same shape as the account menu (auth.js): ONE module-level
+// listener, no stopPropagation, so taps on the menu's own rows (inside #turns-more-wrap)
+// keep it open (toggle rows re-mirror; export rows close explicitly).
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('turns-more-menu');
+  if (!m || !m.classList.contains('open')) return;
+  if (e.target.closest?.('#turns-more-wrap')) return;
+  m.classList.remove('open');
+});
+
 export function renderTurnsApptStrip() {
   const host = document.getElementById('turns-appts-cards'); if (!host) return;
   const sub = document.getElementById('turns-appts-sub');
