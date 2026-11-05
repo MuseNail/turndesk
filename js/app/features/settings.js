@@ -224,6 +224,13 @@ export function renderTurnsSettings() {
     </div>`;
   const precOpts = [['bonusFirst', 'Bonus → Half → Full (bonus wins)'], ['highestValue', 'Highest value wins (Full → Half → Bonus)'], ['costWins', 'Price decides (ignore service tags when priced)']];
   el.innerHTML = `
+    <div class="mb-3 pb-3 border-b border-surface-container-high">
+      <label class="flex items-center gap-2 cursor-pointer mb-1">
+        <input type="checkbox" class="w-5 h-5 accent-primary" ${c.countOnAssign ? 'checked' : ''} onchange="toggleTurnFlag('countOnAssign', this.checked)">
+        <span class="font-headline font-semibold text-on-surface">Count a turn when assigned</span>
+      </label>
+      <p class="pl-7 text-[11px] font-body text-on-surface-variant">On: a turn counts the moment a customer is assigned to a tech — waiting, in service, or done — using the service's base price. Off: a turn counts only once the service is marked Done or a price is entered. Either way, a service with no base price shows a “?” after the count until it's priced.</p>
+    </div>
     <div class="mb-3">
       <label class="flex items-center gap-2 cursor-pointer mb-1">
         <input type="checkbox" class="w-5 h-5 accent-primary" ${c.halfEnabled ? 'checked' : ''} onchange="toggleTurnFlag('halfEnabled', this.checked)">

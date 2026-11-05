@@ -291,7 +291,7 @@ function renderFloorStaffRow() {
         ${statusChip}${timerHtml}
       </div>
       <div class="flex flex-col items-center flex-shrink-0" style="min-width:34px">
-        <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t</span>
+        <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t${techTurns.unknown > 0 ? '<span title="Has assigned service(s) with no price yet" style="color:#b0612a">?</span>' : ''}</span>
         ${techTurns.bonus > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${techTurns.bonus}b</span>` : ''}
       </div>
     </div>`;

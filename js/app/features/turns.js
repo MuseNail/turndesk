@@ -70,6 +70,7 @@ export function getTurnConfig() {
     halfByCost: true, halfByService: false,
     bonusByCost: true, bonusByService: true,
     precedence: 'bonusFirst',
+    countOnAssign: true,   // count a turn as soon as a customer is assigned (any status), via the base price
   };
   const stored = cfg().turn_config || {};
   const merged = { ...defaults, ...stored };
@@ -137,17 +138,19 @@ export function classifyTurn(cost, serviceId) {
   });
 }
 
-// Status-aware class (Item A): a DONE / awaiting-price service (status 'complete') counts even
-// before it's priced, using the service's EXPECTED price (its baseCost) — reclassifying to the real
-// value once a price is entered. Not-complete-and-unpriced → 'unpriced' (not counted, as before),
-// and a complete service with no expected price also stays 'unpriced' (no "provisional full" guess).
+// Status-aware class: an unpriced service counts via its EXPECTED price (baseCost) — reclassified to
+// the real value once a price is entered. WHEN it starts counting depends on config.countOnAssign:
+//   on  (default) → as soon as it's assigned, at ANY status (waiting / in service / done)
+//   off           → only once it's DONE ('complete') — the earlier count-at-Done behavior
+// Either way, no base price + no entered price → 'unpriced' (not counted; the board shows a "?").
 // A comp keeps its real a.cost, so it classifies by that. This NEVER writes a.cost.
 export function turnClassOf(a) {
   if (!a) return 'unpriced';
+  const c = getTurnConfig();
   const priced = (a.cost || 0) > 0;
-  const expected = priced ? a.cost
-    : (a.status === 'complete' ? (svc(a.serviceId)?.baseCost || 0) : 0);
-  return classifyAmount(expected || 0, a.serviceId || '', getTurnConfig(), {
+  const countEarly = c.countOnAssign || a.status === 'complete';
+  const expected = priced ? a.cost : (countEarly ? (svc(a.serviceId)?.baseCost || 0) : 0);
+  return classifyAmount(expected || 0, a.serviceId || '', c, {
     isBonusSvc: isAlwaysBonusService(a.serviceId),
     isHalfSvc: isHalfService(a.serviceId),
   });
@@ -157,7 +160,8 @@ export function turnClassOf(a) {
 // expected price on a done/awaiting-price service that isn't priced yet — the number may shift when a
 // real price lands. A 'bonus' shows the word "Bonus" (keeps its teal pill), and 'unpriced' shows '?'.
 export function isEstimatedTurn(a, tt) {
-  return (a.cost || 0) === 0 && a.status === 'complete' && (tt === 'full' || tt === 'half');
+  const countEarly = getTurnConfig().countOnAssign || a.status === 'complete';
+  return (a.cost || 0) === 0 && countEarly && (tt === 'full' || tt === 'half');
 }
 
 // The rotation, excluding any ids that are blank or belong to deactivated staff
@@ -202,13 +206,14 @@ export function removeTurnSkip(skipId) {
 }
 
 export function getTechTurns(techId) {
-  let full = 0, half = 0, bonus = 0;
+  let full = 0, half = 0, bonus = 0, unknown = 0;
   getTechAllAssignments(techId).forEach(({ assignment: a }) => {
     const t = turnClassOf(a);
     if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
+    else if (t === 'unpriced') unknown++;   // assigned but can't be counted yet (no base/typed price) → "?" on the board
   });
   full += todaySkips(techId).length;   // each manual skip counts as a full turn
-  return { full, half, bonus, total: full + half };
+  return { full, half, bonus, total: full + half, unknown };
 }
 
 export function getTechStatusColor(staffId) {
@@ -566,9 +571,12 @@ export function renderTurnsTechGrid() {
       ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${avPres.ring}">`
       : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${avPres.ring}20;border-color:${avPres.ring};color:${avPres.ring}">${st.name.charAt(0).toUpperCase()}</div>`;
     const isHalf = !Number.isInteger(turns.total) && turns.total > 0;
+    // A trailing "?" flags assigned work that can't be counted yet (no base/typed price) — added
+    // after the count, never replacing it (title explains it on hover).
+    const unk = turns.unknown > 0 ? `<span title="Has assigned service(s) with no price yet" style="color:#b0612a">?</span>` : '';
     const turnDisplay = turns.total > 0
-      ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
-      : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
+      ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t${unk}</span>`
+      : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t${unk}</span>`;
     // The turn count + billed total live in their own fixed column (turnsCountCol, below); this left
     // column is just the tech's photo, name, and status.
     const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">

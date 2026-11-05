@@ -13,6 +13,7 @@ const DEF = {
   halfByCost: true, halfByService: false,
   bonusByCost: true, bonusByService: true,
   precedence: 'bonusFirst',
+  countOnAssign: true,
 };
 const f = (isBonusSvc = false, isHalfSvc = false) => ({ isBonusSvc, isHalfSvc });
 
@@ -130,10 +131,16 @@ test('turnClassOf: complete + unpriced counts via the expected price (baseCost)'
   assert.equal(turnClassOf({ serviceId: 's1', cost: 0, status: 'complete' }), 'full'); // 30 >= 28
 });
 
-test('turnClassOf: in-service + unpriced is NOT counted, even with an expected price', () => {
+test('turnClassOf: countOnAssign OFF — in-service + unpriced is NOT counted (base price ignored until Done)', () => {
   getState().config.services = [{ id: 's1', baseCost: 30 }];
-  getState().config.turn_config = {};
+  getState().config.turn_config = { countOnAssign: false };
   assert.equal(turnClassOf({ serviceId: 's1', cost: 0, status: 'inservice' }), 'unpriced');
+});
+test('turnClassOf: countOnAssign ON (default) — waiting/in-service + unpriced counts via the base price', () => {
+  getState().config.services = [{ id: 's1', baseCost: 30 }];
+  getState().config.turn_config = {};   // default countOnAssign = true
+  assert.equal(turnClassOf({ serviceId: 's1', cost: 0, status: 'inservice' }), 'full'); // 30 >= 28
+  assert.equal(turnClassOf({ serviceId: 's1', cost: 0, status: 'waiting' }), 'full');
 });
 
 test('turnClassOf: complete + NO expected price stays unpriced (exactly as today)', () => {
@@ -158,9 +165,13 @@ test('isEstimatedTurn: false for bonus (shows "Bonus", not an estimate) and unpr
   assert.equal(isEstimatedTurn({ cost: 0, status: 'complete' }, 'bonus'), false);
   assert.equal(isEstimatedTurn({ cost: 0, status: 'complete' }, 'unpriced'), false);
 });
-test('isEstimatedTurn: false once priced, and false while still in service', () => {
+test('isEstimatedTurn: priced is never estimated; countOnAssign gates the unpriced non-complete case', () => {
+  getState().config.turn_config = {};   // default on
   assert.equal(isEstimatedTurn({ cost: 30, status: 'complete' }, 'full'), false);
-  assert.equal(isEstimatedTurn({ cost: 0, status: 'inservice' }, 'full'), false);
+  assert.equal(isEstimatedTurn({ cost: 0, status: 'inservice' }, 'full'), true);   // counted early on assignment → provisional "~"
+  getState().config.turn_config = { countOnAssign: false };
+  assert.equal(isEstimatedTurn({ cost: 0, status: 'inservice' }, 'full'), false);  // not counted → no estimate
+  getState().config.turn_config = {};
 });
 
 // ── getTechTurns integration: proves Item A counting + Item D priced-path parity over a real queue ──
@@ -184,10 +195,28 @@ test('getTechTurns tallies priced, expected-price (done-unpriced), comped and al
     E('e5', { serviceId: 'svAB', cost: 0, status: 'inservice' }),          // always-bonus unpriced -> bonus
   ];
   const t = getTechTurns('t1');
-  assert.deepEqual(t, { full: 3, half: 0, bonus: 1, total: 3 });
+  assert.deepEqual(t, { full: 3, half: 0, bonus: 1, total: 3, unknown: 1 });   // e3 (no base price) is unknown "?"
   getState().queue = [];
   getState().config.services = [];
   getState().config.bonus_services = [];
+});
+
+test('getTechTurns: countOnAssign ON counts a waiting priced-by-base service; a no-base-price one stays unknown ("?")', () => {
+  const now = new Date().toISOString(), ms = Date.now();
+  getState().config.turns_skips = []; getState().config.bonus_services = []; getState().config.half_services = [];
+  getState().config.services = [{ id: 'g', baseCost: 30 }, { id: 'n' }];   // g has a base price, n has none
+  const E = (id, a) => ({ id, name: id, checkinTime: now, status: a.status, assignments: [{ techId: 't2', assignedAt: ms, ...a }] });
+  getState().queue = [
+    E('w1', { serviceId: 'g', cost: 0, status: 'waiting' }),   // base $30 → counts when ON
+    E('w2', { serviceId: 'n', cost: 0, status: 'waiting' }),   // no base price → unknown "?"
+  ];
+  getState().config.turn_config = {};                          // ON (default)
+  const on = getTechTurns('t2');
+  assert.equal(on.total, 1); assert.equal(on.unknown, 1);
+  getState().config.turn_config = { countOnAssign: false };    // OFF → waiting cost-based not counted
+  const off = getTechTurns('t2');
+  assert.equal(off.total, 0); assert.equal(off.unknown, 2);
+  getState().queue = []; getState().config.services = []; getState().config.turn_config = {};
 });
 
 test('isHalfService is guarded: no throw when half_services is undefined', () => {
