@@ -111,6 +111,14 @@ export function generalBonusCount(techTurns, dedServices) {
   const dedSum = (dedServices || []).reduce((s, x) => s + (ded[x.id] || 0), 0);
   return Math.max(0, (techTurns.bonus || 0) - dedSum);
 }
+// Pure decision for the per-tech dedicated-counter display (v6.08). On iPad (≤1194) ONE service counter
+// folds into the main turn box; the rest roll into +Nb. `merge` = show that inline line (and the caller
+// subtracts ONLY techDed[0] from +Nb so the others don't vanish); `showColumn` = the desktop separate
+// column. A tech who does none of the dedicated services (techDedLen 0) gets neither.
+export function turnsDedDisplayPlan(onTablet, showDedicated, techDedLen) {
+  const merge = !!onTablet && !!showDedicated && techDedLen > 0;
+  return { merge, showColumn: !!showDedicated && !onTablet };
+}
 export function isHalfService(serviceId) { return (cfg().half_services || []).includes(serviceId); }
 export function saveHalfServices(ids) { dispatch('config.set', { key: 'half_services', value: ids }); }
 
@@ -570,6 +578,9 @@ export function toggleTurnsActive() {
   showToast(_turnsHideActive ? 'Active list hidden (this device) ✓' : 'Active list shown (this device) ✓');
 }
 document.addEventListener('DOMContentLoaded', applyTurnsHideActive); applyTurnsHideActive();
+// Reflow the tech grid when a window crosses the 1194 tablet boundary (service-counter merge layout).
+// On a fixed-width iPad this never fires; mirrors the header's listener. renderTurnsTechGrid is null-safe.
+window.matchMedia?.('(max-width: 1194px)')?.addEventListener?.('change', renderTurnsTechGrid);
 
 // ── Turns toolbar "⋯ More" overflow (iPad ≤1194px) ────────────────────────────
 // On tablet the secondary toolbar controls collapse into one menu that reuses the
@@ -715,6 +726,8 @@ export function renderTurnsTechGrid() {
   const _tc = getTurnConfig();
   const dedServices = getDedicatedBonusServices();
   const showDedicated = _tc.dedicatedBonusCounters && _tc.bonusEnabled && _tc.bonusByService && dedServices.length > 0;
+  // iPad (≤1194): merge the service counters into the main turn box and show only the first one.
+  const onTablet = !!window.matchMedia?.('(max-width: 1194px)')?.matches;
 
   const rows = order.map(staffId => {
     const st = staffById(staffId);
@@ -842,13 +855,20 @@ export function renderTurnsTechGrid() {
     // do can never silently remove a (manually-assigned) bonus turn from their general +Nb.
     const techDed = showDedicated ? dedServices.filter(s => _techDoesService(st, s.id)) : [];
     const dedCounts = techDed.map(s => turns.dedicated[s.id] || 0);
-    const generalBonus = showDedicated ? generalBonusCount(turns, techDed) : turns.bonus;
+    // On tablet, fold the first service counter into the main box; subtract ONLY that shown service from
+    // +Nb so the other dedicated bonuses roll into +Nb (never vanish). Desktop subtracts all (unchanged).
+    const dedPlan = turnsDedDisplayPlan(onTablet, showDedicated, techDed.length);
+    const generalBonus = !showDedicated ? turns.bonus
+                       : generalBonusCount(turns, dedPlan.merge ? techDed.slice(0, 1) : techDed);
+    const mergedDedLine = dedPlan.merge
+      ? `<div class="flex items-baseline justify-center gap-1 leading-none mt-0.5" title="${escHtml(techDed[0].label)} — bonus add-on"><span class="text-[9px] font-body font-semibold uppercase tracking-wide text-outline-variant truncate" style="max-width:28px">${escHtml(techDed[0].abbr)}</span><span class="text-sm font-headline font-bold leading-none ${dedCounts[0] > 0 ? 'text-secondary' : 'text-outline-variant'}">${dedCounts[0]}</span></div>`
+      : '';
     const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
-      ${turnDisplay}${generalBonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${generalBonus}b</span>` : ''}
+      ${turnDisplay}${generalBonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${generalBonus}b</span>` : ''}${mergedDedLine}
     </div>`;
     // Dedicated add-on counter column (right of the turn count): one line per add-on, "ABBR N" — the
     // 3 services stacked. Same bonus color (text-secondary) as the "+Nb" it split from; a zero reads greyed.
-    const bonusDedicatedCol = showDedicated
+    const bonusDedicatedCol = dedPlan.showColumn
       ? `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-r border-surface-container-high px-0.5 gap-0.5" style="width:var(--turns-totalcol-w,72px)">
           ${techDed.map((s, i) => `<div class="flex items-baseline justify-center gap-1 leading-none" title="${escHtml(s.label)} — bonus add-on">
             <span class="text-[9px] font-body font-semibold uppercase tracking-wide text-outline-variant truncate" style="max-width:28px">${escHtml(s.abbr)}</span>
