@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.73', items: [
+    { icon: 'swap_vert', t: 'Turns board polish', d: 'A few front-desk tweaks: (1) a technician who’s “Next up” now keeps their real status showing (Available / On break / Working now) with a small ↑ flag + teal highlight, instead of the status being hidden. (2) New “Off techs” button in the Turns toolbar hides technicians who’ve clocked out, so the board shows just who’s working — per device, tap again to show them (and anyone still finishing a customer always stays visible). (3) The general bonus counter and the per-service bonus counters are always the same width and resize together. (4) Tapping a technician’s photo opens a wider menu that lists what they can/can’t do in two columns, so long service lists don’t scroll.' },
+  ] },
   { v: 'td-v0.72', items: [
     { icon: 'sort', t: 'Paid customers sort by checkout time', d: 'In the Queue tab, the “Paid Today” list now shows customers in the order they checked out — the most recent checkout on top — instead of by when they checked in. So whoever you just rang up sits right at the top. The other groups (Waiting, In Service, Complete) are unchanged.' },
   ] },

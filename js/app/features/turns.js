@@ -396,7 +396,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); _applyTurnsTotalColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsHideOffBtn(); _applyTurnsTechColW(); _applyTurnsTotalColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
 
 // ── Per-device "$ billed" totals show/hide (Turns toolbar) ────────────────────
 // Device-local (like the text size) — hide each tech's billed dollar total on a
@@ -422,6 +422,27 @@ export function toggleTurnsTotals() {
   localStorage.setItem('turndesk_turns_totals', _turnsTotalsShow ? '1' : '0');
   _applyTurnsTotals();
   showToast(_turnsTotalsShow ? 'Tech totals shown (this device) ✓' : 'Tech totals hidden (this device) ✓');
+}
+
+// NL5: hide/show clocked-out ("Off") technicians on the board (per device, like Totals/Appointments).
+let _turnsHideOff = localStorage.getItem('turndesk_turns_hide_off') === '1';
+function _applyTurnsHideOffBtn() {
+  const btn = document.getElementById('turns-hideoff-toggle');
+  if (!btn) return;
+  // Icon stays the static people glyph (distinct from the Totals eye); the highlight + title show state.
+  btn.classList.toggle('bg-primary', _turnsHideOff);
+  btn.classList.toggle('text-on-primary', _turnsHideOff);
+  btn.classList.toggle('border-primary', _turnsHideOff);
+  btn.classList.toggle('text-on-surface-variant', !_turnsHideOff);
+  btn.classList.toggle('border-surface-container-high', !_turnsHideOff);
+  btn.title = _turnsHideOff ? 'Off technicians hidden — tap to show' : 'Off technicians shown — tap to hide';
+}
+export function toggleTurnsHideOff() {
+  _turnsHideOff = !_turnsHideOff;
+  localStorage.setItem('turndesk_turns_hide_off', _turnsHideOff ? '1' : '0');
+  _applyTurnsHideOffBtn();
+  renderTurnsTechGrid();
+  showToast(_turnsHideOff ? 'Off techs hidden (this device) ✓' : 'Off techs shown (this device) ✓');
 }
 
 // ── Per-device Turns text size (C8) ───────────────
@@ -554,7 +575,12 @@ export function renderTurnsTechGrid() {
 
   const _db = document.getElementById('turns-date-btn-val'); if (_db) _db.textContent = dateBtnLabel(null);
 
-  const order = getActiveTurnsOrder();
+  // NL5: optionally hide clocked-out ("Off") techs from the board (per device) — but NEVER hide one who
+  // still holds a live guest (a waiting or in-service customer), or that customer vanishes from the board.
+  const order = getActiveTurnsOrder().filter(id => {
+    if (!(_turnsHideOff && (cfg().turns_off || []).includes(id))) return true;
+    return techHasPendingAssignment(id) || getActiveTechEntries(id).length > 0;
+  });
   const partyLetters = partyLetterMap(q());   // same party letter as the queue/side cards
   // A single customer can show up as several cards in the grid — multiple services, whether
   // with the SAME tech or split across techs. Tag every one of that customer's slots with a
@@ -568,7 +594,10 @@ export function renderTurnsTechGrid() {
   const sep = turnsSep();
   let activeCount = 0;
   if (order.length === 0) {
-    grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">swap_vert</span>No technicians added today.<br>Click <strong>Technicians</strong> to set up the turn order.</div>';
+    const allHiddenByOff = _turnsHideOff && getActiveTurnsOrder().length > 0;   // techs exist but the Off filter hid them all
+    grid.innerHTML = allHiddenByOff
+      ? '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">group</span>All technicians are Off right now.<br>Tap <strong>Off techs</strong> to show them.</div>'
+      : '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">swap_vert</span>No technicians added today.<br>Click <strong>Technicians</strong> to set up the turn order.</div>';
     const el = document.getElementById('turns-active-count'); if (el) el.textContent = '0';
     return;
   }
@@ -615,14 +644,19 @@ export function renderTurnsTechGrid() {
     // tech due for the next walk-in still gets the filled teal "Next up" chip. getTechStatusColor
     // already uses this red/green on the floor; this brings the Turns chip in line.
     const _dot = c => `<span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block"></span>`;
+    // avPres = the tech's TRUE availability. "Next up" is shown as its OWN pill next to this (NL4), so
+    // it never hides the Available/On-break status; the teal avatar ring still flags the next-up tech.
     const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', lead: _dot('#b0b6ba'), label: 'Off' }
                  : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', lead: _dot('#e0a83a'), label: 'On break' }
                  : sc.label === 'In Service' ? { ring: '#fa746f', chip: 'background:#fdecea;color:#c0362f', lead: _dot('#fa746f'), label: 'Working now' }
-                 : isNextUp                  ? { ring: '#1a5252', chip: 'background:#1a5252;color:#fff', lead: `<span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>`, label: 'Next up' }
                  :                             { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', lead: _dot('#2a7a4f'), label: 'Available' };
+    const ringColor = isNextUp ? '#1a5252' : avPres.ring;
+    // Icon-only so it sits beside the Available chip without wrapping the row (the teal ring + inset bar
+    // already read as "next up"; the title spells it out on hover/press).
+    const nextUpPill = isNextUp ? `<span title="Next up" aria-label="Next up" class="px-1 py-0.5 rounded-full leading-none inline-flex items-center flex-shrink-0" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:12px">arrow_upward</span></span>` : '';
     const photo = st.photo
-      ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${avPres.ring}">`
-      : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${avPres.ring}20;border-color:${avPres.ring};color:${avPres.ring}">${st.name.charAt(0).toUpperCase()}</div>`;
+      ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${ringColor}">`
+      : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${ringColor}20;border-color:${ringColor};color:${ringColor}">${st.name.charAt(0).toUpperCase()}</div>`;
     const isHalf = !Number.isInteger(turns.total) && turns.total > 0;
     // A trailing "?" flags assigned work that can't be counted yet (no base/typed price) — added
     // after the count, never replacing it (title explains it on hover).
@@ -636,7 +670,7 @@ export function renderTurnsTechGrid() {
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0" style="flex:1">
         <div class="leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0;display:block">${st.name}</span></div>
-        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span></div>
+        <div class="flex items-center gap-1 mt-0.5 flex-wrap"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span>${nextUpPill}</div>
         <div class="turns-billed text-[11px] font-headline font-bold leading-none mt-0.5" style="color:#1a5252">$${billed.toFixed(0)}</div>
       </div></div>`;
 
@@ -726,7 +760,7 @@ export function renderTurnsTechGrid() {
     // Dedicated add-on counter column (right of the turn count): one line per add-on, "ABBR N" — the
     // 3 services stacked. Same bonus color (text-secondary) as the "+Nb" it split from; a zero reads greyed.
     const bonusDedicatedCol = showDedicated
-      ? `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-r border-surface-container-high px-0.5 gap-0.5" style="width:52px">
+      ? `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-r border-surface-container-high px-0.5 gap-0.5" style="width:var(--turns-totalcol-w,72px)">
           ${techDed.map((s, i) => `<div class="flex items-baseline justify-center gap-1 leading-none" title="${escHtml(s.label)} — bonus add-on">
             <span class="text-[9px] font-body font-semibold uppercase tracking-wide text-outline-variant truncate" style="max-width:28px">${escHtml(s.abbr)}</span>
             <span class="text-sm font-headline font-bold leading-none ${dedCounts[i] > 0 ? 'text-secondary' : 'text-outline-variant'}">${dedCounts[i]}</span>
@@ -775,10 +809,12 @@ export function renderTurnsTechGrid() {
       document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
     });
     grid.appendChild(handle);
-    // Second handle at the turn-count column's right edge (techCol + gap-2(8px) + totalCol).
+    // Handle at the turn-count column's right edge — which, when the dedicated bonus column shows, is the
+    // SEAM between the two counter columns. Both share --turns-totalcol-w (NL7), so a 1:1 drag of this one
+    // handle keeps them equal and resizes both together.
     const thandle = document.createElement('div');
     thandle.className = 'turns-col-resizer';
-    thandle.title = 'Drag to resize the turn-count column';
+    thandle.title = 'Drag to resize the counter column(s)';
     thandle.style.left = (turnsTechColW() + 8 + turnsTotalColW() - 3) + 'px';
     thandle.addEventListener('pointerdown', ev => {
       ev.preventDefault(); ev.stopPropagation();

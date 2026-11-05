@@ -940,6 +940,10 @@ tailwind.config = {
             <button onclick="toggleTurnsTotals()" id="turns-totals-toggle" title="Show/hide each tech's billed total" class="btn-secondary">
               <span class="material-symbols-outlined" id="turns-totals-icon" style="font-size:16px">visibility</span> Totals
             </button>
+            <!-- Show/hide clocked-out ("Off") technicians (per device) -->
+            <button onclick="toggleTurnsHideOff()" id="turns-hideoff-toggle" title="Show/hide technicians who are Off" class="btn-secondary">
+              <span class="material-symbols-outlined" id="turns-hideoff-icon" style="font-size:16px">group</span> <span id="turns-hideoff-label">Off techs</span>
+            </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
             <button onclick="showManualAdd()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
