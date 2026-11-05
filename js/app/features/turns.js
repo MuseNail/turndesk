@@ -216,6 +216,19 @@ export function getTechTurns(techId) {
   return { full, half, bonus, total: full + half, unknown };
 }
 
+// ── Item 3: don't recommend a tech holding a still-waiting (assigned, not-started) customer ──
+// A tech reads "Available" while a customer is assigned-but-waiting; these keep such a tech out of the
+// suggestions AND the "Next up" badge — but if EVERY available tech is holding someone, the pool falls
+// back to the full set so there's always a who's-next (owner's rule).
+export function _hasPendingAssignment(statuses) { return (statuses || []).some(s => s === 'waiting'); }
+export function techHasPendingAssignment(techId) {
+  return _hasPendingAssignment(getTechAllAssignments(techId).map(({ entry, assignment }) => getAssignmentStatus(entry, assignment)));
+}
+export function _dropHolders(ids, holdsFn) {
+  const kept = (ids || []).filter(id => !holdsFn(id));
+  return kept.length ? kept : (ids || []);
+}
+
 export function getTechStatusColor(staffId) {
   if (cfg().turns_off.includes(staffId))   return { bg: '#f3f4f6', text: '#9ca3af', label: 'Off' };
   if (cfg().turns_break.includes(staffId)) return { bg: '#f5c870', text: '#3a2800', label: 'On Break' };
@@ -251,14 +264,15 @@ export function suggestTechForService(serviceId) {
     return getActiveTechEntries(id).length === 0;
   });
   if (eligible.length === 0) return null;
+  const pool = _dropHolders(eligible, techHasPendingAssignment);   // skip techs holding a waiting customer (fallback if all are)
   // Fewest turns → (for a bonus service) fewest bonus turns → rotation order.
-  eligible.sort((a, b) => {
+  pool.sort((a, b) => {
     const ta = getTechTurns(a), tb = getTechTurns(b);
     if (ta.total !== tb.total) return ta.total - tb.total;
     if (isBonus && ta.bonus !== tb.bonus) return ta.bonus - tb.bonus;
     return order.indexOf(a) - order.indexOf(b);
   });
-  const best = eligible[0];
+  const best = pool[0];
   return { techId: best, techName: staffById(best)?.name || '?' };
 }
 // ── Coordinated per-customer suggestions (one tech per service) ───────────────
@@ -292,8 +306,9 @@ export function suggestTechsForEntry(entry) {
     return st === 'waiting' && !(a && a.techId);
   });
   if (!need.length) return out;
-  const eligibleBase = order.filter(id =>
-    !cfg().turns_break.includes(id) && !cfg().turns_off.includes(id) && getActiveTechEntries(id).length === 0);
+  const eligibleBase = _dropHolders(   // skip techs holding a waiting customer (fallback if all are)
+    order.filter(id => !cfg().turns_break.includes(id) && !cfg().turns_off.includes(id) && getActiveTechEntries(id).length === 0),
+    techHasPendingAssignment);
   const used = new Set();
   const canDo = (id, sid) => _techDoesService(staffById(id), sid);
   // kind 'bonus' = pure fairness rotation (fewest turns → fewest bonus → order). kind 'regular'
@@ -534,9 +549,10 @@ export function renderTurnsTechGrid() {
   // Who gets the next walk-in: the AVAILABLE tech with the fewest turns; a tie goes to whoever
   // is higher in the turn order (scan top-down, replace only on strictly fewer turns). Flagged
   // in place — the row order itself never changes.
+  // Candidates = Available, minus techs holding a still-waiting customer (fallback to all Available if that empties it).
+  const _availForNext = _dropHolders(order.filter(sid => getTechStatusColor(sid).label === 'Available'), techHasPendingAssignment);
   let nextUpId = null, _nextUpTurns = Infinity;
-  for (const sid of order) {
-    if (getTechStatusColor(sid).label !== 'Available') continue;
+  for (const sid of _availForNext) {
     const tt = getTechTurns(sid).total;
     if (tt < _nextUpTurns) { _nextUpTurns = tt; nextUpId = sid; }
   }

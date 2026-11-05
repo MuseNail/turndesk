@@ -11,7 +11,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries } from './turns.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment } from './turns.js';
 import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
 
@@ -265,9 +265,11 @@ function renderFloorStaffRow() {
   el.style.display = '';
   const ids = getActiveTurnsOrder();
   if (!ids.length) { el.innerHTML = '<div class="text-[11px] font-body text-on-surface-variant italic p-2">No technicians in the rotation.</div>'; return; }
-  // Next walk-in: the available tech with the fewest turns; tie → first in order.
+  // Next walk-in: the available tech with the fewest turns; tie → first in order. Skip techs holding a
+  // still-waiting customer (fallback to all Available if that empties the pool).
+  const _availForNext = _dropHolders(ids.filter(id => getTechStatusColor(id).label === 'Available'), techHasPendingAssignment);
   let nextUpId = null, _nuTurns = Infinity;
-  for (const id of ids) { if (getTechStatusColor(id).label !== 'Available') continue; const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
+  for (const id of _availForNext) { const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
   el.innerHTML = ids.map(id => {
     const st = staffById(id); if (!st) return '';
     const c = getTechStatusColor(id);

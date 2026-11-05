@@ -154,6 +154,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.68', items: [
+    { icon: 'person_search', t: 'Who’s-next skips a technician already holding a waiting guest', d: 'When the app suggests the next technician (in Assign & Price and the “Next up” badge on the Turns board and Floor Plan), it now skips anyone who already has a customer assigned but not yet started — so a waiting guest doesn’t get piled onto a tech who’s about to be busy. If every available tech is already holding someone, it falls back to the full list so there’s always a next-up.' },
+    { icon: 'event_upcoming', t: 'Technicians see their next appointment on the Now screen', d: 'The technician app’s “Now” view shows the next upcoming appointment right at the top — time, guest, and services — so techs don’t have to flip to the Appointments tab. Tap it to open the full tab.' },
+  ] },
   { v: 'td-v0.67', items: [
     { icon: 'how_to_reg', t: 'Turns can count the moment a customer is assigned', d: 'A turn now counts as soon as a customer is assigned to a technician — waiting, in service, or done — using the service’s base price (it settles to the exact number once a real price is entered). Prefer the old way? Turn it off in Settings → Business → Turn Rules (“Count a turn when assigned”) to go back to counting only at Done/priced. Either way, a service with no base price shows a small “?” after the technician’s turn count until it’s priced, so you can see there’s unpriced work pending.' },
   ] },

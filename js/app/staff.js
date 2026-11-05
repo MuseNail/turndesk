@@ -371,10 +371,32 @@ function renderMain(meStaff) {
     <div>${_view === 'active' ? renderActiveHtml() : _view === 'appts' ? renderApptsHtml() : renderHistoryHtml()}</div>`;
 }
 
+// Item 2: the tech's NEXT upcoming appointment, shown inline at the top of the Now view so they
+// don't have to switch to the Appts tab. Tapping it opens the full Appts tab. Reads the same derived
+// _appts (from the synced store) the Appts tab uses — loadMyAppts(true) is synchronous + render-safe.
+function nextApptBannerHtml() {
+  loadMyAppts(true);
+  const now = Date.now();
+  const next = (_appts || []).filter(a => a && !a.noShow && a.endMs > now).sort((a, b) => a.startMs - b.startMs)[0];
+  if (!next) return '';
+  const d = new Date(next.startMs);
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const when = localDateStr(d) === todayStr() ? t : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${t}`;
+  const svcs = next.services && next.services.length ? ' · ' + esc(next.services.join(', ')) : '';
+  return `<button onclick="staffTab('appts')" class="w-full mb-3 rounded-2xl border border-surface-container-high bg-surface-container-lowest px-4 py-3 flex items-center gap-3 text-left active:scale-95 transition-all">
+    <span class="material-symbols-outlined text-primary" style="font-size:22px">event_upcoming</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-body font-semibold uppercase tracking-widest text-outline">Next appointment</div>
+      <div class="font-headline font-bold text-on-surface truncate">${when} · ${esc(next.name)}${svcs}</div>
+    </div>
+    <span class="material-symbols-outlined text-outline-variant flex-shrink-0" style="font-size:18px">chevron_right</span>
+  </button>`;
+}
 function renderActiveHtml() {
+  const banner = nextApptBannerHtml();
   const rows = myActiveAssignments(queue(), myId);
   if (rows.length === 0) {
-    return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
+    return banner + `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event_available</span>
       <div class="mt-3 text-xl font-headline font-bold">No one assigned to you</div>
       <div class="text-sm mt-1 text-outline-variant">A customer shows up here the moment the front desk assigns you.</div></div>`;
@@ -390,7 +412,7 @@ function renderActiveHtml() {
     const bi = b.items.some(x => x.status === 'inservice') ? 0 : 1;
     return ai - bi;
   });
-  return cards.map(({ entry, items }) => cardHtml(entry, items)).join('');
+  return banner + cards.map(({ entry, items }) => cardHtml(entry, items)).join('');
 }
 
 function cardHtml(entry, assignments) {
