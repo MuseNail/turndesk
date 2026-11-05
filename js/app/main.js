@@ -50,10 +50,11 @@ import * as billing from './features/billing.js';
 import * as support from './features/support.js';
 import * as waiver from './features/waiver.js';
 import * as pricemenuEditor from './features/pricemenu-editor.js';
+import * as bubblePrefs from './features/bubble-prefs.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver, pricemenuEditor]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver, pricemenuEditor, bubblePrefs]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -96,6 +97,7 @@ const MODAL_CLOSERS = [
   ['global-search-modal', search.closeGlobalSearch],
   ['whatsnew-modal', () => closeWhatsNew()],
   ['numpad-modal', utils.numpadConfirm],
+  ['bubble-info-popover', bubblePrefs.closeBubbleInfoPopover],   // W2-6: dismiss on nav/Esc so it never floats mis-anchored
 ];
 // Generic force-hide on navigation (does NOT invoke each modal's close fn, so a programmatic/
 // back nav isn't gated). User-initiated closes (Esc, backdrop tap, the X button) still run the
@@ -154,6 +156,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.74', items: [
+    { icon: 'view_agenda', t: 'Hide card details you don’t need (your own setting)', d: 'There’s a new “Card info” button on the Turns, Floor Plan, and Queue toolbar (same spot on all three). Tap it and you can uncheck Service time, Technician, and/or Service to hide those bits from the customer cards and declutter the board. It’s your own setting — it follows you to any device you sign in on and doesn’t change what anyone else sees. Everything is shown by default until you turn something off, and the customer’s name, wait time, status color, price, and station always stay. (Heads-up: “Service time” has nothing to hide on the Turns waiting/active cards, since those don’t show a per-service time — it affects the Floor tiles, the technician columns on the Turns board, and the Queue rows.)' },
+    { icon: 'swap_vert', t: 'Turns / Floor Plan / Queue switcher is in one consistent spot', d: 'The three-way switcher at the top of the Floor tab now sits in the exact same place and size on all three views (Turns, Floor Plan, Queue), instead of drifting to the center on the Floor plan. Small thing — it just makes hopping between the three feel steady.' },
+  ] },
   { v: 'td-v0.73', items: [
     { icon: 'swap_vert', t: 'Turns board polish', d: 'A few front-desk tweaks: (1) a technician who’s “Next up” now keeps their real status showing (Available / On break / Working now) with a small ↑ flag + teal highlight, instead of the status being hidden. (2) New “Off techs” button in the Turns toolbar hides technicians who’ve clocked out, so the board shows just who’s working — per device, tap again to show them (and anyone still finishing a customer always stays visible). (3) The general bonus counter and the per-service bonus counters are always the same width and resize together. (4) Tapping a technician’s photo opens a wider menu that lists what they can/can’t do in two columns, so long service lists don’t scroll.' },
   ] },
@@ -338,8 +344,12 @@ function renderDashSubnav(grp, activePanel) {
   document.querySelectorAll('.subnav-slot').forEach(s => { if (s.innerHTML) s.innerHTML = ''; });
   const global = document.getElementById('dash-subnav');
   if (!grp) { if (global) { global.classList.add('hidden'); global.innerHTML = ''; } return; }
-  const html = '<div class="subnav-seg">' + NAV_GROUPS[grp].panels.map(([id, icon, label]) =>
+  const seg = '<div class="subnav-seg">' + NAV_GROUPS[grp].panels.map(([id, icon, label]) =>
     `<button class="subnav-btn${id === activePanel ? ' on' : ''}" onclick="showDashPanel('${id}')"><span class="material-symbols-outlined" style="font-size:17px">${icon}</span><span class="subnav-label">${label}</span></button>`).join('') + '</div>';
+  // W2-6: the "Card info" button rides the floor-group switcher so it sits in the same spot on Turns/Floor/Queue.
+  const html = grp === 'floor'
+    ? `<div class="flex items-center gap-2 flex-wrap">${seg}${bubblePrefs.bubbleInfoButtonHtml()}</div>`
+    : seg;
   const slot = document.getElementById('subnav-slot-' + activePanel);
   if (slot) { slot.innerHTML = html; if (global) { global.classList.add('hidden'); global.innerHTML = ''; } }
   else if (global) { global.classList.remove('hidden'); global.innerHTML = html; }   // fallback row (Customers)

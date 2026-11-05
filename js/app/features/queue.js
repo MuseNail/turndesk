@@ -16,6 +16,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice, isTechPriced } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { getBubblePrefs } from './bubble-prefs.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview, flushAllManualCustNotes } from './square-customers.js';
 import { lastVisitsCompact, buildCombinedRecords } from './reports.js';
 
@@ -289,6 +290,7 @@ export function renderQueue() {
 function _ordinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 
 function buildQueueRow(e) {
+  const { hideTime, hideTech, hideSvc } = getBubblePrefs();   // W2-6 per-user bubble-info toggles
   const t = new Date(e.checkinTime);
   const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const serviceLabels = e.services.map(sid => svc(sid)?.label || sid).join(', ') || '—';
@@ -317,12 +319,14 @@ function buildQueueRow(e) {
     const ls = serviceLineStyle(effectiveServiceStatus(e, a));
     const hot = ls.key === 'inservice';
     const sti = serviceTimeInfo(a);
-    const tip = sti ? `<span class="flex-shrink-0" style="color:${sti.color};font-weight:700;margin-left:auto">${sti.text}</span>` : '';
+    const tip = (sti && !hideTime) ? `<span class="flex-shrink-0" style="color:${sti.color};font-weight:700;margin-left:auto">${sti.text}</span>` : '';
+    const stn = a.station ? '@' + escHtml(String(a.station)) : '';   // @station is a LOCATION, not the technician — it survives hideTech
+    const arrow = hideSvc ? '' : '→ ';   // no leading arrow when the service label it points from is hidden (matches the Turns cards)
     const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:5px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
     return `<div class="flex items-center gap-1 leading-tight rounded-r" style="${rowStyle}">
       <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
-      <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
-      ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
+      ${hideSvc ? '' : `<span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>`}
+      ${(tech && !hideTech) ? `<span class="text-on-surface-variant">${arrow}${escHtml(tech.name)}${stn ? ' ' + stn : ''}</span>` : (stn ? `<span class="text-on-surface-variant">${stn}</span>` : '')}
       ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (isAwaitingPrice(a) ? `<span class="font-semibold" style="color:#6b4fb0">Pending</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''))}
       ${tip}
       ${isTechPriced(a) ? `<span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">Price in ✓</span>` : ''}
@@ -373,7 +377,7 @@ function buildQueueRow(e) {
           ${apptBadge}${totalDisplay}
           ${timeEl}
         </div>
-        ${assignSummary ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
+        ${(assignSummary || hideSvc) ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + escHtml(e.phone) : ''}</div>

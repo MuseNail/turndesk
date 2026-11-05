@@ -526,7 +526,8 @@ tailwind.config = {
 
       <!-- ── FLOOR PLAN PANEL ── -->
       <div class="dash-panel" id="panel-floorplan">
-        <div class="flex items-center gap-2 mb-3 flex-wrap">
+        <!-- NL6: same sticky dash-head + top-aligned switcher as Queue/Turns so it sits in one place on all 3 -->
+        <div class="dash-head flex items-start gap-2 flex-wrap">
           <span class="subnav-slot" id="subnav-slot-floorplan" style="flex:0 1 auto"></span>
           <div id="floorplan-tray" class="flex-1 min-w-0"></div>
           <div class="flex gap-2 items-center flex-shrink-0">
@@ -554,7 +555,7 @@ tailwind.config = {
       <!-- ── QUEUE PANEL ── -->
       <div class="dash-panel" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
-        <div class="dash-head flex gap-2 flex-wrap items-center">
+        <div class="dash-head flex gap-2 flex-wrap items-start">
           <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
           <span class="subnav-slot" id="subnav-slot-queue" style="flex:0 1 auto"></span>
           <!-- History date picker -->
@@ -913,8 +914,9 @@ tailwind.config = {
 
       <!-- ── TURNS PANEL ── -->
       <div class="dash-panel active" id="panel-turns">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-y-2">
-          <div class="flex items-center gap-3">
+        <!-- NL6: sticky dash-head + top-aligned switcher, matching Floor/Queue -->
+        <div class="dash-head flex items-start justify-between gap-3 flex-wrap">
+          <div class="flex items-start gap-3 flex-wrap">
             <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
             <span class="subnav-slot" id="subnav-slot-turns" style="flex:0 1 auto"></span>
             <!-- Date picker — day history. Shows the relative word + the date. -->

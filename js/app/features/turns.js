@@ -9,6 +9,7 @@ import { normalizeNotesList, NOTE_MAX } from '../staff-notes-util.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus, isTechPriced } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { getBubblePrefs } from './bubble-prefs.js';
 import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
@@ -572,6 +573,7 @@ export function renderTurnsTechGrid() {
   const grid = document.getElementById('turns-tech-grid');
   if (!grid) return;
   if (turnsViewingHistory) { renderTurnsHistoryView(); return; }
+  const { hideTime, hideSvc } = getBubblePrefs();   // W2-6 (tech is the column header here, so hideTech is N/A)
 
   const _db = document.getElementById('turns-date-btn-val'); if (_db) _db.textContent = dateBtnLabel(null);
 
@@ -722,8 +724,8 @@ export function renderTurnsTechGrid() {
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${escHtml(e.name)}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel, estimated)}" ${estimated ? 'title="Estimated from the service’s expected price — updates when a real price is entered"' : ''}>${turnLabel}</span>` : ''}</div>
-            <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
-            ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
+            <div class="text-[10px] opacity-90 leading-tight">${[hideSvc ? null : svcLabel, a.station || null, costStr || null].filter(Boolean).join(' · ')}</div>
+            ${(() => { if (hideTime) return ''; const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
           </button></div>`;
       }
@@ -838,6 +840,7 @@ export function renderTurnsQueue() {
   const waitingList = document.getElementById('turns-waiting-list');
   const activeList  = document.getElementById('turns-active-list');
   if (!waitingList || !activeList) return;
+  const { hideTech, hideSvc } = getBubblePrefs();   // W2-6 (no per-service time on these cards, so hideTime is a no-op here)
   const waiting = q().filter(e => { if (isPaidStatus(e.status)) return false; if (!e.assignments || e.assignments.length === 0) return e.status === 'waiting'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'waiting'); });
   const inservice = q().filter(e => { if (!e.assignments || e.assignments.length === 0) return e.status === 'inservice'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'inservice'); });
   const complete = q().filter(e => e.status === 'complete');   // service done, payment pending
@@ -866,14 +869,18 @@ export function renderTurnsQueue() {
         const tech = staffById(a.techId), s = svc(a.serviceId);
         const ls = serviceLineStyle(effectiveServiceStatus(e, a));
         const hot = ls.key === 'inservice';
+        // hideTech hides the ASSIGNED tech name only; a tech SUGGESTION + its one-tap Accept
+        // always stay (hiding a display bit must not kill the accept workflow). The leading
+        // "→" is dropped under hideSvc so a tech line never reads as an orphaned arrow.
+        const arrow = hideSvc ? '' : '→ ';
         let techHtml = '', accept = '';
-        if (tech) techHtml = `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}</span>`;
-        else if (es[a.serviceId]) { techHtml = `<span class="text-on-surface-variant">→ ${escHtml(es[a.serviceId].techName)}?</span>`; accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
+        if (tech) { if (!hideTech) techHtml = `<span class="text-on-surface-variant">${arrow}${escHtml(tech.name)}</span>`; }
+        else if (es[a.serviceId]) { techHtml = `<span class="text-on-surface-variant">${arrow}${escHtml(es[a.serviceId].techName)}?</span>`; accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
         const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:4px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
         return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="${rowStyle}">
           <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
           <span class="min-w-0 flex-1 truncate">
-            <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
+            ${hideSvc ? '' : `<span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>`}
             ${techHtml}${a.cost ? ` <span class="font-semibold text-primary">$${a.cost}</span>` : ''}
           </span>
           ${isTechPriced(a) ? `<span class="flex-shrink-0 text-[9px] font-bold px-1 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">✓</span>` : ''}
@@ -882,11 +889,11 @@ export function renderTurnsQueue() {
       }).join('');
     } else {
       const ls = serviceLineStyle('waiting');
-      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${ls.bar};padding-left:4px;opacity:${ls.rowOpacity}">
+      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; const arrow = hideSvc ? '' : '→ '; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${ls.bar};padding-left:4px;opacity:${ls.rowOpacity}">
         <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
         <span class="min-w-0 flex-1 truncate">
-          <span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>
-          ${sug ? `<span class="text-on-surface-variant">→ ${escHtml(sug.techName)}?</span>` : ''}
+          ${hideSvc ? '' : `<span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>`}
+          ${sug ? `<span class="text-on-surface-variant">${arrow}${escHtml(sug.techName)}?</span>` : ''}
         </span>
         ${sug ? acceptBtnHtml(e.id, sid, sug.techName) : ''}
         <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>

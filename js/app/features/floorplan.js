@@ -13,6 +13,7 @@ import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, 
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment, getDedicatedBonusServices, getTurnConfig, generalBonusCount, _techDoesService } from './turns.js';
 import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
+import { getBubblePrefs, bubbleLineParts } from './bubble-prefs.js';
 import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
@@ -112,6 +113,7 @@ function custLines(e, stationId, fs = 1, maxLines = Infinity, noTiming = false) 
   const assigns = e.assignments || [];
   const sids = [...new Set([...(e.services || []), ...assigns.map(a => a.serviceId)])];
   const dotPx = Math.round(9 * fs);
+  const { hideTime, hideTech, hideSvc } = getBubblePrefs();   // W2-6 per-user bubble-info toggles
   const lines = sids.map(sid => {
     const a = assigns.find(x => x.serviceId === sid);
     const status = a ? getAssignmentStatus(e, a) : 'waiting';
@@ -119,12 +121,14 @@ function custLines(e, stationId, fs = 1, maxLines = Infinity, noTiming = false) 
     const ls = serviceLineStyle(a ? effectiveServiceStatus(e, a) : status);
     const s = svc(sid), t = a && a.techId ? staffById(a.techId) : null;
     const dot = `<span style="display:inline-block;width:${dotPx}px;height:${dotPx}px;border-radius:50%;flex-shrink:0;box-sizing:border-box;${ls.dot}"></span>`;
+    const costStr = a && a.comped ? 'Comp' : (a && a.cost ? '$' + Number(a.cost).toFixed(0) : '');
+    const label = bubbleLineParts({ svcLabel: escHtml(s ? s.label : 'Service'), techFirst: t ? escHtml(t.name.split(' ')[0]) : '', costStr, hasTech: !!t }, { hideSvc, hideTech }).join(' · ');
     const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
-      ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.comped ? ' · Comp' : (a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : '')}${t ? '' : ' · Wait'}</span>
+      ${dot}${hideTech ? '' : _techAvatar(t, fs)}<span class="truncate" style="min-width:0">${label}</span>
     </div>`;
     // Tray cards pass noTiming so each service is one compact line (the elapsed▸avg sub-row would push a
     // busy card past its fixed height and clip the "+N more" chip).
-    const sti = (!noTiming && a) ? serviceTimeInfo(a) : null;
+    const sti = (!noTiming && !hideTime && a) ? serviceTimeInfo(a) : null;
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';
     return main + stiHtml;
   }).filter(Boolean);
