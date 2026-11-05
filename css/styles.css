@@ -216,6 +216,11 @@
     #turns-more-wrap { display: inline-flex !important; }
     #turns-csv-btn, #turns-pdf-btn, #turns-appts-toggle, #turns-totals-toggle, #turns-hideoff-toggle { display: none !important; }
     #turns-more-menu.open { display: block !important; }
+    /* Active-list toggle (v6.07): hide the Active column and shrink the side panel so the tech board
+       grows (the grid is flex-grow). Scoped to ≤1194 so the persisted class can never affect desktop. */
+    #turns-side-panel.turns-hide-active #turns-active-col { display: none !important; }
+    /* Two ids so this outranks the ≤834/≤768 `#panel-turns .flex-shrink-0[...]{width:…}` panel-width rules. */
+    #panel-turns #turns-side-panel.turns-hide-active { width: 220px !important; }
     /* v6.05 left .dash-head sticking at top:62px while the header is 48px on tablet — a 14px gap. Tuck it flush. */
     .dash-head { top: 48px !important; }
   }

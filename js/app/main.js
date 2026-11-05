@@ -156,6 +156,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.81', items: [
+    { icon: 'view_sidebar', t: 'Hide the Active list on iPad for a bigger board', d: 'The Turns “⋯ More” menu now has an “Active list” toggle. Hide it and the side panel shrinks so the technician board gets more room; show it to bring the in-service list back. Per device, iPad only.' },
+    { icon: 'more_horiz', t: 'Clearer settings in the Turns “⋯ More” menu', d: 'The Appointments / Totals / Off-techs options in the iPad Turns “⋯ More” menu now show their “Shown” setting in bold teal so you can tell at a glance what’s on, and the menu scrolls if it ever runs past the screen on a small window.' },
+  ] },
   { v: 'td-v0.80', items: [
     { icon: 'more_horiz', t: 'A tidier Turns toolbar on iPad', d: 'On tablets, the Turns tab toolbar is now a single clean row. The view switcher, date arrows, Technicians, and New Entry stay out front; Appointments, Totals, Off-techs, and the CSV/PDF exports moved into a “⋯ More” menu (the three view options show “Shown/Hidden” so you can tell their setting at a glance). The board also tucks up flush under the slimmer header. Nothing changes on a desktop or laptop.' },
   ] },

@@ -974,7 +974,7 @@ tailwind.config = {
               <button id="turns-more-btn" onclick="toggleTurnsMoreMenu()" title="More turns options" class="btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">more_horiz</span> More
               </button>
-              <div id="turns-more-menu" style="position:absolute;right:0;top:44px;z-index:61;min-width:232px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;padding:6px 0">
+              <div id="turns-more-menu" style="position:absolute;right:0;top:44px;z-index:61;min-width:232px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;max-height:calc(100dvh - 120px);overflow-y:auto;padding:6px 0">
                 <button onclick="toggleTurnsApptStrip();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
                   <span class="material-symbols-outlined" style="font-size:18px">event_upcoming</span>
                   Appointments <span id="tmore-appts-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
@@ -986,6 +986,10 @@ tailwind.config = {
                 <button onclick="toggleTurnsHideOff();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
                   <span class="material-symbols-outlined" style="font-size:18px">group</span>
                   Off techs <span id="tmore-off-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
+                </button>
+                <button onclick="toggleTurnsActive();renderTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+                  <span class="material-symbols-outlined" style="font-size:18px">view_sidebar</span>
+                  Active list <span id="tmore-active-state" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
                 </button>
                 <div style="height:1px;background:var(--surface-container-high);margin:4px 0"></div>
                 <button onclick="exportTurnsCSV();closeTurnsMoreMenu()" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
@@ -1032,7 +1036,7 @@ tailwind.config = {
               <div id="turns-waiting-list" class="overflow-y-auto bg-surface-container-lowest" style="scrollbar-width:auto;flex:1"></div>
             </div>
             <!-- Active -->
-            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - var(--turns-offset, 186px))">
+            <div id="turns-active-col" class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - var(--turns-offset, 186px))">
               <div class="px-2 py-1.5 border-b border-surface-container-high flex items-center justify-between flex-shrink-0" style="background:rgba(200,230,197,0.3)">
                 <span class="text-[11px] font-headline font-bold uppercase tracking-widest" style="color:#1b5e20">Active</span>
                 <span class="text-[10px] font-body text-on-surface-variant" id="turns-active-label">0</span>
