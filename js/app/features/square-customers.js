@@ -165,7 +165,10 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   // customer chosen from autofill, so the front desk can read AND add/update a
   // note in the moment (pre-filled with any existing note).
   if (/^manual-/.test(firstId || '') && customer.phone) {
-    showCustomerNote(customer.phone, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.phone));
+    // Front-desk manual-add: fill THIS guest's note box (phone-keyed) + refresh its header + visit
+    // history — one box per guest now, instead of the single side panel.
+    fillManualCustNote(guestIdx, customer.phone);
+    window.updateManualGuestBox?.(guestIdx);
   } else if (/^first-\d+$/.test(firstId || '') && customer.phone) {
     // Customer-facing KIOSK check-in: reveal the per-guest "customer note (kept on file)"
     // textarea, pre-filled with this returning customer's saved note (phone-keyed).
@@ -208,40 +211,8 @@ export function checkInFromEditCustomer() {
   _startPrefilledCheckin(c);
 }
 
-// Customer note lives as a SIDE PANEL beside the dashboard check-in (#manual-note-panel),
-// not a screen-covering modal: it opens when a returning customer is picked, auto-saves
-// as you type, the Save button saves without closing the check-in, and it closes (after
-// flushing) when the check-in window closes.
-let _notePhoneKey = null, _noteSaveTimer = null;
-export function showCustomerNote(phone, name, note) {
-  const nameEl = document.getElementById('customer-note-name');
-  const editEl = document.getElementById('customer-note-edit');
-  const panel = document.getElementById('manual-note-panel');
-  if (!panel || !editEl) return;
-  _notePhoneKey = notePhoneKey(phone) || null;
-  if (nameEl) nameEl.textContent = name || '';
-  editEl.value = note || '';
-  panel.classList.remove('hidden');
-  window.renderCustomerHistory?.(phone, name, 'ci-history');
-}
-function _persistCustomerNote() {
-  if (!_notePhoneKey) return;
-  const editEl = document.getElementById('customer-note-edit'); if (!editEl) return;
-  const val = editEl.value.trim();
-  const notes = { ...(cfg().customer_notes || {}) };
-  if (val) notes[_notePhoneKey] = val; else delete notes[_notePhoneKey];
-  dispatch('config.set', { key: 'customer_notes', value: notes });
-}
-// Auto-save shortly after typing stops (debounced — no dispatch per keystroke).
-export function autoSaveCustomerNote() { clearTimeout(_noteSaveTimer); _noteSaveTimer = setTimeout(_persistCustomerNote, 600); }
-// "Save note" button — save now, but DON'T close the check-in window.
-export function saveCustomerNoteInline() { clearTimeout(_noteSaveTimer); _persistCustomerNote(); showToast('Note saved'); }
-// Called when the check-in (manual-add) modal closes: flush any pending edit, then hide.
-export function closeCustomerNote() {
-  clearTimeout(_noteSaveTimer); _persistCustomerNote();
-  const panel = document.getElementById('manual-note-panel'); if (panel) panel.classList.add('hidden');
-  _notePhoneKey = null;
-}
+// (The old single customer-note SIDE PANEL (#manual-note-panel) was replaced by the per-guest
+// notes+history strip in the dashboard check-in — see queue.js. Its functions were removed.)
 
 // ── Kiosk per-guest "customer note (kept on file)" ────────────────────────────
 // The customer-facing kiosk has no side panel, so the persistent customer note lives inline in
@@ -268,6 +239,38 @@ function _persistCiCustNote(idx) {
 }
 export function ciCustNoteInput(idx) { clearTimeout(_ciNoteTimers[idx]); _ciNoteTimers[idx] = setTimeout(() => _persistCiCustNote(idx), 600); }
 export function flushCiCustNote(idx) { clearTimeout(_ciNoteTimers[idx]); _persistCiCustNote(idx); }
+
+// ── Dashboard (front-desk) per-guest "customer note (kept on file)" ───────────
+// The front-desk manual-add now shows one notes+history box per guest (a horizontal strip,
+// replacing the single side panel). The persistent customer note lives in each box
+// (#manual-cust-note-<idx>), phone-keyed to #manual-phone-<idx>. Mirrors the kiosk ci* path.
+const _manualNoteTimers = {};
+// DATA-SAFETY GUARD: the box is always present + editable, so an EMPTY note that was never loaded from
+// (a returning customer shown) nor typed into must NOT be persisted — otherwise hand-typing a known
+// customer's phone (without the box ever showing their note) would delete their saved note on flush.
+export function _manualNoteShouldSkip(val, loaded, touched) { return !val && !loaded && !touched; }
+export function fillManualCustNote(idx, phone) {
+  const ta = document.getElementById('manual-cust-note-' + idx); if (!ta) return;
+  ta.value = customerNote(phone);
+  ta.dataset.phoneKey = notePhoneKey(phone) || '';
+  ta.dataset.loaded = '1';   // the box now reflects the saved note → safe to write back on flush
+}
+function _persistManualCustNote(idx) {
+  const ta = document.getElementById('manual-cust-note-' + idx); if (!ta) return;
+  const val = ta.value.trim();
+  if (_manualNoteShouldSkip(val, ta.dataset.loaded === '1', ta.dataset.touched === '1')) return;
+  const key = notePhoneKey(document.getElementById('manual-phone-' + idx)?.value || '') || ta.dataset.phoneKey || '';
+  if (!key) return;
+  const notes = { ...(cfg().customer_notes || {}) };
+  if (val) notes[key] = val; else delete notes[key];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
+}
+export function manualCustNoteInput(idx) {
+  const ta = document.getElementById('manual-cust-note-' + idx); if (ta) ta.dataset.touched = '1';
+  clearTimeout(_manualNoteTimers[idx]); _manualNoteTimers[idx] = setTimeout(() => _persistManualCustNote(idx), 600);
+}
+export function flushManualCustNote(idx) { clearTimeout(_manualNoteTimers[idx]); _persistManualCustNote(idx); }
+export function flushAllManualCustNotes(count) { for (let i = 1; i <= (count || 0); i++) flushManualCustNote(i); }
 
 export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId, maskPhone = false) {
   const dropdown = document.getElementById(dropdownId);

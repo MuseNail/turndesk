@@ -1879,8 +1879,8 @@ tailwind.config = {
 <!-- Duplicate check-in guard — sits ABOVE manual-modal (z-[60]); content injected by showDupGuardModal -->
 <div id="dup-guard-modal" class="fixed inset-0 z-[60] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.5)"></div>
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">
-  <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:90vh">
-  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up max-h-[90vh] overflow-y-auto no-scroll">
+  <div class="flex flex-col lg:flex-row items-stretch justify-center gap-3 w-full max-h-[90vh] overflow-y-auto lg:overflow-visible">
+  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up lg:max-h-[90vh] lg:overflow-y-auto no-scroll">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-headline font-bold text-on-surface">Add Guest</h2>
       <div class="flex items-center gap-3">
@@ -1932,23 +1932,14 @@ tailwind.config = {
       Skip the waiver for this check-in
     </button>
   </div>
-  <!-- Customer note — side panel beside the check-in (does not cover it; auto-saves; closes with the check-in) -->
-  <div id="manual-note-panel" class="hidden bg-surface-container-lowest rounded-2xl shadow-2xl fade-up max-h-[90vh] flex flex-col flex-shrink-0 overflow-hidden" style="width:300px">
-    <div class="flex items-center gap-2 px-5 pt-5 pb-2 flex-shrink-0">
+  <!-- Notes + visit history — one box per guest, beside the check-in; scrolls sideways when the party is large -->
+  <div id="manual-notes-strip" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up lg:max-h-[90vh] flex flex-col flex-shrink-0 overflow-hidden" style="width:252px">
+    <div class="flex items-center gap-2 px-4 pt-4 pb-2 flex-shrink-0">
       <span class="material-symbols-outlined text-secondary" style="font-size:18px">sticky_note_2</span>
-      <h3 class="font-headline font-bold text-on-surface text-base">Customer Note</h3>
+      <h3 class="font-headline font-bold text-on-surface text-base">Notes &amp; history</h3>
+      <span class="text-[11px] font-body text-on-surface-variant ml-auto flex items-center gap-0.5" id="manual-notes-scrollhint" style="display:none">scroll <span class="material-symbols-outlined" style="font-size:14px">arrow_forward</span></span>
     </div>
-    <div class="px-5 flex-shrink-0"><div class="text-sm font-body font-semibold text-on-surface-variant mb-2" id="customer-note-name"></div></div>
-    <!-- Note (fixed height) -->
-    <div class="flex flex-col px-5 flex-shrink-0">
-      <textarea id="customer-note-edit" oninput="autoSaveCustomerNote()" placeholder="Allergies, preferences, etc. — saved to this customer." class="w-full bg-secondary-container/40 border border-surface-container-high rounded-xl p-3 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="height:120px"></textarea>
-      <button onclick="saveCustomerNoteInline()" class="mt-2 w-full bg-primary hover:bg-primary-dim text-on-primary py-2 rounded-xl font-headline font-bold text-sm transition-all active:scale-95">Save note</button>
-    </div>
-    <!-- Visit history fills the rest, so note + history match the check-in window height -->
-    <div class="flex flex-col px-5 pb-5 pt-3 min-h-0 flex-grow">
-      <div class="flex items-center gap-2 mb-2 flex-shrink-0"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">history</span><h3 class="font-headline font-bold text-on-surface text-sm">Visit History</h3></div>
-      <div id="ci-history" class="flex-grow overflow-y-auto min-h-0 pr-1"></div>
-    </div>
+    <div id="manual-notes-row" class="flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-4" style="scrollbar-width:thin"></div>
   </div>
   </div>
 </div>
@@ -2239,7 +2230,7 @@ tailwind.config = {
         <span class="material-symbols-outlined text-primary" style="font-size:15px">favorite</span>
         <span class="text-[11px] font-body font-bold text-primary uppercase tracking-wide">Customer note · always</span>
       </div>
-      <textarea id="assign-cust-note" oninput="saveAssignCustNote()" class="w-full bg-surface-container-lowest border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:70px;max-height:140px"></textarea>
+      <textarea id="assign-cust-note" oninput="saveAssignCustNote()" class="w-full bg-surface-container-lowest border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="height:138px"></textarea>
     </div>
     <div class="flex-grow flex flex-col p-4 min-h-0">
       <div class="flex items-center gap-1.5 mb-2">

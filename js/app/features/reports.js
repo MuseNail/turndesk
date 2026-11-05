@@ -156,6 +156,30 @@ export function _visitLines(assignments, services, svcLabel, techName, chargeOf)
   return lines;
 }
 
+// The N most recent PAST visits for a customer, compacted for the check-in notes box — same phone
+// (last-10) + name-fallback matching and newest-first sort as renderCustomerHistory, but a light
+// {dateMs, services, tech, amount, isRefund, note} shape. Pure (records + label fns injected).
+export function lastVisitsCompact(records, phone, name, n, svcLabel, techName) {
+  const ph = _digits10(phone), nm = (name || '').trim().toLowerCase();
+  if (!ph && !nm) return [];
+  return (records || []).filter(r => {
+    if (!r || r.status === 'deleted' || !(isPaidStatus(r.status) || r.status === 'refund')) return false;
+    const rp = _digits10(r.phone);
+    if (ph && rp) return rp.endsWith(ph) || ph.endsWith(rp);
+    return !!nm && (r.name || '').trim().toLowerCase() === nm;
+  }).sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime)).slice(0, n).map(r => {
+    const lines = _visitLines(r.assignments, r.services, svcLabel, techName);
+    return {
+      dateMs: new Date(r.checkinTime).getTime(),
+      services: lines.map(l => l.service).filter(Boolean).join(', ') || '—',
+      tech: [...new Set(lines.map(l => l.tech).filter(Boolean))].join(', '),
+      amount: r.totalCost || 0,
+      isRefund: r.status === 'refund',
+      note: (r.txnNote || r.discountNote || '').trim(),
+    };
+  });
+}
+
 // The full, reconciling per-visit breakdown — services (via _visitLines) + items + fees − discount.
 // `total` is the record's ALREADY-reconciled totalCost (buildCombinedRecords set it to ticketTotal for
 // parts-bearing rows; legacy/part-less rows keep their stored total), NOT a fresh recompute —

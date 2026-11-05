@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.66', items: [
+    { icon: 'sticky_note_2', t: 'Notes & visit history right in front-desk check-in', d: 'Checking a guest in from the front desk now shows a box per guest beside the form: their saved customer note (editable, kept on file by phone), their last 3 visits (each with services, technician, amount and any note), and a “note for this visit” — replacing the single side panel. Boxes fill in as you type a phone/name or pick a returning customer, scroll sideways for a big party, and stack below the form on a narrow screen. Note fields are roomier (~6 lines) and past visits wrap instead of cutting off.' },
+  ] },
   { v: 'td-v0.65', items: [
     { icon: 'timer', t: 'Live service timer on each floor technician', d: 'Each technician on the Floor Plan now shows a live timer for the service they’re currently working, in the same elapsed ▸ ~average style as the customer cards — so you can see at a glance who’s running long.' },
     { icon: 'view_week', t: 'Waiting list stays one tidy row', d: 'The not-seated waiting list on the Floor Plan is now a single fixed-height row that scrolls sideways (tap the ‹ › chevrons when it overflows) instead of wrapping and pushing the floor down — the floor no longer jumps as guests come and go.' },

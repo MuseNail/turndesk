@@ -16,7 +16,8 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice, isTechPriced } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview, flushAllManualCustNotes } from './square-customers.js';
+import { lastVisitsCompact, buildCombinedRecords } from './reports.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -533,14 +534,139 @@ function renderManualGuestCard(idx) {
       <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2" id="manual-services-${idx}">${serviceButtonsHtml()}</div>
     </div>`;
-  // Per-visit note (txnNote) captured at check-in → carried to the record + customer/staff history.
-  // (The persistent customer note is handled separately by the side panel for returning customers.)
-  card.insertAdjacentHTML('beforeend', `<div>
-      <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
-      <textarea id="manual-visit-note-${idx}" rows="2" placeholder="e.g., design on ring fingers, in a hurry…"
-        class="w-full bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
-    </div>`);
+  // The per-visit note + customer note + visit history now live in this guest's box in the
+  // notes+history strip (one box per guest), not inline in the card.
   container.appendChild(card);
+}
+
+// ── Front-desk notes + history strip (one box per guest, scrolls sideways) ────
+// Each guest gets a fixed-height box: customer note (editable, phone-keyed) · last 3 visits
+// (read-only) · note for this visit (editable → entry.txnNote). The box stays in sync with the
+// guest's phone/name as it's typed or a returning customer is picked. Replaces the old single
+// side panel so several guests' notes + history are visible at once.
+const _fmtPhone = p => { const d = (p || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1'); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : (p || ''); };
+function _manualGuestContact(idx) {
+  const same = idx > 1 && document.getElementById(`manual-same-${idx}`)?.checked;
+  if (same) return { first: document.getElementById(`manual-firstonly-${idx}`)?.value.trim() || '', last: '', phone: document.getElementById('manual-phone-1')?.value.trim() || '' };
+  return { first: document.getElementById(`manual-first-${idx}`)?.value.trim() || '', last: document.getElementById(`manual-last-${idx}`)?.value.trim() || '', phone: document.getElementById(`manual-phone-${idx}`)?.value.trim() || '' };
+}
+const _MANUAL_TA = 'w-full bg-surface-container rounded-lg border border-surface-container-high px-2.5 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none';
+const _NOTE6_H = 'height:134px';   // ~6 visible lines at text-sm (owner wants roomy note boxes)
+const _CLAMP3 = 'display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden';   // let a long visit line wrap to 3 lines instead of "…"
+const _custNoteEditableHtml = idx => `<textarea id="manual-cust-note-${idx}" oninput="manualCustNoteInput(${idx})" placeholder="Allergies, preferences…" class="${_MANUAL_TA}" style="${_NOTE6_H}"></textarea>`;
+// A same-contact guest shares the primary's phone, so the phone-keyed note is the SAME one — show it
+// read-only here (editing happens on the primary) instead of a second editor that would collide.
+function _custNoteSharedHtml(phone) {
+  const note = (customerNote(phone) || '').trim();
+  return `<div class="w-full rounded-lg border border-dashed border-surface-container-high px-2.5 py-1.5 text-sm font-body text-on-surface-variant overflow-hidden" style="${_NOTE6_H}">${note ? escHtml(note) : '<span class="italic">Shared with the primary guest</span>'}</div>`;
+}
+// Visit history source = buildCombinedRecords() (reconciled totals + any paid live-queue visit),
+// so the box agrees with Edit Customer / Reports — never a stale cached totalCost. `records` lets a
+// multi-box refresh fetch it once.
+function _manualHistoryHtml(phone, name, records) {
+  const digits = (phone || '').replace(/\D/g, '');
+  if (!digits && !(name || '').trim()) return `<div class="h-full flex items-center justify-center text-center px-2 text-[11px] font-body text-on-surface-variant">Add a phone number to see notes and visit history</div>`;
+  const visits = lastVisitsCompact(records || buildCombinedRecords(), phone, name, 3, sid => svc(sid)?.label, tid => staffById(tid)?.name);
+  if (!visits.length) return `<div class="h-full flex items-center justify-center text-[11px] font-body text-on-surface-variant italic">No visits on record yet</div>`;
+  return visits.map(v => {
+    const d = new Date(v.dateMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const amt = (v.isRefund ? '-$' : '$') + Math.abs(v.amount).toFixed(0);
+    return `<div class="py-1 border-b border-surface-container-high last:border-0">
+      <div class="text-xs font-body text-on-surface leading-tight" style="${_CLAMP3}"><span class="text-on-surface-variant">${d}</span> · ${escHtml(v.services)}${v.tech ? ' · ' + escHtml(v.tech) : ''} · <span class="font-semibold">${amt}</span>${v.isRefund ? ' · refund' : ''}</div>
+      ${v.note ? `<div class="text-[11px] font-body italic text-on-surface-variant leading-tight" style="${_CLAMP3}">“${escHtml(v.note)}”</div>` : ''}
+    </div>`;
+  }).join('');
+}
+function manualGuestBoxHtml(idx) {
+  const lab = 'text-[11px] font-body font-semibold text-primary uppercase tracking-widest block mb-1';
+  return `<div id="manual-box-${idx}" class="manual-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
+    <div class="flex items-baseline justify-between gap-2" style="height:20px">
+      <span id="manual-box-name-${idx}" class="font-headline font-semibold text-on-surface text-sm truncate">Guest ${idx}</span>
+      <span id="manual-box-phone-${idx}" class="text-[11px] font-body text-on-surface-variant flex-shrink-0"></span>
+    </div>
+    <label class="${lab}" style="margin-top:10px">Customer note</label>
+    <div id="manual-custnote-slot-${idx}" data-same="0">${_custNoteEditableHtml(idx)}</div>
+    <label class="${lab}" style="margin-top:11px">Last 3 visits</label>
+    <div id="manual-history-${idx}" class="overflow-y-auto" style="height:124px"></div>
+    <label class="${lab}" style="margin-top:11px">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
+    <textarea id="manual-visit-note-${idx}" placeholder="e.g., design on ring fingers…" class="${_MANUAL_TA}" style="${_NOTE6_H}"></textarea>
+  </div>`;
+}
+function appendManualGuestBox(idx) {
+  const row = document.getElementById('manual-notes-row'); if (!row) return;
+  row.insertAdjacentHTML('beforeend', manualGuestBoxHtml(idx));
+  updateManualGuestBox(idx);
+}
+// Update a box's header + history (and, only when the same-contact STATE changes, its note slot — so a
+// live phone/name edit never wipes a note being typed). `records` is passed by updateAllManualBoxes to
+// avoid rebuilding the combined records once per box.
+export function updateManualGuestBox(idx, records) {
+  if (!document.getElementById(`manual-box-${idx}`)) return;
+  const c = _manualGuestContact(idx);
+  const nm = document.getElementById(`manual-box-name-${idx}`); if (nm) nm.textContent = [c.first, c.last].filter(Boolean).join(' ') || `Guest ${idx}`;
+  const ph = document.getElementById(`manual-box-phone-${idx}`); if (ph) ph.textContent = c.phone ? _fmtPhone(c.phone) : '';
+  const same = idx > 1 && document.getElementById(`manual-same-${idx}`)?.checked;
+  const slot = document.getElementById(`manual-custnote-slot-${idx}`);
+  if (slot) {
+    const want = same ? '1' : '0';
+    if (slot.dataset.same !== want) {
+      if (want === '1') window.flushManualCustNote?.(idx);   // persist a just-typed note before swapping the editor to read-only
+      slot.dataset.same = want;
+      slot.innerHTML = same ? _custNoteSharedHtml(c.phone) : _custNoteEditableHtml(idx);
+    } else if (same) {
+      slot.innerHTML = _custNoteSharedHtml(c.phone);   // keep the shared read-only view current
+    }
+    // Editable + untouched → reflect the saved note for the CURRENT phone, so the front desk SEES a
+    // known customer's note on phone entry (not just on autocomplete pick) and an empty hand-typed box
+    // can never delete a saved note on flush (the box is loaded, so flush writes it back).
+    if (!same) {
+      const nt = document.getElementById(`manual-cust-note-${idx}`);
+      if (nt && nt.dataset.touched !== '1') {
+        const saved = c.phone ? customerNote(c.phone) : '';
+        nt.value = saved;
+        nt.dataset.phoneKey = notePhoneKey(c.phone) || '';
+        if (saved) nt.dataset.loaded = '1'; else delete nt.dataset.loaded;
+      }
+    }
+  }
+  const h = document.getElementById(`manual-history-${idx}`); if (h) h.innerHTML = _manualHistoryHtml(c.phone, [c.first, c.last].filter(Boolean).join(' '), records);
+}
+// Refresh every open box from ONE combined-records pass (so same-contact boxes track the primary too).
+function updateAllManualBoxes() {
+  const recs = buildCombinedRecords();
+  document.querySelectorAll('#manual-notes-row .manual-note-box').forEach(b => {
+    const m = b.id.match(/manual-box-(\d+)/); if (m) updateManualGuestBox(+m[1], recs);
+  });
+}
+// Size the strip to fit up to ~2 boxes then scroll (desktop/landscape). On a narrow/portrait viewport
+// the strip stacks BELOW the card (CSS) and fills the width — so there it's full-width + scrolls inside.
+function _syncManualStrip() {
+  const row = document.getElementById('manual-notes-row'), panel = document.getElementById('manual-notes-strip');
+  if (!row || !panel) return;
+  const n = row.querySelectorAll('.manual-note-box').length || 1;
+  const stacked = window.matchMedia('(max-width:1023px)').matches;
+  panel.style.width = stacked ? '100%' : Math.min(560, n * 248 + (n - 1) * 12 + 32) + 'px';
+  requestAnimationFrame(() => {
+    const hint = document.getElementById('manual-notes-scrollhint');
+    if (hint) hint.style.display = (row.scrollWidth > row.clientWidth + 2) ? '' : 'none';
+  });
+}
+// Live-sync the boxes as contact fields are typed (debounced; refreshes ALL boxes so a same-contact
+// box tracks the primary). Re-fit the strip on resize/orientation while the modal is open.
+function _wireManualStripInput() {
+  const container = document.getElementById('manual-guests-container');
+  if (!container || container._boxSyncWired) return;
+  container._boxSyncWired = true;
+  let t = null;
+  container.addEventListener('input', e => {
+    if (!/^manual-(?:phone|first|last|firstonly)-\d+$/.test(e.target.id || '')) return;
+    clearTimeout(t); t = setTimeout(updateAllManualBoxes, 250);
+  });
+  if (!window._manualStripResizeWired) {
+    window._manualStripResizeWired = true;
+    let rt = null;
+    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (document.getElementById('manual-modal')?.offsetParent) _syncManualStrip(); }, 150); });
+  }
 }
 
 export function toggleManualSameContact(idx) {
@@ -562,15 +688,17 @@ export function toggleManualSameContact(idx) {
     contactFields?.classList.remove('hidden'); firstOnlyFields?.classList.add('hidden');
     if (fn && fo && fo.value.trim()) fn.value = fo.value.trim();   // carry it back
   }
+  updateManualGuestBox(idx);   // same-contact changes which fields feed this guest's box
 }
 
 export function showManualAdd() {
   window.floorClearPendingSeat?.();   // any builder open retires a stale floor-plan chair target (Wave 2 #3)
   manualGuestCount = 0;
   document.getElementById('manual-guests-container').innerHTML = '';
+  const notesRow = document.getElementById('manual-notes-row'); if (notesRow) notesRow.innerHTML = '';   // reset the per-guest notes+history strip
+  _wireManualStripInput();
   addManualGuest();
   const appt = document.getElementById('manual-is-appointment'); if (appt) appt.checked = false;
-  document.getElementById('manual-note-panel')?.classList.add('hidden');   // note panel appears only when a returning customer is picked
   const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
   const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -589,10 +717,10 @@ export function toggleManualApptTech() {
     sel.innerHTML = '<option value="">— Leave unassigned —</option>' + activeStaff().slice().sort(byName).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   }
 }
-export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); }
-export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); }
+export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); appendManualGuestBox(manualGuestCount); _syncManualStrip(); }
+export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); document.getElementById(`manual-box-${idx}`)?.remove(); _syncManualStrip(); }
 export function closeManualAdd() {
-  closeCustomerNote();   // flush + hide the customer-note side panel
+  flushAllManualCustNotes(manualGuestCount);   // persist any pending per-guest customer-note edits
   // Tear down a live "waiting at the kiosk" overlay + stop watching, so Esc/X mid-wait can't orphan a
   // stale scrim over a freshly-reopened form. We do NOT tombstone here — closing the desk form just
   // stops the desk watching; the kiosk stays live (customer can still sign) and self-expires on TTL.
@@ -601,6 +729,7 @@ export function closeManualAdd() {
   const m = document.getElementById('manual-modal'); m.classList.add('hidden'); m.style.display = '';
   manualGuestCount = 0;
   const c = document.getElementById('manual-guests-container'); if (c) c.innerHTML = '';
+  const row = document.getElementById('manual-notes-row'); if (row) row.innerHTML = '';
 }
 
 // Collect + validate + group-tag the manual-add party from the DOM. Returns the finished entry
@@ -635,6 +764,7 @@ function collectManualEntries() {
 }
 
 export function submitManualAdd(skipApptGuard) {
+  flushAllManualCustNotes(manualGuestCount);   // persist any customer-note edit still inside the debounce window
   const entries = collectManualEntries();
   if (!entries) return;
   // proceed = duplicate guard → routing. Wrapping the SAME callback passed to the appointment guard
