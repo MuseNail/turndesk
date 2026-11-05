@@ -61,6 +61,7 @@ export function showPinModal({ ownerLogin = false } = {}) {
 export function logout() {
   const doLogout = () => {
     window.chatPushOnSignOut?.();   // drop this device's chat-push tag before clearing the session
+    window.clearApptReminders?.();  // clear any staff reminders so they never linger on the kiosk screen
     setActiveUser(null);
     if (isKioskDevice()) { window.goTo?.('screen-welcome'); showPinModal(); }
     else {

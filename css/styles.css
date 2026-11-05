@@ -39,7 +39,7 @@
      content height. The side panel is a sticky flex row; giving it a definite height (same
      calc the left tech-grid already uses) lets its two columns stretch (align-items:stretch)
      and their inner lists (flex:1) fill the space below each header. */
-  #turns-side-panel { height: calc(100vh - var(--turns-offset, 210px)); }
+  #turns-side-panel { height: calc(100vh - var(--turns-offset, 186px)); }
 
   * { box-sizing: border-box; }
   body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -321,6 +321,13 @@
      surface colour, so the header reads as full-width. Headers using this drop their
      own margin-bottom — the padding-bottom here provides the gap (and carries the bg). */
   .dash-head { position: sticky; top: 62px; z-index: 9; background: var(--surface, #e8ecee); padding-top: 0.5rem; padding-bottom: 0.75rem; }
+
+  /* Transactions (N5): fill the viewport below the nav and scroll the sale rows INSIDE #txn-scroll, so
+     the controls row + the "Showing…" total bar stay pinned. The panel owns its height, so its dash-head
+     is a normal (static) flex child rather than page-sticky. Offset = 62px nav + the main's p-4 (2rem). */
+  #panel-transactions.active { display: flex; flex-direction: column; height: calc(100vh - 62px - 2rem - var(--sync-banner-h, 0px)); }
+  #panel-transactions .dash-head { position: static; top: auto; }
+  #txn-scroll { min-height: 0; }
 
   /* Autocomplete dropdown */
   .autocomplete-list {

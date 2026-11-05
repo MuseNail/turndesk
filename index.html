@@ -494,6 +494,10 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:18px">local_offer</span>
             Price menu
           </button>
+          <button onclick="openColorKey();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">palette</span>
+            Color key
+          </button>
           <button onclick="showWhatsNew();closeUserMenu()" style="width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors">
             <span class="material-symbols-outlined" style="font-size:18px">new_releases</span>
             What's new
@@ -849,7 +853,7 @@ tailwind.config = {
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
-        <div id="txn-total-bar" class="mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">
+        <div id="txn-total-bar" class="flex-shrink-0 mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">
           <div class="flex items-center gap-2 text-sm font-body text-on-surface min-w-0">
             <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">receipt_long</span>
             <span class="truncate">Showing <strong id="txn-total-range">Today</strong> · <span id="txn-total-count">0</span> ticket<span id="txn-total-count-s">s</span></span>
@@ -865,10 +869,13 @@ tailwind.config = {
             </div>
           </div>
         </div>
-        <div id="txn-list" class="space-y-2"></div>
-        <div id="txn-empty" class="hidden text-center py-16 text-on-surface-variant text-sm font-body">
-          <span class="material-symbols-outlined text-4xl block mb-3 opacity-40">receipt_long</span>
-          No transactions yet
+        <!-- Sale rows scroll inside here; the controls row + the total bar above stay pinned -->
+        <div id="txn-scroll" class="flex-1 overflow-y-auto no-scroll" style="min-height:0">
+          <div id="txn-list" class="space-y-2"></div>
+          <div id="txn-empty" class="hidden text-center py-16 text-on-surface-variant text-sm font-body">
+            <span class="material-symbols-outlined text-4xl block mb-3 opacity-40">receipt_long</span>
+            No transactions yet
+          </div>
         </div>
       </div>
 
@@ -950,30 +957,20 @@ tailwind.config = {
           <div id="turns-appts-cards" class="flex gap-1.5 p-1.5 overflow-x-auto" style="scrollbar-width:thin"></div>
         </div>
 
-        <!-- Slot color + turn-badge legend -->
-        <div class="flex items-center gap-3 flex-wrap text-[10px] text-on-surface-variant mb-2 px-1">
-          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#f5c870;display:inline-block"></span>Waiting</span>
-          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#2a7a4f;display:inline-block"></span>In service</span>
-          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#1a5c7a;display:inline-block"></span>Done</span>
-          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#6b4fb0;display:inline-block"></span>Awaiting price</span>
-          <span class="inline-flex items-center gap-1"><span style="width:9px;height:9px;border-radius:2px;background:#5b6166;display:inline-block"></span>Paid</span>
-          <span class="inline-flex items-center gap-1" style="border-left:1px solid var(--surface-container-high);padding-left:12px"><b class="font-semibold" style="background:#f5c870;color:#3a2800;padding:0 4px;border-radius:3px">0.5</b> half turn</span>
-          <span class="inline-flex items-center gap-1"><b class="font-semibold text-secondary">Bonus</b> bonus service</span>
-          <span class="inline-flex items-center gap-1"><b class="font-semibold" style="color:#9a6b00">?</b> needs price</span>
-        </div>
+        <!-- Slot color + turn-badge legend moved to the account menu → "Color key" (opens #color-key-modal) -->
 
         <!-- Two column layout — left scrolls, right sticks -->
         <div class="flex gap-3" style="align-items:flex-start;min-height:400px">
           <!-- Left: grid -->
-          <div class="flex-grow overflow-y-auto overflow-x-hidden" style="scrollbar-width:thin;max-height:calc(100vh - var(--turns-offset, 210px))" id="turns-tech-grid"></div>
+          <div class="flex-grow overflow-y-auto overflow-x-hidden" style="scrollbar-width:thin;max-height:calc(100vh - var(--turns-offset, 186px))" id="turns-tech-grid"></div>
           <!-- Drag to resize the waiting/active panel (width persists per device) -->
           <div id="turns-split-handle" title="Drag to resize" class="flex-shrink-0 self-stretch flex items-center justify-center cursor-col-resize group" style="width:14px;touch-action:none;-webkit-user-select:none;user-select:none">
             <div class="rounded-full bg-surface-container-high group-hover:bg-primary transition-colors" style="width:4px;height:52px"></div>
           </div>
           <!-- Right: waiting + active side by side, sticky, narrower -->
-          <div id="turns-side-panel" class="flex-shrink-0 flex gap-2" style="position:sticky;top:0;width:380px;max-height:calc(100vh - var(--turns-offset, 210px))">
+          <div id="turns-side-panel" class="flex-shrink-0 flex gap-2" style="position:sticky;top:0;width:380px;max-height:calc(100vh - var(--turns-offset, 186px))">
             <!-- Waiting -->
-            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #d4860a;max-height:calc(100vh - var(--turns-offset, 210px))">
+            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #d4860a;max-height:calc(100vh - var(--turns-offset, 186px))">
               <div class="px-2 py-1.5 border-b border-surface-container-high flex items-center justify-between flex-shrink-0" style="background:rgba(255,224,178,0.3)">
                 <span class="text-[11px] font-headline font-bold uppercase tracking-widest" style="color:#a05000">Waiting</span>
                 <span class="text-[10px] font-body text-on-surface-variant" id="turns-waiting-label">0</span>
@@ -981,7 +978,7 @@ tailwind.config = {
               <div id="turns-waiting-list" class="overflow-y-auto bg-surface-container-lowest" style="scrollbar-width:auto;flex:1"></div>
             </div>
             <!-- Active -->
-            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - var(--turns-offset, 210px))">
+            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - var(--turns-offset, 186px))">
               <div class="px-2 py-1.5 border-b border-surface-container-high flex items-center justify-between flex-shrink-0" style="background:rgba(200,230,197,0.3)">
                 <span class="text-[11px] font-headline font-bold uppercase tracking-widest" style="color:#1b5e20">Active</span>
                 <span class="text-[10px] font-body text-on-surface-variant" id="turns-active-label">0</span>
@@ -1880,7 +1877,9 @@ tailwind.config = {
 <div id="dup-guard-modal" class="fixed inset-0 z-[60] hidden items-center justify-center px-4" style="background:rgba(20,22,30,.5)"></div>
 <div id="manual-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/30 px-4">
   <div class="flex flex-col lg:flex-row items-stretch justify-center gap-3 w-full max-h-[90vh] overflow-y-auto lg:overflow-visible">
-  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl fade-up lg:max-h-[90vh] lg:overflow-y-auto no-scroll">
+  <div id="manual-card" class="bg-surface-container-lowest rounded-2xl w-full max-w-lg shadow-2xl fade-up flex flex-col lg:max-h-[90vh]">
+    <!-- Header (pinned) -->
+    <div class="flex-shrink-0 px-8 pt-8 pb-4 border-b border-surface-container-high">
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-xl font-headline font-bold text-on-surface">Add Guest</h2>
       <div class="flex items-center gap-3">
@@ -1908,7 +1907,10 @@ tailwind.config = {
         <option value="">— Leave unassigned —</option>
       </select>
     </div>
+    </div><!-- /header -->
 
+    <!-- Guests (scrolls; header + footer stay pinned) -->
+    <div class="flex-1 overflow-y-auto no-scroll px-8 pt-1">
     <!-- Primary guest -->
     <div id="manual-guests-container" class="space-y-5">
       <!-- Injected by JS -->
@@ -1922,15 +1924,20 @@ tailwind.config = {
       </button>
     </div>
 
+    </div><!-- /guests scroll -->
+
+    <!-- Footer (pinned): the primary action + its bypass-waiver warning stay together, always reachable -->
+    <div class="flex-shrink-0 px-8 pt-4 pb-8 border-t border-surface-container-high">
     <!-- Bypass / no-kiosk warning (shown by refreshManualAddChrome when a check-in will be added without a signed waiver) -->
-    <div id="manual-bypass-banner" class="hidden mt-4 px-3 py-2 rounded-lg text-sm font-body" style="background:#fef3c7;color:#7c4a03"></div>
-    <button id="manual-primary-btn" onclick="submitManualAdd()" class="w-full mt-5 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
+    <div id="manual-bypass-banner" class="hidden mb-3 px-3 py-2 rounded-lg text-sm font-body" style="background:#fef3c7;color:#7c4a03"></div>
+    <button id="manual-primary-btn" onclick="submitManualAdd()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
       Add to Queue
     </button>
     <!-- Explicit "skip waiver" escape hatch — shown by refreshManualAddChrome only when a kiosk would otherwise be used -->
     <button id="manual-skip-btn" onclick="submitManualAddSkip()" class="hidden w-full mt-2 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body text-sm hover:bg-surface-container transition-colors">
       Skip the waiver for this check-in
     </button>
+    </div><!-- /footer -->
   </div>
   <!-- Notes + visit history — one box per guest, beside the check-in; scrolls sideways when the party is large -->
   <div id="manual-notes-strip" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up lg:max-h-[90vh] flex flex-col flex-shrink-0 overflow-hidden" style="width:252px">
@@ -3173,6 +3180,37 @@ tailwind.config = {
       <button onclick="pmUnsavedSave()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save and leave</button>
       <button onclick="pmUnsavedDiscard()" class="w-full border-2 border-error text-error hover:bg-error/10 py-3 rounded-xl font-headline font-bold transition-all">Discard changes</button>
       <button onclick="pmUnsavedStay()" class="w-full border-2 border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-bold transition-all">Keep editing</button>
+    </div>
+  </div>
+</div>
+
+<!-- Color key (opened from the account menu; the turns-board legend lives here now) -->
+<div id="color-key-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeColorKey()">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-sm shadow-2xl fade-up max-h-[85vh] flex flex-col">
+    <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
+      <span class="material-symbols-outlined text-primary" style="font-size:22px">palette</span>
+      <h2 class="text-lg font-headline font-bold text-on-surface">Color key</h2>
+      <button onclick="closeColorKey()" class="ml-auto w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
+    </div>
+    <div class="p-5 space-y-4 overflow-y-auto">
+      <div>
+        <div class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2">Service status</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm font-body text-on-surface">
+          <span class="inline-flex items-center gap-2"><span style="width:12px;height:12px;border-radius:3px;background:#f5c870;display:inline-block;flex-shrink:0"></span>Waiting</span>
+          <span class="inline-flex items-center gap-2"><span style="width:12px;height:12px;border-radius:3px;background:#2a7a4f;display:inline-block;flex-shrink:0"></span>In service</span>
+          <span class="inline-flex items-center gap-2"><span style="width:12px;height:12px;border-radius:3px;background:#1a5c7a;display:inline-block;flex-shrink:0"></span>Done</span>
+          <span class="inline-flex items-center gap-2"><span style="width:12px;height:12px;border-radius:3px;background:#6b4fb0;display:inline-block;flex-shrink:0"></span>Awaiting price</span>
+          <span class="inline-flex items-center gap-2"><span style="width:12px;height:12px;border-radius:3px;background:#5b6166;display:inline-block;flex-shrink:0"></span>Paid</span>
+        </div>
+      </div>
+      <div class="border-t border-surface-container-high pt-4">
+        <div class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2">Turn badges</div>
+        <div class="space-y-2.5 text-sm font-body text-on-surface">
+          <div class="inline-flex items-center gap-2"><b class="font-semibold" style="background:#f5c870;color:#3a2800;padding:0 5px;border-radius:3px">0.5</b> half turn</div>
+          <div class="inline-flex items-center gap-2"><b class="font-semibold text-secondary">Bonus</b> bonus service</div>
+          <div class="inline-flex items-center gap-2"><b class="font-semibold" style="color:#9a6b00">?</b> needs price</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

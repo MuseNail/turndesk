@@ -34,8 +34,18 @@ export function startApptReminders() {
   _timer = setInterval(checkApptReminders, 30000);   // every 30s
 }
 
+// Remove every visible reminder banner (used on sign-out so the public kiosk screen never shows a
+// staff reminder that fired before the operator signed out — the fired-set guard only blocks NEW ones).
+export function clearApptReminders() {
+  document.getElementById('appt-reminder-stack')?.remove();
+  document.getElementById('appt-reminder-more')?.remove();
+}
+
 export function checkApptReminders() {
-  if (!getActiveUser()) return;                       // only when a staff member is logged in
+  // Suppress staff reminders when no one is signed in (logout / session-revoke / PIN-cancel) OR on the
+  // designated public kiosk device (it stays signed in all day but must never show them over the customer
+  // screen). Clearing here self-heals every such state within one 30s tick.
+  if (!getActiveUser() || window.isKioskDevice?.()) { clearApptReminders(); return; }
   const leads = reminderLeads(); if (!leads.length) return;
   const appts = (window.apptsForReminders ? window.apptsForReminders() : []);
   if (!appts.length) return;

@@ -495,8 +495,9 @@ function applyTurnsApptStripVisibility() {
   if (!hide) renderTurnsApptStrip();
   // Keep the strip anchored under the header (no page scroll) by shrinking the
   // grid + side-panel scroll height to absorb the strip's height; only the grid
-  // scrolls. 210px is the header budget; +12 is the strip's bottom margin (mb-3).
-  if (panel) { const extra = (!hide && strip) ? strip.offsetHeight + 12 : 0; panel.style.setProperty('--turns-offset', (210 + extra) + 'px'); }
+  // scrolls. 186px is the header budget (was 210; the ~24px color legend moved to the account menu);
+  // +12 is the strip's bottom margin (mb-3).
+  if (panel) { const extra = (!hide && strip) ? strip.offsetHeight + 12 : 0; panel.style.setProperty('--turns-offset', (186 + extra) + 'px'); }
 }
 export function renderTurnsApptStrip() {
   const host = document.getElementById('turns-appts-cards'); if (!host) return;
