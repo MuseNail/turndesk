@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { scopedKey } from '../apptoken.js';   // per-salon isolation for the device-local turns-history snapshot
-import { canDo } from '../session.js';
+import { canDo, getActiveUser } from '../session.js';
 import { normalizeNotesList, NOTE_MAX } from '../staff-notes-util.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus, isTechPriced } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
@@ -886,6 +886,35 @@ function reorderTurnSlots(techId, moveEntryId, beforeEntryId) {
   showToast('Turn order updated ✓');
 }
 
+// ── N3 drag→tech: which services a dragged customer can be assigned/moved to a tech (pure cores) ──
+// canDo is a FLAG (skills warn, not filter — the owner can override with a warning), never a filter.
+export function eligibleWaitingServices(entry, techId, { statusOf, doesService, labelOf }) {
+  const out = [];
+  (entry.services || []).forEach(sid => {
+    const a = (entry.assignments || []).find(x => x.serviceId === sid);
+    const status = a ? statusOf(entry, a) : 'waiting';
+    if (status !== 'waiting') return;               // only still-waiting work is "assignable"
+    if (a && a.techId === techId) return;           // already on this tech
+    out.push({ serviceId: sid, svcLabel: labelOf(sid), canDo: !!doesService(sid) });
+  });
+  return out;
+}
+// Case (b): the dragged customer's assignments currently on fromTechId that can move to another tech.
+// Waiting/in-service move freely; done/paid are offered only to a manager, flagged needsOverride.
+export function movableServices(entry, fromTechId, { isManager, doesService, labelOf, statusOf, isPaidStatus }) {
+  const out = [];
+  (entry.assignments || []).forEach(a => {
+    if (a.techId !== fromTechId) return;
+    const status = statusOf(entry, a);
+    if (isPaidStatus(status)) return;               // a PAID service has a saved record — moving it would
+                                                    // desync Reports/Payroll; it can't move from the board
+    const free = status === 'waiting' || status === 'inservice';
+    if (!free && !isManager) return;                // 'complete' (done, unpaid) → manager only
+    out.push({ serviceId: a.serviceId, svcLabel: labelOf(a.serviceId), canDo: !!doesService(a.serviceId), status, needsOverride: !free });
+  });
+  return out;
+}
+
 // ── Assign-to-slot modal ──────────────────────────
 let turnsAssignTarget = null;
 export function openTurnsAssign(techId, slotIndex) {
@@ -921,7 +950,11 @@ export function assignServiceFromTurns(entryId, serviceId) {
   closeTurnsAssignModal();
   showGroupAssignModal(entryId);
   setTimeout(() => {
-    const rows = document.querySelectorAll('#group-assign-content [data-service-id]');
+    // Scope to the dragged customer's rows (a party renders one [data-assign-entry] wrapper per guest),
+    // so a shared service name (e.g. two guests both "Manicure") can't pre-fill another guest's row.
+    // Fallback to the flat query for a single-customer modal that has no wrapper.
+    let rows = document.querySelectorAll(`#group-assign-content [data-assign-entry="${entryId}"] [data-service-id]`);
+    if (!rows.length) rows = document.querySelectorAll('#group-assign-content [data-service-id]');
     rows.forEach(row => {
       if (row.dataset.serviceId === serviceId) {
         const techSelect = row.querySelector('.assign-tech');
@@ -935,7 +968,79 @@ export function assignServiceFromTurns(entryId, serviceId) {
   }, 250);
 }
 export function closeTurnsAssignModal() {
+  _dragPickState = null;   // drop any pending drag-pick closures when the picker closes (X / backdrop / choice)
   const m = document.getElementById('turns-assign-modal'); m.classList.add('hidden'); m.style.display = '';
+}
+
+// ── N3 drag→tech flow (assign a waiting customer, or move an assigned one, scoped to the dragged guest) ──
+// (_statusWord is shared with the history view, defined lower in this module.)
+// Entry point from the drop handler. fromTech set = already assigned there (a MOVE); null = a waiting
+// customer (an ASSIGN). Break/Off is folded into the SAME confirm as the skills/override warnings so a
+// drag never stacks two modals. ctx carries everything the warning/copy needs.
+function dragDropToTech(entryId, fromTech, targetTech) {
+  const entry = q().find(x => String(x.id) === String(entryId)); if (!entry) return;
+  const tech = staffById(targetTech), techName = tech?.name || 'this tech';
+  const deps = { statusOf: getAssignmentStatus, doesService: sid => _techDoesService(tech, sid), labelOf: sid => svc(sid)?.label || sid };
+  const breakOff = (cfg().turns_break || []).includes(targetTech) ? 'Break' : ((cfg().turns_off || []).includes(targetTech) ? 'Off' : null);
+  const ctx = { techName, breakOff };
+  if (fromTech) _dragMove(entry, fromTech, targetTech, ctx, deps);
+  else _dragAssign(entry, targetTech, ctx, deps);
+}
+function _dragAssign(entry, targetTech, ctx, deps) {
+  const options = eligibleWaitingServices(entry, targetTech, deps);
+  if (!options.length) { showToast(`No waiting services to assign for ${entry.name}`); return; }   // xss-ok: showToast sets textContent, not HTML
+  turnsAssignTarget = { techId: targetTech };
+  _pickDragService('assign', `Assign ${entry.name} to ${ctx.techName}`, options, sid => assignServiceFromTurns(entry.id, sid), ctx);   // xss-ok: title → #turns-assign-label.textContent
+}
+function _dragMove(entry, fromTech, targetTech, ctx, deps) {
+  const isManager = ['admin', 'manager'].includes(getActiveUser()?.role);
+  const options = movableServices(entry, fromTech, { isManager, isPaidStatus, ...deps });
+  if (!options.length) { showToast(`Nothing of ${entry.name}’s can move to ${ctx.techName}`); return; }   // xss-ok: showToast sets textContent, not HTML
+  _pickDragService('move', `Move which of ${entry.name}’s services to ${ctx.techName}?`, options, sid => _commitDragMove(entry.id, sid, fromTech, targetTech, ctx.techName), ctx);   // xss-ok: title → #turns-assign-label.textContent
+}
+// Re-find the entry at commit time + patch ONLY the moved assignment (queue.assignmentPatch, which the
+// store applies to the CURRENT entry by id). This is what keeps the async think-time in the picker/
+// confirm from letting a stale whole-entry upsert clobber a concurrent fees/items/discount edit (§14).
+function _commitDragMove(entryId, serviceId, fromTech, targetTech, techName) {
+  const entry = q().find(x => String(x.id) === String(entryId)); if (!entry) return;
+  const a0 = (entry.assignments || []).find(x => x.serviceId === serviceId && x.techId === fromTech);
+  if (!a0) { showToast('That service is no longer there to move'); return; }
+  const a = JSON.parse(JSON.stringify(a0));            // patch a clone of only this assignment
+  a.techId = targetTech; a.assignedAt = Date.now();    // dispatch stamps updatedAt/updatedBy; lands as the new tech's newest turn
+  dispatch('queue.assignmentPatch', { entryId, serviceId, techId: fromTech, assignment: a });
+  renderQueue(); renderTurns();
+  showToast(`Moved ${svc(serviceId)?.label || 'service'} to ${techName}`);
+}
+// 0 → caller already toasted; 1 → straight through (still confirms if warnings apply); 2+ → picker.
+let _dragPickState = null;
+function _pickDragService(action, title, options, onPick, ctx) {
+  const pick = opt => _confirmThenCommit(action, opt, onPick, ctx);
+  if (options.length === 1) { pick(options[0]); return; }
+  _dragPickState = { options, pick };
+  document.getElementById('turns-assign-label').textContent = title;
+  document.getElementById('turns-assign-list').innerHTML = options.map((o, i) => `<button onclick="turnsDragPickChoose(${i})" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-container transition-colors text-left border-t border-surface-container-high">
+    <div class="w-2 h-2 rounded-full ${o.canDo ? 'bg-amber-400' : 'bg-outline-variant'} flex-shrink-0"></div>
+    <span class="text-sm font-body font-semibold text-on-surface flex-1">${escHtml(o.svcLabel)}</span>
+    ${o.needsOverride ? `<span class="text-[10px] font-body text-on-surface-variant flex-shrink-0">${_statusWord(o.status)}</span>` : ''}
+    ${!o.canDo ? '<span class="text-[10px] font-body text-on-surface-variant italic flex-shrink-0">not their usual</span>' : ''}
+  </button>`).join('');
+  const m = document.getElementById('turns-assign-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export function turnsDragPickChoose(i) {
+  const st = _dragPickState; _dragPickState = null; closeTurnsAssignModal();
+  const opt = st && st.options[i]; if (opt) st.pick(opt);
+}
+// Break/Off + skills (menu) + done override reasons combine into ONE confirm (never stacked modals),
+// phrased with the right verb for the action ('assign' | 'move'). `ctx.techName` is for copy only.
+function _confirmThenCommit(action, opt, onPick, ctx) {
+  const go = () => onPick(opt.serviceId);
+  const verb = action === 'move' ? 'Move' : 'Assign';
+  const warns = [];
+  if (ctx.breakOff) warns.push(`${ctx.techName} is on ${ctx.breakOff}.`);
+  if (!opt.canDo) warns.push(`${ctx.techName} doesn’t normally do ${opt.svcLabel}.`);
+  if (opt.needsOverride) warns.push(`${opt.svcLabel} is already ${_statusWord(opt.status)}.`);
+  if (warns.length && window.showWarnModal) window.showWarnModal(`${verb} anyway?`, warns.join(' '), go, `Yes, ${verb.toLowerCase()}`);
+  else go();
 }
 
 // ── Tech status menu ──────────────────────────────
@@ -1449,22 +1554,15 @@ export function exportTurnsPDF() {
       window.showWarnModal?.('Reorder turns?', 'Move this customer before the selected slot? All other turns shift accordingly.', () => reorderTurnSlots(capturedTech, capturedId, filledTarget.dataset.entryId));
       return;
     }
-    const dropZone = pt?.closest('.turns-drop-zone');
-    if (!dropZone) return;
-    const targetTech = dropZone.dataset.techId;
-    if (capturedTech && capturedTech !== targetTech) {
-      const entry = q().find(x => String(x.id) === String(capturedId));
-      if (entry?.assignments) {
-        entry.assignments.forEach(a => { if (a.techId === capturedTech) a.techId = targetTech; });
-        dispatch('queue.upsert', { entry });
-        renderQueue(); renderTurns();
-        showToast('Moved to ' + (staffById(targetTech)?.name || 'tech'));
-      }
-      return;
-    }
-    turnsAssignTarget = { techId: targetTech };
-    showGroupAssignModal(capturedId);
-    setTimeout(() => { document.querySelectorAll('#group-assign-content .assign-tech').forEach(sel => { if (!sel.value) sel.value = targetTech; }); window.updateGroupTotal?.(); }, 260);
+    // Resolve the target tech from anywhere on a tech's row — the empty "+" slot OR a filled slot — so
+    // "drop onto this tech" always works, not only on the empty slot.
+    const targetTech = pt?.closest('.turns-drop-zone')?.dataset.techId || filledTarget?.dataset.techId;
+    if (!targetTech) return;
+    // Dropped an assigned customer back on their OWN tech (not a reorder) → nothing to reassign.
+    if (capturedTech && capturedTech === targetTech) return;
+    // capturedTech set = this customer is already assigned there → a MOVE; null = waiting → an ASSIGN.
+    // Both route through the scoped "which service?" flow (only the dragged customer).
+    dragDropToTech(capturedId, capturedTech, targetTech);
   }
   document.addEventListener('pointerdown', function(e) {
     if (e.button !== 0) return;

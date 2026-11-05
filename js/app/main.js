@@ -154,6 +154,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.71', items: [
+    { icon: 'drag_pan', t: 'Smarter drag-to-assign on the Turns board', d: 'Drag a waiting guest onto a technician and you now pick which of THAT guest’s services goes to them — so when two people in the same party both have “Manicure,” picking one no longer fills in the other. If the guest has only one service it just assigns. Drag a guest who’s already with one technician onto another to MOVE a service over (it asks which one). You get a quick heads-up if the technician is on break, doesn’t usually do that service, or it’s already done — all in one confirm. Already-paid services stay put. Reordering a technician’s own turns is unchanged.' },
+  ] },
   { v: 'td-v0.70', items: [
     { icon: 'palette', t: 'Color key moved to your account menu', d: 'The color legend that used to sit at the top of the Turns board is gone, giving the board more room. You can still look up what every color and badge means anytime: tap your name (top-right) → “Color key.”' },
     { icon: 'receipt_long', t: 'Transactions: filters & totals stay pinned', d: 'On the Transactions screen, the date/controls row and the “Showing… tickets · Net Total” bar now stay fixed at the top while only the list of sales scrolls — so you never lose the filters or the running total as you scroll.' },
