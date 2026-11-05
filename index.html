@@ -420,25 +420,25 @@ tailwind.config = {
       </div>
 
   <!-- Top bar: logo left, nav centered, sync+user right -->
-  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:calc(62px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;min-width:0">
+  <header id="dash-header" class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:calc(62px + env(safe-area-inset-top));padding:env(safe-area-inset-top) 12px 0;min-width:0">
     <!-- Logo -->
     <img id="logo-desk" src="" alt="" class="h-[60px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
     <!-- Nav — centered, takes remaining space -->
     <nav id="dash-nav" class="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scroll min-w-0" style="min-width:0;justify-content:safe center">
       <button class="dash-tab active" id="nav-floor" onclick="showDashGroup('floor')">
-        <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Floor
+        <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> <span>Floor</span>
       </button>
       <button class="dash-tab" id="nav-calendar" onclick="showDashPanel('calendar')">
-        <span class="material-symbols-outlined" style="font-size:18px">calendar_month</span> Calendar
+        <span class="material-symbols-outlined" style="font-size:18px">calendar_month</span> <span>Calendar</span>
       </button>
       <button class="dash-tab" id="nav-money" onclick="showDashGroup('money')">
-        <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> Sales
+        <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> <span>Sales</span>
       </button>
       <button class="dash-tab" id="nav-reportsgrp" onclick="showDashGroup('reportsgrp')">
-        <span class="material-symbols-outlined" style="font-size:18px">bar_chart</span> Reports
+        <span class="material-symbols-outlined" style="font-size:18px">bar_chart</span> <span>Reports</span>
       </button>
       <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
-        <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
+        <span class="material-symbols-outlined" style="font-size:18px">tune</span> <span>Settings</span>
       </button>
     </nav>
     <!-- Right side: sync pills + actions — locked right -->
@@ -447,7 +447,7 @@ tailwind.config = {
         class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">search</span>
       </button>
-      <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
+      <div id="sync-pill" class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="forceSyncNow()" title="Live sync — tap to re-sync now">
         <span class="sync-dot" id="conn-dot" style="background:#adb3b5"></span>
         <span id="conn-text">Live</span>
@@ -464,7 +464,7 @@ tailwind.config = {
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">chat</span>
         <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
       </button>
-      <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
+      <button id="customer-screen-btn" onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">tablet</span>
       </button>
       <!-- User bubble: tap to open account menu (clock in/out + log out). -->
@@ -474,9 +474,27 @@ tailwind.config = {
           <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
           <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
           <span id="clock-btn-dot" class="hidden absolute" style="top:-2px;right:-2px;width:10px;height:10px;border-radius:9999px;border:2px solid var(--surface);background:#f59e0b"></span>
+          <!-- Tablet-only: combined chat+support unread (chat/support buttons collapse into the menu on iPad). Top-LEFT so it never overlaps the clock dot at top-right. -->
+          <span id="acct-unread-badge" class="hidden absolute items-center justify-center font-bold text-white" style="top:-5px;left:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1"></span>
         </button>
         <!-- User menu dropdown -->
         <div id="user-menu" class="hidden" style="position:absolute;right:0;top:40px;z-index:61;min-width:196px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;padding:6px 0">
+          <!-- Tablet-only (≤1194px): Chat / Help / Customer screen collapse off the top bar into this menu. Hidden on desktop via #user-menu .tablet-only. -->
+          <button onclick="toggleChat();closeUserMenu()" class="tablet-only w-full items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+            <span class="material-symbols-outlined" style="font-size:18px">chat</span>
+            Chat
+            <span id="menu-chat-badge" class="hidden ml-auto flex items-center justify-center font-bold text-white" style="min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1"></span>
+          </button>
+          <button onclick="openSupport();closeUserMenu()" class="tablet-only w-full items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+            <span class="material-symbols-outlined" style="font-size:18px">support_agent</span>
+            Help &amp; feedback
+            <span id="menu-support-badge" class="hidden ml-auto flex items-center justify-center font-bold text-white" style="min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1"></span>
+          </button>
+          <button onclick="goTo('screen-welcome');closeUserMenu()" class="tablet-only w-full items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
+            <span class="material-symbols-outlined" style="font-size:18px">tablet</span>
+            Customer screen
+          </button>
+          <div class="tablet-only" style="height:1px;background:var(--surface-container-high);margin:4px 0"></div>
           <button id="clock-btn" onclick="onClockBtn();closeUserMenu()" style="display:none;width:100%;border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent" class="flex items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold hover:bg-surface-container transition-colors">
             <span class="material-symbols-outlined" style="font-size:18px">schedule</span>
             <span id="clock-btn-label">Clock in</span>

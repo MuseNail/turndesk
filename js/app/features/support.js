@@ -46,8 +46,13 @@ function isEditing() {
   return [...overlay.querySelectorAll('input,textarea')].some(el => el.type !== 'radio' && el.value.trim());
 }
 
+// Combined-unread source for the iPad account-avatar badge (main.js refreshAccountUnread).
+// Salon-side unread tickets (same filter paintUnreadDot uses for the Settings-nav dot).
+export function supportUnreadCount() { return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').length; }
+
 // ── Unread badge on the Settings nav button (dev replies the staff haven't seen) ──
 function paintUnreadDot(n) {
+  window.refreshAccountUnread?.();   // iPad: Help collapses into the account menu → mirror onto the avatar badge
   const btn = document.getElementById('nav-settings');
   if (!btn) return;
   let dot = btn.querySelector('.support-unread-dot');

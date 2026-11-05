@@ -175,20 +175,39 @@
     /* (The tech column is now user-resizable via --turns-techcol-w; default 155px, drag to narrow.) */
   }
 
-  /* ── iPad / tablet (≤1180px) ─────────────────────
-     13" iPad Pro portrait = 1024px, landscape = 1366px.
-     At ≤1180px we hide nav tab text labels (keep icons)
-     to prevent the header from overflowing.              */
-  @media (max-width: 1180px) {
+  /* ── iPad header slim-down (v6.05): desktop-proof hides ──
+     GLOBAL (not in a media query) so neither JS toggling .hidden nor a Tailwind
+     utility can leak these onto desktop (>1194px). The ≤1194 block reveals them. */
+  #acct-unread-badge { display: none !important; }
+  #user-menu .tablet-only { display: none; }   /* id+class outranks Tailwind .flex (cf. the .hidden note below) */
+
+  /* ── iPad / tablet (≤1194px) ─────────────────────
+     1194 (not 1180) so an 11" iPad is covered in BOTH orientations — 11" Pro
+     landscape is 1194px CSS. Portrait iPads, Air/10.9" landscape and 12.9"
+     portrait all fall under it; real desktop (>1194px) is untouched. Hides nav
+     tab labels, slims the header, and collapses chat/customer-screen (+ a Help
+     shortcut) into the account menu.                      */
+  @media (max-width: 1194px) {
     /* Nav tabs: icon only, no text */
     .dash-tab span:not(.material-symbols-outlined) { display: none !important; }
     .dash-tab { padding: 8px 10px !important; gap: 0 !important; }
-    /* Hide "Square synced" text, keep dot */
-    #sync-label { display: none !important; }
     /* Shrink action icon buttons slightly */
     .dash-tab .material-symbols-outlined { font-size: 20px !important; }
     /* Logged-in user: hide name, keep avatar */
     #logged-in-name { display: none !important; }
+    /* Slim the header bar + logo (keep the safe-area inset so the notch never clips it) */
+    #dash-header { height: calc(48px + env(safe-area-inset-top)) !important; }
+    #logo-desk { height: 40px !important; }
+    /* Collapse these off the bar → they live in the account menu instead */
+    #chat-btn, #customer-screen-btn { display: none !important; }
+    #user-menu .tablet-only { display: flex !important; }
+    /* Combined chat+support unread badge on the avatar — only when it has a count */
+    #acct-unread-badge:not(.hidden) { display: flex !important; }
+    /* Sync pill → just the dot, but keep a finger-sized tap target for tap-to-resync (44×40 in the 48px bar) */
+    #sync-pill { min-width: 44px !important; height: 40px !important; padding: 0 !important; background: transparent !important; justify-content: center !important; }
+    #conn-text { display: none !important; }
+    /* The menu gained rows — let it scroll on a short landscape / Stage Manager window */
+    #user-menu { max-height: calc(100dvh - 56px) !important; overflow-y: auto !important; }
   }
 
   /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤834px) ──
@@ -218,8 +237,7 @@
   @media (max-width: 760px) {
     /* Service buttons in check-in: 3-col → 2-col */
     #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    /* Sync indicators: hide both text labels */
-    #conn-text { display: none !important; }
+    /* (#conn-text is already hidden from ≤1194 above — no need to repeat it here) */
   }
   @media (max-width: 768px) {
     #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }

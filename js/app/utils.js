@@ -13,6 +13,16 @@ export const businessName = () => ((getState().config.business || {}).name || 'T
 // default cents accumulator. Read from synced config; store.js has no imports so no cycle.
 const _wholeDollars = () => !!getState().config?.numpad_whole_dollars;
 
+// ── Account-avatar unread badge (iPad header) ────────
+// On tablet the chat + support buttons collapse into the account menu, so their
+// unread counts are summed onto one small badge on the avatar. Pure so it can be
+// unit-tested; the DOM wiring lives in main.js refreshAccountUnread. Junk/stale
+// inputs floor to 0 (callers read possibly-undefined module counts).
+export function accountUnreadText(chatUnread, supportUnread) {
+  const n = Math.max(0, Math.floor(Number(chatUnread) || 0)) + Math.max(0, Math.floor(Number(supportUnread) || 0));
+  return n <= 0 ? '' : n > 9 ? '9+' : String(n);
+}
+
 // ── Ticket total (single source of truth) ────────
 // A ticket's true total = its parts: services + retail items + fees − discount.
 // Used at pay-time, in reports, and by the heal — so a stale cached `totalCost`
