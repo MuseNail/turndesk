@@ -590,6 +590,36 @@ function _manualHistoryHtml(phone, name, records) {
     </div>`;
   }).join('');
 }
+// NL1: per-guest notes box inside the A&P one-list (one per party member), mirroring the check-in
+// box's three sections. `recs` is buildCombinedRecords() computed ONCE per render and threaded in
+// (a party would otherwise rebuild it per guest). `seenKeys` tracks phone keys already given an
+// editable box so a second party member sharing a phone gets a read-only shared view (no collision).
+function _assignGuestNotesHtml(e, recs, seenKeys) {
+  const lab = 'text-[11px] font-body font-semibold text-primary uppercase tracking-widest block mb-1';
+  const taCls = 'w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none';
+  const pk = notePhoneKey(e.phone);
+  const dupe = !!pk && seenKeys.has(pk);
+  if (pk) seenKeys.add(pk);
+  const note = customerNote(e.phone);
+  let custBox;
+  if (!pk) {
+    // No phone on file → no key to save under. Disable the box so a typed note isn't silently dropped
+    // (the FD adds a phone, then the note field enables on the next re-render), mirroring the old panel.
+    custBox = `<textarea class="${taCls} opacity-60" disabled placeholder="Add a phone number to save a customer note" style="height:110px"></textarea>`;
+  } else if (dupe) {
+    custBox = `<div class="w-full rounded-xl border border-dashed border-surface-container-high bg-surface-container-lowest px-3 py-2 text-sm font-body text-on-surface-variant overflow-hidden" style="height:110px"><span class="text-[10px] uppercase tracking-widest text-outline block mb-0.5">Shared · read-only</span>${note ? escHtml(note) : '<span class="italic">Shared with another guest on this ticket</span>'}</div>`;
+  } else {
+    custBox = `<textarea class="ga-custnote ${taCls}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="height:110px">${escHtml(note)}</textarea>`;
+  }
+  // _manualHistoryHtml returns already-escaped HTML (it escHtml's every field it renders); compute it
+  // out of the interpolation so the e.phone/e.name lookup args aren't flagged as a raw sink (F4 gate).
+  const histHtml = _manualHistoryHtml(e.phone, (e.name || '').trim(), recs);
+  return `<div class="mt-3 rounded-xl border border-surface-container-high bg-surface-container-low p-3 space-y-2" style="max-width:23rem">
+    <div><span class="${lab}">Customer note</span>${custBox}</div>
+    <div><span class="${lab}">Last 3 visits</span><div id="ga-hist-${e.id}" class="overflow-y-auto bg-surface-container-lowest rounded-xl border border-surface-container-high px-2.5 py-1" style="height:120px">${histHtml}</div></div>
+    <div><span class="${lab}">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></span><textarea class="ga-visitnote ${taCls}" oninput="assignGuestVisitNoteInput('${e.id}')" placeholder="e.g., design on ring fingers…" style="height:90px">${escHtml(e.txnNote || '')}</textarea></div>
+  </div>`;
+}
 function manualGuestBoxHtml(idx) {
   const lab = 'text-[11px] font-body font-semibold text-primary uppercase tracking-widest block mb-1';
   return `<div id="manual-box-${idx}" class="manual-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
@@ -1680,6 +1710,48 @@ export function saveAssignTxnNote() {
   if (entry && el) entry.txnNote = el.value;
 }
 
+// ── NL1: per-guest notes in the A&P one-list ─────────────────────────────────────
+// Each guest section carries its own Customer-note / Last-3-visits / This-visit-note box. Because the
+// one-list rebuilds its whole innerHTML on nearly every interaction, notes are flushed BEFORE each
+// rebuild (via _saveAssignOneList → _flushAssignGuestCustNotes) and captured in the save loop; a 600ms
+// debounce covers a nav-force-hide that bypasses _saveAssignOneList.
+export function assignGuestVisitNoteInput(entryId) {
+  const sec = document.querySelector(`#group-assign-content [data-assign-entry="${entryId}"]`);
+  const ta = sec?.querySelector('.ga-visitnote');
+  const entry = q().find(e => String(e.id) === String(entryId));
+  if (entry && ta) entry.txnNote = ta.value;   // local (persisted on the next queue.upsert at pay/save)
+}
+let _assignNoteTimer = null;
+export function assignGuestCustNoteInput(entryId) {
+  const sec = document.querySelector(`#group-assign-content [data-assign-entry="${entryId}"]`);
+  const ta = sec?.querySelector('.ga-custnote');
+  if (ta) ta.dataset.touched = '1';
+  clearTimeout(_assignNoteTimer);
+  _assignNoteTimer = setTimeout(_flushAssignGuestCustNotes, 600);
+}
+// Persist every TOUCHED per-guest customer note to the synced phone-keyed store in ONE dispatch.
+// GATE on `touched` only (never write an untouched box) so an Edit-Customer edit (person_edit) or a
+// cross-device sync echo is never clobbered by a stale box. Reads the LIVE phone field so a number
+// changed inline keys correctly. Dispatches only when something actually changed (no write-amplification).
+function _flushAssignGuestCustNotes() {
+  clearTimeout(_assignNoteTimer); _assignNoteTimer = null;
+  const boxes = document.querySelectorAll('#group-assign-content .ga-custnote');
+  if (!boxes.length) return;
+  const notes = { ...(cfg().customer_notes || {}) };
+  let changed = false;
+  boxes.forEach(ta => {
+    if (ta.dataset.touched !== '1') return;
+    const sec = ta.closest('[data-assign-entry]');
+    const key = notePhoneKey(sec?.querySelector('.ga-phone')?.value || '');
+    if (!key) return;
+    const val = ta.value.trim();
+    if (val === (notes[key] || '')) return;
+    if (val) notes[key] = val; else delete notes[key];
+    changed = true;
+  });
+  if (changed) dispatch('config.set', { key: 'customer_notes', value: notes });
+}
+
 // Load the editable "Customer note" field in the assign/price notes panel from the
 // customer's saved (phone-keyed) note. No phone on file → disabled with a hint.
 function _setAssignCustNote(phone) {
@@ -1818,6 +1890,8 @@ function _renderAssignOneList() {
       <span class="text-sm font-body font-semibold text-on-surface">${s.label}</span>
       <span class="text-xs font-headline font-bold text-outline">${s.baseCost != null ? '$' + Number(s.baseCost).toFixed(0) : ''}</span></button>`).join('');
 
+  const recs = buildCombinedRecords();   // NL1: computed ONCE, threaded to every guest's history box
+  const _seenNoteKeys = new Set();        // NL1: dedupe same-phone party members to a read-only shared note
   const guestSections = party.map(e => {
     const color = e.groupColor || '#1a5252';
     const nm = (e.name || '').trim().split(/\s+/), first = nm[0] || '', last = nm.slice(1).join(' ') || '';
@@ -1836,6 +1910,7 @@ function _renderAssignOneList() {
         ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
       </div>
       ${rows}
+      ${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}
     </div>`;
   }).join('');
 
@@ -1913,8 +1988,9 @@ function _renderAssignOneList() {
     </div>`;
   updateGroupTotal();
   document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);
-  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = party[0].txnNote || '';
-  _setAssignCustNote(party[0].phone);   // + the customer's saved note (persistent, read-only)
+  // NL1: the one-list now carries a per-guest notes box in each guest section, so the single
+  // first-guest side panel is retired here (its markup + handlers stay for the kept tabbed layout).
+  document.getElementById('assign-notes-panel')?.style.setProperty('display', 'none');
 }
 
 export function assignToggleExtras() {
@@ -1989,8 +2065,11 @@ function _saveAssignOneList() {
       _applyRowToAssignment(entry.id, a, row, isNew);
     });
     entry.services = entry.assignments.map(a => a.serviceId);
+    // NL1: capture THIS guest's visit note from their own box (was a single party[0] read that wiped
+    // guest-1 once the side panel went away).
+    const vn = sec.querySelector('.ga-visitnote'); if (vn) entry.txnNote = vn.value;
   });
-  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) party[0].txnNote = noteEl.value;
+  _flushAssignGuestCustNotes();   // NL1: persist per-guest customer notes BEFORE the caller rebuilds the DOM
 
   // Whole-ticket items / fees / discount → consolidated onto the anchor (same as tabbed).
   const memberSvc = e => (e.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer services subtotal (stored totalCost / fee / discount base): comps $0
