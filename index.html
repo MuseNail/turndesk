@@ -1906,8 +1906,10 @@ tailwind.config = {
       </div>
     </div>
 
-    <!-- Appointment technician (shown only when "Appointment" is checked) -->
-    <div id="manual-appt-tech-wrap" class="hidden mb-4">
+    <!-- Appointment technician: RETIRED (v6.00) — superseded by the per-service tech+station assigner on
+         each guest's service rows. Kept hidden (display:none wins over the toggleManualApptTech class flip)
+         so the Appointment checkbox's onchange never throws; the checkbox itself still marks the visit. -->
+    <div id="manual-appt-tech-wrap" class="hidden mb-4" style="display:none">
       <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Technician <span class="text-outline normal-case tracking-normal">(optional)</span></label>
       <select id="manual-appt-tech" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
         <option value="">— Leave unassigned —</option>

@@ -156,6 +156,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.77', items: [
+    { icon: 'event_seat', t: 'Assign a tech & seat right at check-in', d: 'When you check someone in, each service you pick for them now has its own “tech” and “seat” picker. Choose a tech and that service arrives already assigned to them (and to a seat, if you pick one) — it counts their turn right away, just like assigning in Assign & Price. Leave it blank and it’s unassigned exactly like before, so nothing changes for a normal walk-in. A few touches: the seat picker turns on once you pick a tech, a seat that’s already taken shows “(occupied)” (you can still override), and the tech list is your checked-in technicians. This replaces the old single “Appointment → one tech” picker with a per-service one that works for every check-in.' },
+  ] },
   { v: 'td-v0.76', items: [
     { icon: 'star', t: 'Set a customer’s preferred technician', d: 'When you check a customer in, there’s now a “Preferred tech” picker in their box. Pick who they like and it’s saved to that customer — so next time it’s already filled in, and a “★ Prefers Anna” badge shows on their queue card, the Assign & Price screen, and the Turns board. When you’re assigning, the turn suggestion puts their preferred technician forward first — but only if that tech is free, not on break, and can do the service; otherwise it quietly falls back to the normal fair rotation. It never forces an assignment and never changes anyone’s turn count. A couple of nice touches: it still shows your existing “usually with…” hint when it’s a different tech, and if two guests check in on the same phone number they share one preference (shown read-only on the second guest).' },
   ] },

@@ -339,6 +339,11 @@ function buildQueueRow(e) {
       <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${(tip || isTechPriced(a)) ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
     </div>`;
   }).join('');
+  // W2-7: a mixed entry can have some services teched at check-in and some left blank — those blank
+  // services have no assignment row above, so they'd vanish from the board until A&P is opened. List
+  // them (only when there IS an assignSummary; the all-unassigned case already shows serviceLabels below).
+  const _coveredSids = new Set((e.assignments || []).filter(a => a.techId || a.cost).map(a => String(a.serviceId)));
+  const _uncoveredLabels = (e.services || []).filter(sid => !_coveredSids.has(String(sid))).map(sid => svc(sid)?.label || sid).join(', ');
   const totalDisplay = e.totalCost ? `<span class="font-semibold text-primary ml-1">$${e.totalCost.toFixed(2)}</span>` : '';
   const cardBg = isPaidStatus(e.status)
     ? 'bg-surface-container-high border-surface-container-highest opacity-70'
@@ -385,6 +390,7 @@ function buildQueueRow(e) {
         </div>
         ${(assignSummary || hideSvc) ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
+        ${(assignSummary && !hideSvc && _uncoveredLabels) ? `<div class="text-[11px] font-body text-on-surface-variant truncate" title="Not yet assigned to a tech">+ ${escHtml(_uncoveredLabels)} · needs a tech</div>` : ''}
         ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + escHtml(e.phone) : ''}</div>
         ${cardNotePreview(e.phone, e.txnNote)}
@@ -494,13 +500,78 @@ export function tryAdvanceStatus(id, targetStatus) {
 let manualGuestCount = 0;
 let groupColorIndex = 0;
 
-function serviceButtonsHtml() {
+function serviceButtonsHtml(idx) {
   return cfg().services.map(s => `
-    <button type="button" onclick="this.classList.toggle('selected')" data-service="${s.id}"
+    <button type="button" onclick="toggleManualService(this, ${idx})" data-service="${s.id}"
       class="service-btn flex flex-col items-center justify-center py-2 rounded-lg bg-surface-container text-on-surface-variant border border-outline-variant/30 hover:bg-primary/10 hover:text-primary transition-all text-xs">
       <span class="font-headline font-bold">${s.abbr}</span>
       <span class="text-[9px] font-body mt-0.5 uppercase tracking-tighter text-center leading-tight">${s.label}</span>
     </button>`).join('');
+}
+
+// ── W2-7: assign tech + station at check-in (per service) ─────────────────────────
+// PURE core: one assignment per selected service that HAS a tech chosen (a blank service contributes
+// nothing, so an unassigned walk-in keeps today's no-assignments-array shape — critical: an all-blank
+// array would strand the entry in Waiting). Station is only meaningful with a tech; assignedAt offsets
+// by index so a multi-service party sorts stably on the turn board. Counting gates on techId, not assignedAt.
+export function buildCheckinAssignments(selectedServiceIds, picks, nowBase) {
+  const out = [];
+  let i = 0;
+  (selectedServiceIds || []).forEach(sid => {
+    const p = (picks && picks[sid]) || {};
+    if (!p.techId) return;
+    out.push({ serviceId: sid, techId: p.techId, station: p.station || '', status: 'waiting', cost: 0, assignedAt: nowBase + (i++) });
+  });
+  return out;
+}
+// Tech options mirror the A&P picker — CHECKED-IN techs only (turns_order), appending an off-rotation
+// tech only when one is already selected — so assigning at check-in books a turn for someone on the floor.
+function _checkinTechOptions(sel) {
+  const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id)).sort(byName);
+  let opts = checkedIn;
+  if (sel && !checkedIn.some(s => s.id === sel)) { const a = staffById(sel); if (a) opts = [...checkedIn, a]; }
+  return '<option value="">— Unassigned —</option>' + (opts.length
+    ? opts.map(st => `<option value="${st.id}"${sel === st.id ? ' selected' : ''}>${escHtml(st.name)}</option>`).join('')
+    : '<option value="" disabled>No techs checked in</option>');
+}
+// Station options label an already-held seat "(occupied)" (soft — the FD can still override) so a party
+// isn't silently double-booked onto one chair.
+function _checkinStationOptions(sel) {
+  const occupied = new Set();
+  q().forEach(e => { if (!isPaidStatus(e.status)) (e.assignments || []).forEach(a => { if (a.station) occupied.add(String(a.station)); }); });
+  // Also count seats already picked for OTHER rows in THIS open check-in (same-party double-book),
+  // not just customers already on the board.
+  document.querySelectorAll('[id^="manual-asn-stn-"]').forEach(s => { if (s.value) occupied.add(String(s.value)); });
+  return '<option value="">— No seat —</option>' + stationDefs().map(s => {
+    const occ = occupied.has(String(s.id)) && String(s.id) !== String(sel);
+    return `<option value="${s.id}"${String(sel) === String(s.id) ? ' selected' : ''}>${escHtml(s.label || s.id)}${occ ? ' (occupied)' : ''}</option>`;
+  }).join('');
+}
+const _asnSel = 'bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-xs font-body text-on-surface focus:outline-none focus:border-primary';
+function _assignRowHtml(idx, sid) {
+  const s = svc(sid);
+  return `<div class="flex items-center gap-2" id="manual-asn-row-${idx}-${sid}">
+    <span class="font-body font-semibold text-on-surface-variant flex-shrink-0 truncate" style="width:70px;font-size:11px" title="${escHtml(s?.label || sid)}">${escHtml(s?.abbr || s?.label || sid)}</span>
+    <select id="manual-asn-tech-${idx}-${sid}" onchange="manualAssignTechChange(${idx},'${escAttrJs(sid)}')" class="flex-1 min-w-0 ${_asnSel}">${_checkinTechOptions('')}</select>
+    <select id="manual-asn-stn-${idx}-${sid}" disabled class="flex-1 min-w-0 ${_asnSel} disabled:opacity-50">${_checkinStationOptions('')}</select>
+  </div>`;
+}
+// Incrementally add/remove just the toggled service's row — never a full re-render, so sibling rows keep
+// their picks and an open <select> isn't clobbered. A re-selected service starts blank (its row was removed).
+export function toggleManualService(btn, idx) {
+  const sid = btn.dataset.service;
+  const nowSelected = !btn.classList.contains('selected');
+  btn.classList.toggle('selected');
+  const cont = document.getElementById(`manual-assign-${idx}`); if (!cont) return;
+  const row = document.getElementById(`manual-asn-row-${idx}-${sid}`);
+  if (nowSelected) { if (!row) cont.insertAdjacentHTML('beforeend', _assignRowHtml(idx, sid)); }
+  else row?.remove();
+  document.getElementById(`manual-assign-hint-${idx}`)?.classList.toggle('hidden', cont.children.length === 0);
+}
+export function manualAssignTechChange(idx, sid) {
+  const tech = document.getElementById(`manual-asn-tech-${idx}-${sid}`);
+  const stn = document.getElementById(`manual-asn-stn-${idx}-${sid}`);
+  if (stn) { const on = !!tech?.value; stn.disabled = !on; if (!on) stn.value = ''; }
 }
 
 function renderManualGuestCard(idx) {
@@ -551,7 +622,9 @@ function renderManualGuestCard(idx) {
     </div>` : ''}
     <div>
       <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-2">Services</label>
-      <div class="grid grid-cols-4 gap-2" id="manual-services-${idx}">${serviceButtonsHtml()}</div>
+      <div class="grid grid-cols-4 gap-2" id="manual-services-${idx}">${serviceButtonsHtml(idx)}</div>
+      <div id="manual-assign-hint-${idx}" class="hidden text-[10px] font-body text-outline-variant mt-2">Assign a tech &amp; seat now · optional</div>
+      <div id="manual-assign-${idx}" class="space-y-1.5 mt-1"></div>
     </div>`;
   // The per-visit note + customer note + visit history now live in this guest's box in the
   // notes+history strip (one box per guest), not inline in the card.
@@ -774,24 +847,16 @@ export function showManualAdd() {
   _wireManualStripInput();
   addManualGuest();
   const appt = document.getElementById('manual-is-appointment'); if (appt) appt.checked = false;
-  const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
-  const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
+  // (The party-wide appt-tech picker was retired in v6.00 — superseded by the per-service assigner;
+  //  no reset needed for the permanently-hidden element.)
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   refreshManualAddChrome();   // set the primary-button label / skip button / bypass banner from config
   setTimeout(() => document.getElementById('manual-phone-1')?.focus(), 100);
 }
-// Appointment check-ins can pre-assign a technician. Show the picker only when the
-// "Appointment" box is checked; populate it with active staff (lazily, keeping any
-// current choice). Leaving it blank leaves the check-in unassigned.
-export function toggleManualApptTech() {
-  const on = document.getElementById('manual-is-appointment')?.checked;
-  const wrap = document.getElementById('manual-appt-tech-wrap'); if (!wrap) return;
-  wrap.classList.toggle('hidden', !on);
-  const sel = document.getElementById('manual-appt-tech');
-  if (on && sel && sel.options.length <= 1) {
-    sel.innerHTML = '<option value="">— Leave unassigned —</option>' + activeStaff().slice().sort(byName).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-  }
-}
+// Retired no-op (v6.00): the party-wide appointment tech picker was superseded by the per-service
+// tech+station assigner. The "Appointment" checkbox still calls this via its inline onchange, so the
+// function stays (a ReferenceError otherwise) but does nothing — the checkbox only marks isAppointment.
+export function toggleManualApptTech() {}
 export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); appendManualGuestBox(manualGuestCount); _syncManualStrip(); }
 export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); document.getElementById(`manual-box-${idx}`)?.remove(); _syncManualStrip(); }
 export function closeManualAdd() {
@@ -812,7 +877,6 @@ export function closeManualAdd() {
 function collectManualEntries() {
   const newEntries = [];
   const isAppointment = document.getElementById('manual-is-appointment')?.checked || false;
-  const apptTechId = isAppointment ? (document.getElementById('manual-appt-tech')?.value || '') : '';
   for (let i = 1; i <= manualGuestCount; i++) {
     const card = document.getElementById(`manual-guest-${i}`);
     if (!card) continue;
@@ -831,9 +895,13 @@ function collectManualEntries() {
     // guests have a disabled picker → never stamped (one preference per shared phone).
     const ptEl = document.getElementById(`manual-preftech-${i}`);
     if (ptEl && !ptEl.disabled && ptEl.dataset.touched === '1') entry.preferredTechId = ptEl.value || null;
-    // Appointment + chosen tech → pre-assign that tech to each service (remembered on
-    // the check-in). Blank tech leaves it unassigned (no assignments created here).
-    if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
+    // W2-7: per-service tech+station picks → hard assignments. Only a service WITH a tech becomes an
+    // assignment; a blank service contributes nothing, so an unassigned walk-in keeps today's shape
+    // (no assignments array → the queue/floor/A&P paths behave exactly as before).
+    const picks = {};
+    services.forEach(sid => { const t = document.getElementById(`manual-asn-tech-${i}-${sid}`)?.value || ''; if (t) picks[sid] = { techId: t, station: document.getElementById(`manual-asn-stn-${i}-${sid}`)?.value || '' }; });
+    const asn = buildCheckinAssignments(services, picks, Date.now());
+    if (asn.length) entry.assignments = asn;   // ⚠️ keep CONDITIONAL — an all-blank assignments array strands the entry in Waiting (updateStatus/deriveEntryStatus)
     newEntries.push(entry);
   }
   if (newEntries.length === 0) return null;

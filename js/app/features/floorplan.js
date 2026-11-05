@@ -527,6 +527,9 @@ export function floorCheckInAt(stationId) {
 export function floorSeatPending(entries) {
   const pending = _pendingSeatStation; _pendingSeatStation = null;   // consume-once, no matter the outcome
   const e0 = entries && entries[0];                                  // party extras stay in the tray
+  // W2-7: if the FD already chose per-service seats at check-in, the armed floor chair must NOT
+  // blanket-overwrite them — their explicit picks win.
+  if (e0 && (e0.assignments || []).some(a => a.station)) return;
   const occ = pending ? collectFloor().byStation[pending] : null;
   const plan = _planSeat(pending, {
     stationExists:  !!pending && getStations().includes(pending),

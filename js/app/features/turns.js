@@ -896,8 +896,22 @@ export function renderTurnsQueue() {
     const avatar = `<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-headline font-bold" style="background:${_av.bg};color:${_av.fg}">${escHtml(e.name.charAt(0).toUpperCase())}</div>`;
     const assignments = (e.assignments||[]).filter(a => a.techId || a.serviceId);
     const es = suggestions[e.id] || {};
+    // Unassigned-service row (shared): used for a fully-unassigned entry AND for the services of a MIXED
+    // entry (some teched at check-in via W2-7, some left blank) that have no assignment — otherwise those
+    // blank services would vanish from the turns card (the floor already shows the union).
+    const _lsW = serviceLineStyle('waiting');
+    const _unassignedRow = sid => { const s = svc(sid), sug = es[sid]; const arrow = hideSvc ? '' : '→ '; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${_lsW.bar};padding-left:4px;opacity:${_lsW.rowOpacity}">
+        <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${_lsW.dot}"></span>
+        <span class="min-w-0 flex-1 truncate">
+          ${hideSvc ? '' : `<span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>`}
+          ${sug ? `<span class="text-on-surface-variant">${arrow}${escHtml(sug.techName)}?</span>` : ''}
+        </span>
+        ${sug ? acceptBtnHtml(e.id, sid, sug.techName) : ''}
+        <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${_lsW.pill.bg};color:${_lsW.pill.fg}">${_lsW.pill.label}</span>
+      </div>`; };
     let serviceContent;
     if (assignments.length > 0) {
+      const _covered = new Set(assignments.map(a => String(a.serviceId)));
       serviceContent = assignments.map(a => {
         const tech = staffById(a.techId), s = svc(a.serviceId);
         const ls = serviceLineStyle(effectiveServiceStatus(e, a));
@@ -919,18 +933,9 @@ export function renderTurnsQueue() {
           ${isTechPriced(a) ? `<span class="flex-shrink-0 text-[9px] font-bold px-1 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">✓</span>` : ''}
           <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
         </div>`;
-      }).join('');
+      }).join('') + (e.services || []).filter(sid => !_covered.has(String(sid))).map(_unassignedRow).join('');   // W2-7: also show blank (un-teched) services
     } else {
-      const ls = serviceLineStyle('waiting');
-      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; const arrow = hideSvc ? '' : '→ '; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${ls.bar};padding-left:4px;opacity:${ls.rowOpacity}">
-        <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
-        <span class="min-w-0 flex-1 truncate">
-          ${hideSvc ? '' : `<span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>`}
-          ${sug ? `<span class="text-on-surface-variant">${arrow}${escHtml(sug.techName)}?</span>` : ''}
-        </span>
-        ${sug ? acceptBtnHtml(e.id, sid, sug.techName) : ''}
-        <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
-      </div>`; }).join('');
+      serviceContent = (e.services || []).map(_unassignedRow).join('');
     }
     // C9/D13 vocabulary (recolored v4.79): In Service = green, Done(complete) = blue,
     // Awaiting price = violet, Waiting = amber — match the status pills rendered inside this same
