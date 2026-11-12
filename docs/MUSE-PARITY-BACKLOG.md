@@ -49,6 +49,33 @@ Open for TD: eyeball the payroll frozen column on a real iPad (compare on, 3+ te
 fix on a phone, same as Muse. NOTE: for very large multi-location totals, `PW=72` (fits ~$999,999)
 may want bumping.
 
+## Ported into TurnDesk (2026-11-11 round) — td-v0.83
+
+Two reviewed/shipped Muse features transplanted, adapted to TD's diverged multi-tenant code. Client-only
+(no Worker change, no `wrangler deploy`). Version trio bumped once together. 643 tests pass (76 files).
+Built via `rigorous-build`: TDD on the pure helpers → 3-lens + guardrail subagent review → fixes.
+
+- **Unified notification bell (Muse v6.18, `2f1daf8`)** — ONE header bell aggregating everything pending,
+  each row tappable straight to its source. New `js/app/notif-util.js` (pure, unit-tested) + `features/
+  notifications.js` (DOM, strictly READ-ONLY on state; one debounced `refreshNotifBell()` in `onStateChange`
+  + a 60s heartbeat). **TD-adapted sources:** failed/dead-lettered writes (admin+manager), replies to your
+  help tickets (all), unread chat (all), the actionable clock station-warning (admin), app updates (all).
+  **Omitted vs Muse (deliberate):** `supportNew` (TD's salon app has no operator inbox — new-ticket triage
+  is the operator console's job) and overdue `tasks` (TD tasks are Google-Tasks-backed, not synced state).
+  Every source is already per-salon → no cross-tenant leak (verified). Retired the now-redundant Settings-nav
+  support dot + the iPad avatar combined-unread badge (`#acct-unread-badge`) + `#menu-support-badge`; moved
+  nothing (desktop already reaches Help via Settings → Help & Feedback). **Data Recovery is now manager-visible**
+  (was admin-only) so the manager's "a sale didn't save" alert leads somewhere. Tests: `test/notifications.test.js`.
+- **Book next appointment at checkout (Muse v6.19, `b7a8240`)** — after a paid SERVICE sale, a non-blocking
+  card offers to book the next visit → Calendar banner → clicking a slot opens New Appointment autofilled
+  with name+phone. New `js/app/rebook-util.js` (pure, unit-tested) + `features/rebook.js` (device-local
+  `_pending`, never synced). Hooked at the top of `square-pos._finalizeTerminalPaid` — TD's single LOCAL
+  checkout chokepoint (cash/Zelle/gift/card + record-as-paid + manual checkout all funnel here; the synced
+  `updateStatus(...,'paid')` path never calls it), capturing a name/phone/services snapshot before the
+  paid-flip → card fires on the checkout device only, never salon-wide (verified). Service-visit gate excludes
+  gift-card/retail/Quick Sale. Synced `config.rebook_prompt` (default ON) + a Settings → Workflow → Checkout
+  Rebooking toggle (manager/admin). Tests: `test/rebook.test.js`.
+
 ## Deferred (documented, not built)
 
 - **#1 — Helcim refund safety hardening.** Muse (v4.97) hardened its card-refund path:

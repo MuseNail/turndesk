@@ -7,6 +7,8 @@ import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisu
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
 import { breakInstancesForDay, ruleOccurrence } from './breaks.js';
 import { canDo, getActiveUser } from '../session.js';
+import { splitName } from '../rebook-util.js';
+import { rebookPending, renderRebookBanner, finishRebook } from './rebook.js';
 
 // Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
 // blank/placeholder → neutral gray. One source of truth for both grid views.
@@ -575,6 +577,7 @@ export async function calLoadAndRender(silent) {
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
     renderCalSelectorList(); calUpdateDateInput(); renderTodaysAppointments();
+    renderRebookBanner();   // show/hide the "Booking next visit for …" banner from rebook mode
   } catch (err) {
     console.warn('[calendar] render failed:', err);
     calSetStatus('Error rendering calendar: ' + (err?.message || 'Unknown error'));
@@ -1798,6 +1801,15 @@ export function showNewApptModal(calId, hour, minute, techName) {
   document.getElementById('appt-event-id').value = '';
   document.getElementById('appt-cal-id').value = calId || '';
   ['appt-name','appt-first','appt-last','appt-phone','appt-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  // Rebook: when a rebook is in progress, prefill the customer's name + phone (service/tech/time
+  // are chosen fresh). A "Rebooking …" chip makes the prefill obviously intentional.
+  const _rb = rebookPending();
+  if (_rb) {
+    const nm = splitName(_rb.name);
+    const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    setV('appt-first', nm.first); setV('appt-last', nm.last); setV('appt-name', _rb.name || ''); setV('appt-phone', _rb.phone || '');
+  }
+  _setApptRebookChip(_rb ? _rb.name : null);
   document.getElementById('appt-delete-btn').classList.add('hidden');
   document.getElementById('appt-date').value = localDateStr(new Date(_calDate));
   setApptTimeFields(hour ?? 9, minute ?? 0);
@@ -1807,10 +1819,17 @@ export function showNewApptModal(calId, hour, minute, techName) {
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('appt-phone').focus(), 100);
 }
+// Toggle the "Rebooking {name}" chip shown in the New Appointment header during rebook mode.
+function _setApptRebookChip(name) {
+  const chip = document.getElementById('appt-rebook-chip'); if (!chip) return;
+  if (name) { const n = document.getElementById('appt-rebook-chip-name'); if (n) n.textContent = name; chip.classList.remove('hidden'); }
+  else chip.classList.add('hidden');
+}
 export function showConvertToApptModal(apptId) { showEditApptModal(apptId); }   // native: no plain-event conversion
 export function showEditApptModal(apptId) {
   const a = (getState().appointments || []).find(x => x.id === apptId); if (!a) return;
   _apptEditId = apptId; _apptExtraGuests = []; _apptEditGroupId = '';
+  _setApptRebookChip(null);   // edits are never a rebook
   const startDt = new Date(a.start), endDt = new Date(a.end || startDt.getTime()+3600000);
   const durMins = Math.max(15, Math.round((endDt-startDt)/60000));
   document.getElementById('appt-modal-title').textContent = 'Edit Appointment';
@@ -1890,6 +1909,7 @@ export async function saveAppt() {
     guests.forEach(g => { if (g.phone) squareUpsertCustomer({ name: g.name, phone: g.phone }); });   // keep the directory current
     try { _notifyApptTechs(appt, prevStaff); } catch {}
     closeApptModal();
+    if (!existing) finishRebook();   // a NEW appointment ends rebook mode (editing an unrelated appt must not)
     showToast(guests.length > 1 ? `Appointment saved for ${guests.length} guests ✓` : 'Appointment saved ✓');
     // The store subscription re-renders when the optimistic apply notifies; force one for safety.
     if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true);

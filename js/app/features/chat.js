@@ -453,6 +453,7 @@ export function updateChatBadge() {
   if (n > 0 && !_open) { badge.textContent = n > 9 ? '9+' : String(n); badge.classList.remove('hidden'); }
   else { badge.textContent = ''; badge.classList.add('hidden'); }
   window.refreshAccountUnread?.();   // iPad: chat collapses into the account menu → mirror onto the avatar badge
+  window.refreshNotifBell?.();        // the bell carries a chat row; keep it fresh on open/close too
 }
 
 // Combined-unread source for the iPad account-avatar badge (main.js refreshAccountUnread).

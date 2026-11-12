@@ -87,7 +87,7 @@ export function recoveryRestoreFailed(mutationId) {
   clearFailedOp(mutationId);
   renderRecoveryReport();
 }
-export function recoveryDismissFailed(mutationId) { clearFailedOp(mutationId); showToast('Dismissed'); renderRecoveryReport(); }
+export function recoveryDismissFailed(mutationId) { clearFailedOp(mutationId); showToast('Dismissed'); renderRecoveryReport(); window.refreshNotifBell?.(); }
 
 export function recoveryReaddCheckin(squareId) {
   const lost = probableLostCheckins(3650).find(x => x.squareId === squareId);   // wide window for the explicit re-add

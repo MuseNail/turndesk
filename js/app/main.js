@@ -51,10 +51,12 @@ import * as support from './features/support.js';
 import * as waiver from './features/waiver.js';
 import * as pricemenuEditor from './features/pricemenu-editor.js';
 import * as bubblePrefs from './features/bubble-prefs.js';
+import * as notifications from './features/notifications.js';
+import * as rebook from './features/rebook.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver, pricemenuEditor, bubblePrefs]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, landing, billing, support, waiver, pricemenuEditor, bubblePrefs, notifications, rebook]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -156,6 +158,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.83', items: [
+    { icon: 'notifications', t: 'One notification bell for everything', d: 'A new bell in the top bar gathers every pending thing in one place — replies to your help tickets, unread team chat, a time-clock heads-up, and app updates — each in plain language and tappable straight to where it lives. It also surfaces a red alert if a sale or change didn’t save to the cloud, so it never slips by. Managers now also see that “didn’t save” alert and can open Data Recovery.' },
+    { icon: 'event_upcoming', t: 'Book the next appointment right at checkout', d: 'After a service is paid, a prompt now offers to book that customer’s next visit while they’re still at the desk. Tap “Book next appointment” and it jumps to the Calendar with a banner showing who you’re booking — click any open time and the New Appointment form opens with their name and phone already filled in; you just pick the service and time. The banner stays until you save the booking or close it. Gift-card, retail, and Quick Sales never prompt. You can turn it off in Settings → Workflow → Checkout Rebooking.' },
+  ] },
   { v: 'td-v0.82', items: [
     { icon: 'view_sidebar', t: 'Tidier turn counters on iPad', d: 'On tablets, each technician’s per-service turn counter now sits inside the main turn box instead of a separate column, and only the first one is shown to save space. The other services are still counted — they roll into the “+Nb” bonus number so your turn totals stay accurate — and the full per-service breakdown still shows on a desktop or laptop.' },
   ] },
@@ -439,13 +445,12 @@ Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleV
 function refreshAccountUnread() {
   const chatN = chat.chatUnreadCount?.() || 0;
   const supN  = support.supportUnreadCount?.() || 0;
-  const txt = utils.accountUnreadText(chatN, supN);
-  const badge = document.getElementById('acct-unread-badge');
-  if (badge) { badge.textContent = txt; badge.classList.toggle('hidden', txt === ''); }
+  const txt = utils.accountUnreadText(chatN, supN);   // still used for the tablet account-button aria-label
+  // The avatar combined badge (#acct-unread-badge) and the account-menu support badge
+  // (#menu-support-badge) were retired — the notification bell now owns those signals. Only the
+  // account-menu CHAT row keeps a badge.
   const cb = document.getElementById('menu-chat-badge');
   if (cb) { cb.textContent = chatN > 9 ? '9+' : String(chatN); cb.classList.toggle('hidden', chatN <= 0); }
-  const sb = document.getElementById('menu-support-badge');
-  if (sb) { sb.textContent = supN > 9 ? '9+' : String(supN); sb.classList.toggle('hidden', supN <= 0); }
   const btn = document.getElementById('logged-in-user-btn');
   // Announce the combined count only where the avatar badge is actually shown (tablet ≤1194px).
   // On desktop the unread lives on the separate chat/support buttons, so attributing it to the
@@ -604,6 +609,7 @@ function _purgeStrayConfigX() {
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   renderSyncBanner(state);   // loud banner on the same triggers (incl. connection) — debounced inside
+  notifications.refreshNotifBell?.();   // bell recompute on EVERY op incl. connection/chat (debounced inside)
   if (changed === 'connection') return;
   if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
@@ -638,6 +644,8 @@ function onStateChange(state, changed) {
 // reload can keep serving the cached version, so tapping it unregisters the service
 // worker + clears the cache and reloads to force the newest version. Data is untouched.
 let _autoPromptedVersion = null;   // newest version we've already auto-popped this session
+let _updateAvailableVersion = null;   // the newer version string when an update is live, else null
+window.updateAvailableVersion = () => _updateAvailableVersion;   // read by the notification bell
 async function checkAppVersion() {
   const badge = document.getElementById('app-version-badge');
   if (!badge) return;
@@ -648,6 +656,7 @@ async function checkAppVersion() {
   badge.style.cursor = 'pointer';
   badge.classList.remove('update-pulse');
   badge.onclick = () => showWhatsNew();
+  _updateAvailableVersion = null;
   try {
     const res = await fetch('/turndesk/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
@@ -657,11 +666,13 @@ async function checkAppVersion() {
       badge.title = `Update ${data.version} available — tap to reload`;
       badge.classList.add('update-pulse');   // E2: make the update glyph discoverable
       badge.onclick = () => utils.showUpdatePopup(data.version);
+      _updateAvailableVersion = data.version;
       // The badge alone kept getting missed — pop a prominent prompt once per new version
       // (on boot and on every tab-resume until they update).
       if (_autoPromptedVersion !== data.version) { _autoPromptedVersion = data.version; utils.showUpdatePopup(data.version); }
     }
   } catch (e) {}
+  notifications.refreshNotifBell?.();   // reflect the update row in the bell
 }
 
 function registerServiceWorker() {
@@ -852,6 +863,10 @@ function boot() {
   armMidnightRollover();
   utils.initAmountFieldCalc();   // desktop: evaluate "40+5" typed into an amount field on blur
   refreshAccountUnread();        // iPad: paint the account-avatar unread badge from the initial counts
+  notifications.refreshNotifBell?.();   // notification bell: initial paint
+  // Fallback heartbeat so nothing goes stale if a source's own refresh hook is missed (e.g. a failed
+  // write cleared outside the store, or a clock change via a direct action). Skipped while hidden.
+  setInterval(() => { if (!document.hidden) notifications.refreshNotifBell?.(); }, 60 * 1000);
   checkAppVersion();
   // Also poll periodically so an always-open front-desk iPad (which never fires a fresh
   // launch/visibilitychange) still notices a new deploy and prompts on its own. Skipped while

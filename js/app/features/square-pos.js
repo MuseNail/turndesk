@@ -8,6 +8,7 @@ import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer, customerNote } from './square-customers.js';
 import { chargeOnHelcim, helcimActive, helcimCustomerCode, manualMode } from './helcim.js';
 import { drawerTipPayoutCents } from './cashdrawer.js';
+import { maybeOfferRebook } from './rebook.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -637,6 +638,12 @@ function _pollTerminalCheckout(id) {
 
 function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unrecorded) {
   hideTerminalModal();
+  // Rebook offer: capture the primary guest's name/phone/services BEFORE the paid-flip + state reset.
+  // This is the single local checkout chokepoint (cash/Zelle/gift/card + record-as-paid all funnel
+  // here); offering here — and nowhere in the sync/webhook path — keeps the card on the checkout
+  // device only.
+  const _rbP = queue().find(x => String(x.id) === String(partyIds[0]));
+  const _rbPrimary = _rbP ? { name: _rbP.name, phone: _rbP.phone || '', services: (_rbP.services || []).slice(), quickSale: _rbP.quickSale } : null;
   // The Assign & Price modal stays open during the charge (so a cancel returns to it) — but once
   // the payment lands, close it; leaving it up showed a stale, already-paid ticket.
   window.closeGroupAssignModal?.();
@@ -657,6 +664,7 @@ function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unreco
   showToast(unrecorded?.length
     ? `Paid ✓ — ${unrecorded.join(' & ')} not logged to Square (will show in Reconcile)`
     : 'Paid ✓');
+  maybeOfferRebook(_rbPrimary);   // offer to book the next visit (service tickets only; gated by config.rebook_prompt)
 }
 
 export async function cancelTerminalCheckout() {

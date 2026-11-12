@@ -460,6 +460,23 @@ tailwind.config = {
       <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="TurnDesk"></span>
       <!-- Popover for the clock notice / admin nudge (filled by timeclock.js). -->
       <div id="clock-popover" class="hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl p-4" style="position:fixed;z-index:62;width:264px"></div>
+      <!-- Notification bell: one place for everything pending (failed writes, help replies, chat, clock, update). -->
+      <div id="notif-bell-wrap" style="position:relative">
+        <button onclick="toggleNotifPanel()" id="notif-bell-btn" title="Notifications" aria-label="Notifications" aria-expanded="false" aria-haspopup="true" class="relative flex items-center justify-center w-11 h-11 rounded-full hover:bg-surface-container transition-colors">
+          <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">notifications</span>
+          <span id="notif-bell-badge" aria-live="polite" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#2a7a4f;font-size:10px;line-height:1">0</span>
+        </button>
+        <div id="notif-panel" role="region" aria-label="Notifications">
+          <div class="notif-head">
+            <span class="font-headline font-bold text-on-surface" style="font-size:15px">Notifications</span>
+            <span id="notif-hdr-count" class="text-xs font-body text-on-surface-variant" style="margin-left:8px">all clear</span>
+          </div>
+          <div id="notif-list"></div>
+          <div id="notif-empty" class="hidden" style="padding:28px 16px;text-align:center;font-size:13px;color:var(--on-surface-variant)">
+            <span class="material-symbols-outlined" style="font-size:26px;color:#2a7a4f;display:block;margin-bottom:6px">check_circle</span>You’re all caught up.
+          </div>
+        </div>
+      </div>
       <button onclick="toggleChat()" id="chat-btn" title="Staff chat" class="relative flex items-center justify-center w-11 h-11 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">chat</span>
         <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
@@ -474,8 +491,6 @@ tailwind.config = {
           <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
           <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
           <span id="clock-btn-dot" class="hidden absolute" style="top:-2px;right:-2px;width:10px;height:10px;border-radius:9999px;border:2px solid var(--surface);background:#f59e0b"></span>
-          <!-- Tablet-only: combined chat+support unread (chat/support buttons collapse into the menu on iPad). Top-LEFT so it never overlaps the clock dot at top-right. -->
-          <span id="acct-unread-badge" class="hidden absolute items-center justify-center font-bold text-white" style="top:-5px;left:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1"></span>
         </button>
         <!-- User menu dropdown -->
         <div id="user-menu" class="hidden" style="position:absolute;right:0;top:40px;z-index:61;min-width:196px;background:var(--surface);border:1px solid var(--surface-container-high);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:hidden;padding:6px 0">
@@ -488,7 +503,6 @@ tailwind.config = {
           <button onclick="openSupport();closeUserMenu()" class="tablet-only w-full items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
             <span class="material-symbols-outlined" style="font-size:18px">support_agent</span>
             Help &amp; feedback
-            <span id="menu-support-badge" class="hidden ml-auto flex items-center justify-center font-bold text-white" style="min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1"></span>
           </button>
           <button onclick="goTo('screen-welcome');closeUserMenu()" class="tablet-only w-full items-center gap-3 px-4 py-2.5 text-sm font-body font-semibold text-on-surface hover:bg-surface-container transition-colors" style="border:none;text-align:left;cursor:pointer;border-radius:0;background:transparent">
             <span class="material-symbols-outlined" style="font-size:18px">tablet</span>
@@ -1052,6 +1066,12 @@ tailwind.config = {
            CALENDAR PANEL
       ═══════════════════════════════════════ -->
       <div class="dash-panel" id="panel-calendar">
+        <!-- Rebook banner: shown while booking a customer's next visit from checkout -->
+        <div id="rebook-banner" class="hidden flex items-center gap-2 mb-3 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/30" aria-live="polite">
+          <span class="material-symbols-outlined text-primary" style="font-size:20px" aria-hidden="true">event_upcoming</span>
+          <span class="text-sm font-body text-on-surface">Booking next visit for <span id="rebook-banner-name" class="font-headline font-bold text-primary"></span> — tap an open time</span>
+          <button onclick="cancelRebook()" aria-label="Cancel rebooking" class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:18px" aria-hidden="true">close</span></button>
+        </div>
         <!-- Header -->
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div class="flex items-center gap-2">
@@ -1293,6 +1313,11 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-commission-section" class="hidden px-5 py-4"></div>
           <div id="settings-numpad-section" class="hidden px-5 py-4"></div>
+        </div>
+
+        <!-- Leaf: Checkout rebooking -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-rebook-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Appearance -->
@@ -3075,6 +3100,10 @@ tailwind.config = {
       <button onclick="closeApptModal()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center">
         <span class="material-symbols-outlined text-on-surface-variant">close</span>
       </button>
+    </div>
+    <div id="appt-rebook-chip" class="hidden -mt-2 mb-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 text-primary text-sm font-body">
+      <span class="material-symbols-outlined" style="font-size:16px" aria-hidden="true">event_upcoming</span>
+      <span>Booking next visit for <span id="appt-rebook-chip-name" class="font-semibold"></span> — pick the service and time</span>
     </div>
     <div class="space-y-4">
       <!-- Primary contact (required) -->

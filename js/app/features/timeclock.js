@@ -9,6 +9,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser, canDo } from '../session.js';
 import { showToast, escHtml } from '../utils.js';
+import { clockStateNeedsAttention } from '../notif-util.js';
 
 const cfg = () => getState().config;
 const _key = id => 'fd_clock_' + id;
@@ -53,6 +54,9 @@ export function toggleMyClock() {
 //              a changed station id) → tap offers Fix / Dismiss
 // Before v4.50 the button simply vanished off the station, leaving FD staff with no clue why.
 let _clockState = 'hidden';
+// Notification bell: surface the clock ONLY when it's actionable ('warn' = admin, station changed).
+// The permanent 'notice' state (FD user off-station) is excluded — nothing to clear.
+export function clockNeedsAttention() { return clockStateNeedsAttention(_clockState); }
 export function onClockBtn() {
   if (_clockState === 'clock') { toggleMyClock(); return; }
   toggleClockPopover();

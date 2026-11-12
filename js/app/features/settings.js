@@ -436,6 +436,22 @@ export function setNumpadWholeDollars(val) {
   showToast(val ? 'Numpad: whole dollars' : 'Numpad: cents');
 }
 
+// ── Checkout rebooking prompt (config.rebook_prompt, default ON) ────────────────
+export function renderRebookSettings() {
+  const el = document.getElementById('settings-rebook-section'); if (!el) return;
+  const on = cfg().rebook_prompt !== false;   // default ON
+  el.innerHTML = `
+    <p class="text-xs font-body text-on-surface-variant mb-4">After a <strong>service</strong> is paid, show a prompt to book the customer’s next visit. Tapping it jumps to the Calendar with their name &amp; phone ready — you pick the service and time. (Gift-card, retail &amp; Quick Sales never prompt.)</p>
+    <label class="flex items-center justify-between gap-4 cursor-pointer bg-surface-container-low rounded-xl px-4 py-3 border ${on ? 'border-primary' : 'border-surface-container-high'}">
+      <span class="min-w-0"><span class="text-sm font-body font-semibold text-on-surface">Offer to book the next appointment</span><span class="block text-[11px] font-body text-on-surface-variant">Shows after each paid service sale.</span></span>
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="setRebookPrompt(this.checked)" class="w-5 h-5 accent-primary cursor-pointer flex-shrink-0"></label>`;
+}
+export function setRebookPrompt(on) {
+  dispatch('config.set', { key: 'rebook_prompt', value: !!on });
+  renderRebookSettings();
+  showToast(on ? 'Rebooking prompt on' : 'Rebooking prompt off');
+}
+
 // ── Orchestrator ──────────────────────────────────
 // ── Settings drill-down navigation ────────────────────────────────────────────
 // Groups existing setting sections into 6 categories. Content is already rendered
@@ -457,6 +473,7 @@ const SETTINGS_NAV = [
     { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true, icon:'event_repeat' },
     { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true, icon:'paid' },
     { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings', icon:'dialpad' },
+    { label:'Checkout Rebooking', sub:'Offer to book the next appointment after each sale', content:'settings-rebook-section', render:'renderRebookSettings', adminOrManager:true, icon:'event_upcoming' },
     { label:'Turns Board Display', sub:'Text size & tech/turn separation (divider or lane) — set per device', content:'settings-turnsdisplay-section', render:'renderTurnsDisplaySettings', icon:'format_size' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section', icon:'schedule' },
   ]},
@@ -481,7 +498,7 @@ const SETTINGS_NAV = [
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section', icon:'backup' },
     { label:'Activity Log', sub:'All users, all devices', content:'settings-audit-section', render:'renderActivityLog', icon:'history' },
-    { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOnly:true, icon:'restore_page' },
+    { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOrManager:true, icon:'restore_page' },
     { label:'Diagnostics', sub:'Automatic error log & bug alerts', content:'settings-diagnostics-section', render:'renderDiagnostics', adminOnly:true, icon:'bug_report' },
     { label:'Help & Feedback', sub:'Message the TurnDesk team — bugs, questions & feedback', action:'openSupport', icon:'support_agent' },
     { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo', icon:'info' },

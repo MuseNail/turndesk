@@ -46,30 +46,29 @@ function isEditing() {
   return [...overlay.querySelectorAll('input,textarea')].some(el => el.type !== 'radio' && el.value.trim());
 }
 
-// Combined-unread source for the iPad account-avatar badge (main.js refreshAccountUnread).
-// Salon-side unread tickets (same filter paintUnreadDot uses for the Settings-nav dot).
+// Salon-side unread tickets (dev replies the staff haven't seen). Read by the notification bell
+// (supportReply source) and by main.js refreshAccountUnread for the tablet account-button aria-label.
 export function supportUnreadCount() { return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').length; }
 
-// ── Unread badge on the Settings nav button (dev replies the staff haven't seen) ──
-function paintUnreadDot(n) {
+// Per-ticket rows for the notification bell: each unread salon reply becomes a tappable row that
+// deep-links into that thread (and clears its unread). Same filter as supportUnreadCount.
+export function supportSalonUnreadList() {
+  return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').map(t => ({ id: t.id, subject: t.subject }));
+}
+
+// ── Unread signal (dev replies the staff haven't seen) ──
+// The Settings-nav support dot is RETIRED — the notification bell now surfaces unread replies
+// explicitly (one tappable row per ticket). This stays as the refresh hook (bell + iPad avatar)
+// and a cleanup that removes any stray dot a stale cached build may have left on the nav button.
+function paintUnreadDot() {
   window.refreshAccountUnread?.();   // iPad: Help collapses into the account menu → mirror onto the avatar badge
-  const btn = document.getElementById('nav-settings');
-  if (!btn) return;
-  let dot = btn.querySelector('.support-unread-dot');
-  if (n > 0) {
-    if (!dot) {
-      dot = document.createElement('span');
-      dot.className = 'support-unread-dot';
-      dot.style.cssText = 'position:absolute;top:4px;right:8px;min-width:8px;height:8px;border-radius:9999px;background:#e5484d;box-shadow:0 0 0 2px var(--surface,#fff)';
-      if (getComputedStyle(btn).position === 'static') btn.style.position = 'relative';
-      btn.appendChild(dot);
-    }
-  } else if (dot) dot.remove();
+  window.refreshNotifBell?.();       // the bell aggregates salon-reply unread
+  document.getElementById('nav-settings')?.querySelector('.support-unread-dot')?.remove();
 }
 export async function pollSupportUnread() {
   try {
     await loadTickets();
-    paintUnreadDot(_tickets.filter(t => t.unreadForSalon).length);
+    paintUnreadDot();
     if (document.getElementById('support-modal') && !isEditing()) renderModal();   // keep an open modal fresh, but never mid-typing
   } catch {}
 }
@@ -93,7 +92,15 @@ export function closeSupport() {
   document.getElementById('support-modal')?.remove();
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   _view = 'list'; _openId = null;
-  pollSupportUnread();   // refresh the nav dot on close
+  pollSupportUnread();   // refresh the bell + badges on close
+}
+
+// Deep-link from the notification bell: open the Help modal straight to one ticket's thread.
+// Loads tickets first so it works even from a cold cache; openThread does the optimistic
+// read-clear + server POST + bell refresh.
+export function supportOpenThread(id) {
+  openSupport();               // ensures the modal exists + starts the poll
+  loadTickets().then(() => { if (!isEditing()) openThread(id); });
 }
 
 function renderModal() {
@@ -210,6 +217,7 @@ async function openThread(id) {
   const t = _tickets.find(x => x.id === id);
   if (t && t.unreadForSalon) {
     t.unreadForSalon = false;                       // optimistic
+    window.refreshNotifBell?.();                    // drop the bell's reply row now, not in 3 min
     api('/support/ticket/' + encodeURIComponent(id) + '/read', { method: 'POST' }).then(() => pollSupportUnread());
   }
 }
