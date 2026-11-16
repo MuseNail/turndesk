@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { localDateStr, showToast } from '../utils.js';
-import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges } from '../fd-schedule-util.js';
+import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges, repeatForwardDates } from '../fd-schedule-util.js';
 
 const cfg = () => getState().config;
 let fdWeekStart = _weekStart(new Date());
@@ -106,10 +106,7 @@ export function openFdShiftPicker(date, fdId) {
   _ensureFdTimeOptions();
   _fdSetTimeFields('fd-start', (cur && cur.s) ? cur.s : '09:00');
   _fdSetTimeFields('fd-end',   (cur && cur.e) ? cur.e : '17:00');
-  // Default to "Every week" when this day's shift comes from the repeating pattern (no explicit
-  // override), so editing a repeat day edits the repeat — otherwise it's a one-off ("this week").
-  const isRepeat = !!(cfg().fd_schedule?._repeats?.[fdId]?.[dow]) && (cfg().fd_schedule?.[date]?.[fdId] === undefined);
-  fdShiftMode = isRepeat ? 'every' : 'week';
+  fdShiftMode = 'week';   // default to this-week; "Repeat next 4 weeks" is an explicit choice
   fdSelectedDays = new Set([dow]);
   fdSyncShiftTime();
   _renderFdDayChips();
@@ -173,22 +170,19 @@ function _applyFdShift(value) {
   if (!fdSelectedDays.size) { showToast('Pick at least one day.'); return; }
   const sched = JSON.parse(JSON.stringify(_draftSched()));   // edits write the DRAFT, not published
   const wkStart = _weekStart(new Date(fdPickerTarget.date + 'T12:00:00'));
-  fdSelectedDays.forEach(dow => {
-    const dt = localDateStr(_addDays(wkStart, dow));
-    if (fdShiftMode === 'every') {
-      sched._repeats = sched._repeats || {}; sched._repeats[fdId] = sched._repeats[fdId] || {};
-      if (value === null) { delete sched._repeats[fdId][dow]; }
-      else sched._repeats[fdId][dow] = value;
-      // Drop any one-off override on this week's matching date so the repeat shows through.
-      if (sched[dt]?.[fdId] !== undefined) { delete sched[dt][fdId]; if (!Object.keys(sched[dt]).length) delete sched[dt]; }
-    } else {
-      if (!sched[dt]) sched[dt] = {};
-      if (value === null) {
-        if (sched._repeats?.[fdId]?.[dow]) sched[dt][fdId] = SCHED_NONE;   // blank a day the repeat covers
-        else { delete sched[dt][fdId]; if (!Object.keys(sched[dt]).length) delete sched[dt]; }
-      } else sched[dt][fdId] = value;
-    }
-  });
+  // Write one explicit per-date entry. Clear (value null) over a date a LEGACY repeat still covers
+  // writes SCHED_NONE (a real blank) so the old pattern doesn't leak back; otherwise delete the cell.
+  const _writeDate = (dt, dow) => {
+    if (value === null) {
+      if (sched._repeats?.[fdId]?.[dow]) { sched[dt] = sched[dt] || {}; sched[dt][fdId] = SCHED_NONE; }
+      else if (sched[dt]?.[fdId] !== undefined) { delete sched[dt][fdId]; if (!Object.keys(sched[dt]).length) delete sched[dt]; }
+    } else { sched[dt] = sched[dt] || {}; sched[dt][fdId] = value; }
+  };
+  if (fdShiftMode === 'every') {   // "Repeat next 4 weeks" — stamp explicit dates forward (overwrite); no standing pattern
+    repeatForwardDates(localDateStr(wkStart), 4, [...fdSelectedDays]).forEach(dt => _writeDate(dt, new Date(dt + 'T12:00:00').getDay()));
+  } else {                         // just this week
+    fdSelectedDays.forEach(dow => _writeDate(localDateStr(_addDays(wkStart, dow)), dow));
+  }
   dispatch('config.set', { key: 'fd_schedule_draft', value: sched });
   closeFdShiftPicker();
   renderFdSchedule();
