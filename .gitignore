@@ -19,3 +19,6 @@ mockups/
 # Private security reports — NEVER commit/publish (repo-root .md is served by Pages)
 .security/
 SECURITY-REVIEW-*.md
+
+# superpowers workspace (brainstorm mockups, sdd ledger)
+.superpowers/
