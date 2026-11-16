@@ -260,14 +260,23 @@ function renderFdView(fdUser) {
   document.getElementById('staff-tech-name').textContent = fdUser.name;
   const dot = document.getElementById('staff-conn'); if (dot) dot.style.background = store.getState().connected ? '#2a7a4f' : '#e8730a';
   const schedBase = new Date(); schedBase.setDate(schedBase.getDate() + _fdSchedOffset * 7);
-  const ws = _fdWeekStart(schedBase), dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], today = todayStr();
-  const we = new Date(ws); we.setDate(we.getDate() + 6);
-  const sched = dayNames.map((dn, i) => {
-    const d = new Date(ws); d.setDate(d.getDate() + i);
-    const key = localDateStr(d), sh = getFdShift(key, fdUser.id), isToday = key === today;
-    const val = sh === 'off' ? '<span style="color:#a05000">Off</span>' : (sh && sh.s) ? esc(fdShiftLabel(sh)) : '<span class="text-on-surface-variant">—</span>';
-    return `<div class="flex items-center justify-between px-4 py-3 ${isToday ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-lg ${isToday ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}</span><span class="font-headline font-bold text-lg">${val}</span></div>`;
-  }).join('');
+  const baseWs = _fdWeekStart(schedBase), dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], today = todayStr();
+  // Rolling month: this week + the next 3, PUBLISHED only. Each week is its own labeled card.
+  const _staffWeekCard = (wi) => {
+    const ws = new Date(baseWs); ws.setDate(ws.getDate() + wi * 7);
+    const we = new Date(ws); we.setDate(we.getDate() + 6);
+    const rows = dayNames.map((dn, i) => {
+      const d = new Date(ws); d.setDate(d.getDate() + i);
+      const key = localDateStr(d), sh = getFdShift(key, fdUser.id), isT = key === today;
+      const val = sh === 'off' ? '<span style="color:#a05000">Off</span>' : (sh && sh.s) ? esc(fdShiftLabel(sh)) : '<span class="text-on-surface-variant">—</span>';
+      return `<div class="flex items-center justify-between px-4 py-2.5 ${isT ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-base ${isT ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}${isT ? ' · Today' : ''}</span><span class="font-headline font-bold text-base">${val}</span></div>`;
+    }).join('');
+    const fD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const title = wi === 0 ? 'This week' : wi === 1 ? 'Next week' : `Week of ${fD(ws)}`;
+    return `<div class="rounded-2xl border overflow-hidden mb-3 ${wi === 0 ? 'border-surface-container-high bg-surface-container-lowest' : 'border-primary/25'}"${wi === 0 ? '' : ' style="background:rgba(42,122,79,.05)"'}>`
+      + `<div class="flex items-center justify-between px-4 py-2 border-b border-surface-container-high"><span class="font-headline font-bold text-sm ${wi === 0 ? 'text-on-surface' : 'text-primary'}">${title}</span><span class="text-xs font-body text-on-surface-variant">${fD(ws)} – ${fD(we)}</span></div>${rows}</div>`;
+  };
+  const weekCards = [0, 1, 2, 3].map(_staffWeekCard).join('');
   const per = _fdPayPeriodAt(_fdPeriodOffset);
   const { hours, openShift, flagged } = fdPaidHours(fdUser.id, +per.from, +per.to);
   const punches = fdPunches(fdUser.id).filter(p => p.in >= +per.from && p.in <= +per.to).sort((a, b) => b.in - a.in);
@@ -277,7 +286,8 @@ function renderFdView(fdUser) {
     return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0${suspect ? ' bg-error/5' : ''}"><span class="font-body text-on-surface">${new Date(p.in).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })}</span><span class="font-body text-on-surface-variant text-sm">${_fdHM(p.in)} – ${p.out ? _fdHM(p.out) : '…'}</span><span class="font-headline font-bold">${dur}</span></div>`;
   }).join('') : '<div class="px-4 py-5 text-center font-body text-on-surface-variant">No clock punches this period.</div>';
   const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const schedLabel = _fdSchedOffset === 0 ? 'This week' : `${fmtD(ws)} – ${fmtD(we)}`;
+  const monthEnd = new Date(baseWs); monthEnd.setDate(monthEnd.getDate() + 27);
+  const schedLabel = _fdSchedOffset === 0 ? 'next 4 weeks' : `${fmtD(baseWs)} – ${fmtD(monthEnd)}`;
   const periodLabel = _fdPeriodOffset === 0 ? 'Current pay period'
     : _fdPeriodOffset < 0 ? `${-_fdPeriodOffset} period${_fdPeriodOffset < -1 ? 's' : ''} ago`
     : `${_fdPeriodOffset} period${_fdPeriodOffset > 1 ? 's' : ''} ahead`;
@@ -301,7 +311,7 @@ function renderFdView(fdUser) {
         <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant">My schedule · ${schedLabel}</div>
         <div class="flex gap-1.5">${navBtn('fdNavSched', -1, '◀')}${navBtn('fdNavSched', 1, '▶')}</div>
       </div>
-      <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high overflow-hidden">${sched}</div>
+      ${weekCards}
     </div>
     <div>
       <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2 px-1">Clock punches · this period</div>
