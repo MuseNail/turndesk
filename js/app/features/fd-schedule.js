@@ -9,13 +9,25 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { localDateStr, showToast } from '../utils.js';
+import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges } from '../fd-schedule-util.js';
 
 const cfg = () => getState().config;
-const SCHED_NONE = '__none__';
 let fdWeekStart = _weekStart(new Date());
 let fdPickerTarget = null;     // { date, fdId } of the clicked cell
-let fdShiftMode = 'week';      // 'week' (these dates only) | 'every' (repeating default)
+let fdShiftMode = 'week';      // 'week' (these dates only) | 'every' (repeat forward N weeks)
 let fdSelectedDays = new Set();// day-of-week (0..6) the editor will stamp
+
+// ── Draft vs published ────────────────────────────────────────────────────────
+// Staff read PUBLISHED (config.fd_schedule); the builder edits a DRAFT (config.fd_schedule_draft)
+// until Publish promotes it. Clearing the draft stores `null` (config.set can't delete a key), so
+// emptiness is always a null/empty-object check, never an `in`/`!==undefined` test.
+const _publishedSched = () => cfg().fd_schedule || {};
+const _draftSched = () => {
+  const d = cfg().fd_schedule_draft;
+  return (d && Object.keys(d).length) ? d : JSON.parse(JSON.stringify(_publishedSched()));
+};
+let _schedView = 'draft';   // 'draft' = editing the draft | 'published' = read-only preview of what staff see
+const _activeSched = () => _schedView === 'published' ? _publishedSched() : _draftSched();
 
 function _weekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
 function _addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
@@ -27,14 +39,9 @@ const _hoursBetween = (s, e) => (_toMin(e) - _toMin(s)) / 60;
 const _shiftHours = sh => (sh && sh.s) ? Math.max(0, _hoursBetween(sh.s, sh.e)) : 0;
 const _fmtHrs = h => h % 1 === 0 ? String(h) : h.toFixed(1);
 
-// Effective shift for a date: {s,e} (working) | 'off' | null (unset).
+// Effective shift for a date: {s,e} (working) | 'off' | null (unset). Staff-facing → PUBLISHED copy.
 export function getFdShift(date, fdId) {
-  const sched = cfg().fd_schedule || {};
-  const ex = sched[date]?.[fdId];
-  if (ex === SCHED_NONE) return null;
-  if (ex) return ex;
-  const dow = new Date(date + 'T12:00:00').getDay();
-  return sched._repeats?.[fdId]?.[dow] || null;
+  return resolveFdShift(_publishedSched(), date, fdId);
 }
 export const fdShiftLabel = _shiftLabel;   // reused by the staff app's FD view
 
@@ -61,7 +68,7 @@ export function toggleFdScheduleView() {
 export function renderFdSchedule() {
   const grid = document.getElementById('fd-schedule-grid'); if (!grid) return;
   const label = document.getElementById('fd-schedule-week-label');
-  const sched = cfg().fd_schedule || {};
+  const sched = _activeSched();   // draft while editing; published while previewing "what staff see"
   const weekEnd = new Date(fdWeekStart); weekEnd.setDate(weekEnd.getDate() + 6);
   const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   if (label) label.textContent = `${fmtShort(fdWeekStart)} – ${fmtShort(weekEnd)}`;
@@ -74,7 +81,7 @@ export function renderFdSchedule() {
   const rows = (cfg().fd_users || []).map(u => {
     let weekHours = 0;
     const cells = dates.map(d => {
-      const key = localDateStr(d), sh = getFdShift(key, u.id);
+      const key = localDateStr(d), sh = resolveFdShift(sched, key, u.id);
       const isRepeat = !sched[key]?.[u.id] && sched._repeats?.[u.id]?.[d.getDay()];
       const off = sh === 'off', work = !!(sh && sh.s);
       if (work) weekHours += _shiftHours(sh);
@@ -93,7 +100,7 @@ export function renderFdSchedule() {
 export function openFdShiftPicker(date, fdId) {
   fdPickerTarget = { date, fdId };
   const u = (cfg().fd_users || []).find(x => x.id === fdId);
-  const d = new Date(date + 'T12:00:00'), cur = getFdShift(date, fdId), dow = d.getDay();
+  const d = new Date(date + 'T12:00:00'), cur = resolveFdShift(_draftSched(), date, fdId), dow = d.getDay();
   const lab = document.getElementById('fd-shift-picker-label');
   if (lab) lab.textContent = `${u?.name || ''} — ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
   _ensureFdTimeOptions();
@@ -164,7 +171,7 @@ function _applyFdShift(value) {
   if (!fdPickerTarget) return;
   const { fdId } = fdPickerTarget;
   if (!fdSelectedDays.size) { showToast('Pick at least one day.'); return; }
-  const sched = JSON.parse(JSON.stringify(cfg().fd_schedule || {}));
+  const sched = JSON.parse(JSON.stringify(_draftSched()));   // edits write the DRAFT, not published
   const wkStart = _weekStart(new Date(fdPickerTarget.date + 'T12:00:00'));
   fdSelectedDays.forEach(dow => {
     const dt = localDateStr(_addDays(wkStart, dow));
@@ -182,10 +189,36 @@ function _applyFdShift(value) {
       } else sched[dt][fdId] = value;
     }
   });
-  dispatch('config.set', { key: 'fd_schedule', value: sched });
+  dispatch('config.set', { key: 'fd_schedule_draft', value: sched });
   closeFdShiftPicker();
   renderFdSchedule();
 }
+
+// ── Publish / Discard / preview toggle ────────────────────────────────────────
+export function publishFdSchedule() {
+  if (!hasUnpublishedChanges(_publishedSched(), cfg().fd_schedule_draft)) return;
+  const go = () => {
+    dispatch('config.set', { key: 'fd_schedule', value: JSON.parse(JSON.stringify(_draftSched())) });
+    dispatch('config.set', { key: 'fd_schedule_draft', value: null });   // published first, then clear
+    _schedView = 'draft';
+    showToast('Schedule published ✓');
+    renderFdSchedule();
+  };
+  if (window.showWarnModal) window.showWarnModal('Publish schedule?', 'This makes your changes visible to all front-desk staff now.', go, 'Publish');
+  else go();
+}
+export function discardFdSchedule() {
+  if (!hasUnpublishedChanges(_publishedSched(), cfg().fd_schedule_draft)) return;
+  const go = () => {
+    dispatch('config.set', { key: 'fd_schedule_draft', value: null });
+    _schedView = 'draft';
+    showToast('Draft discarded');
+    renderFdSchedule();
+  };
+  if (window.showWarnModal) window.showWarnModal('Discard changes?', 'This throws away all unpublished changes and reverts to the published schedule.', go, 'Discard');
+  else go();
+}
+export function fdSchedViewMode(mode) { _schedView = (mode === 'published') ? 'published' : 'draft'; renderFdSchedule(); }
 export function saveFdShift() {
   const s = _fdReadTime('fd-start'), e = _fdReadTime('fd-end');
   if (_hoursBetween(s, e) <= 0) { showToast('End time must be after start time.'); return; }
