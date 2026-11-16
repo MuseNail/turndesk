@@ -105,6 +105,12 @@ export function payPeriodForDate(payPeriodCfg, now = new Date()) {
   return { from, to };
 }
 
+// Staff schedule card label from a week's ACTUAL offset from today (not the card's index), so the
+// labels stay correct after ◀▶ navigation. '' → the caller uses a "Week of <date>" label instead.
+export function weekBandTitle(absOffset) {
+  return absOffset === 0 ? 'This week' : absOffset === 1 ? 'Next week' : '';
+}
+
 // Pay-period start dates that fall within [fromStr, toStr], for drawing boundary markers.
 // `periodForDate(dateStr) -> { from: Date, to: Date }` is injected (so this stays pure/testable).
 export function payPeriodBoundariesInRange(periodForDate, fromStr, toStr) {

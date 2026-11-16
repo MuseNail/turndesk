@@ -164,6 +164,7 @@ function _renderWeekBand(weekStart, sched, pub, draftRaw, showDiff, today, users
 }
 
 export function openFdShiftPicker(date, fdId) {
+  if (_schedView === 'published') { _schedView = 'draft'; renderFdSchedule(); }   // "What staff see" is read-only — editing always acts on the draft
   fdPickerTarget = { date, fdId };
   const u = (cfg().fd_users || []).find(x => x.id === fdId);
   const d = new Date(date + 'T12:00:00'), cur = resolveFdShift(_draftSched(), date, fdId), dow = d.getDay();

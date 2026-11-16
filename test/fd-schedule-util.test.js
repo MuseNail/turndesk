@@ -11,6 +11,7 @@ import {
   hasUnpublishedChanges,
   payPeriodBoundariesInRange,
   payPeriodForDate,
+  weekBandTitle,
 } from '../js/app/fd-schedule-util.js';
 
 // ── resolveFdShift: mirrors getFdShift exactly (per-date → SCHED_NONE→null → legacy repeat) ──
@@ -130,4 +131,12 @@ test('payPeriodForDate: bimonthly → 1st–15th and 16th–end-of-month', () =>
 test('payPeriodForDate: a configured startDate wins as the anchor', () => {
   const p = payPeriodForDate({ type: 'weekly', startDate: '2026-11-16' }, new Date(2026, 10, 18));
   assert.equal(p.from.getFullYear(), 2026); assert.equal(p.from.getMonth(), 10); assert.equal(p.from.getDate(), 16);
+});
+
+// ── weekBandTitle: staff card label from the ACTUAL week offset (not the card index) ──
+test('weekBandTitle: 0 → This week, 1 → Next week, else "" (caller uses a date)', () => {
+  assert.equal(weekBandTitle(0), 'This week');
+  assert.equal(weekBandTitle(1), 'Next week');
+  assert.equal(weekBandTitle(2), '');
+  assert.equal(weekBandTitle(-1), '');
 });

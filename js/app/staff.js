@@ -18,6 +18,7 @@ import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 import { applyAssignmentStatus, isPaidStatus, isTechPriced } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
+import { weekBandTitle } from './fd-schedule-util.js';
 import * as chat from './features/chat.js';
 Object.assign(window, chat);   // chat panel uses inline onclick= handlers
 import { fdPaidHours, fdPunches, roundQuarterHours, fdPunchSuspect } from './features/timeclock.js';
@@ -272,7 +273,7 @@ function renderFdView(fdUser) {
       return `<div class="flex items-center justify-between px-4 py-2.5 ${isT ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-base ${isT ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}${isT ? ' · Today' : ''}</span><span class="font-headline font-bold text-base">${val}</span></div>`;
     }).join('');
     const fD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const title = wi === 0 ? 'This week' : wi === 1 ? 'Next week' : `Week of ${fD(ws)}`;
+    const title = weekBandTitle(wi + _fdSchedOffset) || `Week of ${fD(ws)}`;   // label from the real offset, not the card index
     return `<div class="rounded-2xl border overflow-hidden mb-3 ${wi === 0 ? 'border-surface-container-high bg-surface-container-lowest' : 'border-primary/25'}"${wi === 0 ? '' : ' style="background:rgba(42,122,79,.05)"'}>`
       + `<div class="flex items-center justify-between px-4 py-2 border-b border-surface-container-high"><span class="font-headline font-bold text-sm ${wi === 0 ? 'text-on-surface' : 'text-primary'}">${title}</span><span class="text-xs font-body text-on-surface-variant">${fD(ws)} – ${fD(we)}</span></div>${rows}</div>`;
   };
