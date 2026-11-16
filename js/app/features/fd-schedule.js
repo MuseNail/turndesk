@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { localDateStr, showToast } from '../utils.js';
-import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges, repeatForwardDates } from '../fd-schedule-util.js';
+import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges, repeatForwardDates, cellChangeKind } from '../fd-schedule-util.js';
 
 const cfg = () => getState().config;
 let fdWeekStart = _weekStart(new Date());
@@ -47,7 +47,7 @@ export const fdShiftLabel = _shiftLabel;   // reused by the staff app's FD view
 
 export function fdScheduleWeek(delta, today = false) {
   if (today) fdWeekStart = _weekStart(new Date());
-  else { fdWeekStart = new Date(fdWeekStart); fdWeekStart.setDate(fdWeekStart.getDate() + delta * 7); }
+  else { fdWeekStart = new Date(fdWeekStart); fdWeekStart.setDate(fdWeekStart.getDate() + delta * 14); }   // 2-week window
   renderFdSchedule();
 }
 
@@ -69,16 +69,29 @@ export function renderFdSchedule() {
   const grid = document.getElementById('fd-schedule-grid'); if (!grid) return;
   const label = document.getElementById('fd-schedule-week-label');
   const sched = _activeSched();   // draft while editing; published while previewing "what staff see"
-  const weekEnd = new Date(fdWeekStart); weekEnd.setDate(weekEnd.getDate() + 6);
-  const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  if (label) label.textContent = `${fmtShort(fdWeekStart)} – ${fmtShort(weekEnd)}`;
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dates = days.map((_, i) => { const d = new Date(fdWeekStart); d.setDate(d.getDate() + i); return d; });
+  const pub = _publishedSched();
+  const draftRaw = cfg().fd_schedule_draft;
+  const showDiff = _schedView === 'draft' && !!(draftRaw && Object.keys(draftRaw).length);   // highlight only real draft changes
   const today = new Date(); today.setHours(0, 0, 0, 0);
+  const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const windowEnd = new Date(fdWeekStart); windowEnd.setDate(windowEnd.getDate() + 13);
+  if (label) label.textContent = `${fmtShort(fdWeekStart)} – ${fmtShort(windowEnd)}`;
+  const users = cfg().fd_users || [];
+  if (!users.length) { grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No front-desk users yet — add one above.</div>'; return; }
+  const week1 = new Date(fdWeekStart); week1.setDate(week1.getDate() + 7);
+  grid.innerHTML = _renderWeekBand(new Date(fdWeekStart), sched, pub, draftRaw, showDiff, today, users)
+                 + _renderWeekBand(week1, sched, pub, draftRaw, showDiff, today, users);
+}
+
+// One stacked week band: a "Week of …" label, the Sun–Sat day header, then a row per FD user.
+function _renderWeekBand(weekStart, sched, pub, draftRaw, showDiff, today, users) {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dates = days.map((_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
   const isToday = d => d.toDateString() === today.toDateString();
   const stickyBg = 'background:var(--surface-container-lowest, #f5f7f8)';
+  const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const headerCols = dates.map((d, i) => `<div class="text-center px-2 py-1.5 min-w-[92px]${isToday(d) ? ' bg-primary/5' : ''}"><div class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">${days[i]}</div><div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div></div>`).join('');
-  const rows = (cfg().fd_users || []).map(u => {
+  const rows = users.map(u => {
     let weekHours = 0;
     const cells = dates.map(d => {
       const key = localDateStr(d), sh = resolveFdShift(sched, key, u.id);
@@ -88,13 +101,20 @@ export function renderFdSchedule() {
       const bg = off ? 'background:#f5c870;color:#3a2800;' : work ? 'background:#dcebea;color:#0a3a3a;' : '';
       const txt = off ? 'Off' : work ? _shiftLabel(sh) : '';
       const isPast = d < today && !isToday(d);
-      return `<div class="min-w-[92px] px-1 py-0.5"><button onclick="openFdShiftPicker('${key}','${u.id}')" class="w-full h-9 rounded-lg text-[11px] font-body font-semibold transition-all hover:opacity-80 border relative ${(off || work) ? 'border-transparent' : 'border-dashed border-outline-variant/50 hover:bg-surface-container'} ${isPast ? 'opacity-50' : ''}" style="${bg}">${txt}${isRepeat ? '<span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px rgba(255,255,255,0.7)"></span>' : ''}</button></div>`;
+      // Draft diff (structural): amber ring on any changed cell; struck old value for edited/removed.
+      const diff = showDiff ? cellChangeKind(pub, draftRaw, key, u.id) : null;
+      const oldEx = (diff === 'edited' || diff === 'removed') ? pub[key]?.[u.id] : null;
+      const oldLbl = (oldEx && oldEx.s) ? _shiftLabel(oldEx) : (oldEx === 'off' ? 'Off' : '');
+      const oldTag = (diff && oldLbl) ? `<span class="fd-cell-old">${oldLbl}</span>` : '';
+      const repeatDot = (isRepeat && !diff) ? '<span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px rgba(255,255,255,0.7)"></span>' : '';
+      return `<div class="min-w-[92px] px-1 py-0.5"><button onclick="openFdShiftPicker('${key}','${u.id}')" class="w-full h-9 rounded-lg text-[11px] font-body font-semibold transition-all hover:opacity-80 border relative ${diff ? 'fd-cell-changed' : ''} ${(off || work) ? 'border-transparent' : 'border-dashed border-outline-variant/50 hover:bg-surface-container'} ${isPast ? 'opacity-50' : ''}" style="${bg}">${oldTag}${txt}${repeatDot}</button></div>`;
     }).join('');
     const photo = u.photo ? `<img src="${_esc(u.photo)}" class="w-8 h-8 rounded-full object-cover border border-surface-container-high flex-shrink-0">` : `<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${_esc((u.name || '?').charAt(0).toUpperCase())}</span></div>`;
-    const hrsLine = weekHours > 0 ? `<div class="text-[11px] font-body text-on-surface-variant leading-tight">${_fmtHrs(weekHours)}h this week</div>` : '';
+    const hrsLine = weekHours > 0 ? `<div class="text-[11px] font-body text-on-surface-variant leading-tight">${_fmtHrs(weekHours)}h</div>` : '';
     return `<div class="flex items-center border-b border-surface-container-high last:border-0"><div class="flex items-center gap-2 w-[150px] pr-2 py-1 flex-shrink-0 sticky left-0 z-10" style="${stickyBg}">${photo}<div class="min-w-0 flex-grow"><div class="text-sm font-body font-semibold text-on-surface truncate leading-tight">${_esc(u.name)}</div>${hrsLine}</div></div>${cells}</div>`;
   }).join('');
-  grid.innerHTML = `<div class="flex items-center border-b-2 border-surface-container-high sticky top-0 z-20" style="${stickyBg}"><div class="w-[150px] flex-shrink-0 sticky left-0 z-30" style="${stickyBg}"></div>${headerCols}</div>${rows || '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No front-desk users yet — add one above.</div>'}`;
+  return `<div class="mt-4 first:mt-0"><div class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest px-1 mb-1">Week of ${fmtShort(weekStart)}</div>`
+       + `<div class="flex items-center border-b-2 border-surface-container-high" style="${stickyBg}"><div class="w-[150px] flex-shrink-0 sticky left-0 z-10" style="${stickyBg}"></div>${headerCols}</div>${rows}</div>`;
 }
 
 export function openFdShiftPicker(date, fdId) {

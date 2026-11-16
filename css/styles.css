@@ -219,6 +219,13 @@
   .notif-sub { display: block; font-size: 11.5px; color: var(--on-surface-variant); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notif-chev { font-size: 18px; color: var(--outline-variant); flex-shrink: 0; }
 
+  /* ── FD schedule builder: draft-change highlight ───────────────────
+     Amber ring marks a cell changed in the unpublished draft (distinct from the
+     teal "repeats weekly" dot). .fd-cell-old shows the struck-out published time. */
+  .fd-cell-changed { box-shadow: 0 0 0 2px #e08a00 !important; }
+  .fd-cell-old { position: absolute; top: 1px; left: 4px; font-size: 8px; line-height: 1; font-weight: 700; color: #9a6a1a; text-decoration: line-through; }
+  html[data-appearance="dark"] .fd-cell-old { color: #d9a94a; }
+
   /* ── iPad / tablet (≤1194px) ─────────────────────
      1194 (not 1180) so an 11" iPad is covered in BOTH orientations — 11" Pro
      landscape is 1194px CSS. Portrait iPads, Air/10.9" landscape and 12.9"
