@@ -53,3 +53,25 @@ test('renderFdSchedule: no highlight when there is no draft (null-safe)', () => 
   const html = document.getElementById('fd-schedule-grid').innerHTML;
   assert.ok(!html.includes('fd-cell-changed'), 'published-only schedule shows no stale "removed" highlight');
 });
+
+test('draft bar: shows the change count + wired Publish/Discard when there are changes', () => {
+  const midWeek = _iso(new Date(_weekStart(new Date()).getTime() + 2 * 86400000));
+  seed({}, { [midWeek]: { u1: { s: '09:00', e: '17:00' } } });
+  fdSchedViewMode('draft'); fdScheduleWeek(0, true);
+  const bar = document.getElementById('fd-sched-draftbar').innerHTML;
+  assert.match(bar, /1 unpublished change/);
+  assert.ok(bar.includes('publishFdSchedule()') && bar.includes('discardFdSchedule()'), 'Publish + Discard wired');
+  assert.ok(bar.includes("fdSchedViewMode('published')"), 'the What-staff-see toggle is wired');
+});
+
+test('draft bar: "all published" note when there are no changes', () => {
+  seed({}, null);
+  fdScheduleWeek(0, true);
+  assert.match(document.getElementById('fd-sched-draftbar').innerHTML, /All changes published/);
+});
+
+test('pay-period chip renders from config.pay_period', () => {
+  getState().config.pay_period = { type: 'biweekly', startDate: '2026-11-16' };
+  seed({}, null); fdScheduleWeek(0, true);
+  assert.match(document.getElementById('fd-sched-payperiod').innerHTML, /Pay period .* · bi-weekly/);
+});

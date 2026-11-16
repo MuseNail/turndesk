@@ -15,6 +15,7 @@ import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 import { printTechReceipts80 } from './receipt.js';
 import { drawerReportHtml } from './cashdrawer.js';
+import { payPeriodForDate } from '../fd-schedule-util.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -362,29 +363,10 @@ function rangeLabel() {
 }
 function compareLabel() { return (COMPARE_OPTS.find(o => o[0] === reportRange.compare) || COMPARE_OPTS[0])[1]; }
 
-// Current pay period from config.pay_period: weekly/biweekly anchored at startDate,
-// or bimonthly (1st–15th, 16th–end). Returns { from, to }.
+// Current pay period from config.pay_period. Single source of truth lives in fd-schedule-util
+// (payPeriodForDate) — the FD schedule builder draws its boundary markers from the same math.
 function payPeriodDates(now = new Date()) {
-  const pp = cfg().pay_period || {};
-  const type = pp.type || 'weekly';
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (type === 'bimonthly') {
-    if (today.getDate() <= 15) return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(today.getFullYear(), today.getMonth(), 15, 23,59,59) };
-    return { from: new Date(today.getFullYear(), today.getMonth(), 16), to: new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59) };
-  }
-  const len = type === 'biweekly' ? 14 : 7;
-  // With no configured start date, anchor to a FIXED reference Sunday (2024-01-07) so week/biweek
-  // boundaries are stable. (Anchoring to `today` made the period slide every day — and start in the
-  // future: mod=0 → from=today, to=today+6.) A configured startDate always wins. Day counts use
-  // UTC midnights + calendar arithmetic (new Date(y,m,d±n)) so a DST transition between the anchor
-  // and today — or inside the period — can't shift the boundary by a day.
-  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date(2024, 0, 7);
-  const utcMid = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
-  const daysSince = Math.round((utcMid(today) - utcMid(anchor)) / 86400000);
-  const mod = ((daysSince % len) + len) % len;
-  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mod);
-  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + (len - 1), 23, 59, 59, 999);
-  return { from, to };
+  return payPeriodForDate(cfg().pay_period, now);
 }
 function getReportDates() {
   const now = new Date(), T = reportRange.type;

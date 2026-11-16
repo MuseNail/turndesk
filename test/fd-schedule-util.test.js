@@ -10,6 +10,7 @@ import {
   structuralChangeCount,
   hasUnpublishedChanges,
   payPeriodBoundariesInRange,
+  payPeriodForDate,
 } from '../js/app/fd-schedule-util.js';
 
 // ── resolveFdShift: mirrors getFdShift exactly (per-date → SCHED_NONE→null → legacy repeat) ──
@@ -107,4 +108,26 @@ test('payPeriodBoundariesInRange: boundary inside the window', () => {
 });
 test('payPeriodBoundariesInRange: empty when no period start falls inside', () => {
   assert.deepEqual(payPeriodBoundariesInRange(mkPeriod, '2026-11-17', '2026-11-29'), []);
+});
+
+// ── payPeriodForDate: mirrors reports.js payPeriodDates, taking the config as an argument ──
+test('payPeriodForDate: weekly (no startDate) → Sunday-aligned 7-day window containing the date', () => {
+  const p = payPeriodForDate({ type: 'weekly' }, new Date(2026, 10, 18)); // Nov 18 2026
+  assert.equal(p.from.getDay(), 0, 'from is a Sunday (anchor 2024-01-07)');
+  assert.ok(p.from <= new Date(2026, 10, 18) && new Date(2026, 10, 18) <= p.to);
+  assert.equal(Math.floor((p.to - p.from) / 86400000), 6); // from 00:00 day0 .. 23:59 day6 → 6 full days + EOD
+});
+test('payPeriodForDate: biweekly → 14-day window', () => {
+  const p = payPeriodForDate({ type: 'biweekly' }, new Date(2026, 10, 18));
+  assert.equal(Math.floor((p.to - p.from) / 86400000), 13);
+});
+test('payPeriodForDate: bimonthly → 1st–15th and 16th–end-of-month', () => {
+  const a = payPeriodForDate({ type: 'bimonthly' }, new Date(2026, 10, 10));
+  assert.equal(a.from.getDate(), 1); assert.equal(a.to.getDate(), 15);
+  const b = payPeriodForDate({ type: 'bimonthly' }, new Date(2026, 10, 20));
+  assert.equal(b.from.getDate(), 16); assert.equal(b.to.getMonth(), 10); assert.equal(b.to.getDate(), 30);
+});
+test('payPeriodForDate: a configured startDate wins as the anchor', () => {
+  const p = payPeriodForDate({ type: 'weekly', startDate: '2026-11-16' }, new Date(2026, 10, 18));
+  assert.equal(p.from.getFullYear(), 2026); assert.equal(p.from.getMonth(), 10); assert.equal(p.from.getDate(), 16);
 });

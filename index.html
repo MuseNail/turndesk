@@ -1611,17 +1611,21 @@ tailwind.config = {
             </div>
             </div><!-- /fdusers-list-view -->
             <div id="fdusers-schedule-view" class="hidden">
+              <!-- Draft status bar (JS-populated by renderFdSchedule): pill + Draft/Published toggle + Discard/Publish -->
+              <div id="fd-sched-draftbar" class="mb-3"></div>
               <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                   <button onclick="fdScheduleWeek(-1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
                   <span id="fd-schedule-week-label" class="text-sm font-body font-semibold text-on-surface min-w-40 text-center"></span>
                   <button onclick="fdScheduleWeek(1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
                   <button onclick="fdScheduleWeek(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+                  <span id="fd-sched-payperiod"></span>
                 </div>
                 <div class="flex gap-3 flex-wrap text-xs font-body text-on-surface-variant">
                   <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Shift hours</div>
                   <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#f5c870"></div>Off</div>
                   <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-md relative flex-shrink-0" style="background:#dcebea;border:1px solid #b6d2d0"><span style="position:absolute;top:-2px;right:-2px;width:5px;height:5px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px #fff"></span></div>Repeats weekly</div>
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-md flex-shrink-0" style="box-shadow:0 0 0 2px #e08a00"></div>Changed (draft)</div>
                 </div>
               </div>
               <div class="overflow-auto no-scroll rounded-xl border border-surface-container-high" style="max-height:calc(100vh - 320px)"><div id="fd-schedule-grid" class="min-w-max"></div></div>

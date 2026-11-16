@@ -84,6 +84,27 @@ export function hasUnpublishedChanges(published, draft) {
   return structuralChangeCount(published, draft) > 0;
 }
 
+// Pay period containing `now`, from config.pay_period (passed in so this stays pure). Mirrors
+// reports.js payPeriodDates: weekly/biweekly anchored at startDate (or the fixed 2024-01-07 Sunday),
+// bimonthly = 1st–15th / 16th–end. One source of truth — reports.js consumes this too.
+export function payPeriodForDate(payPeriodCfg, now = new Date()) {
+  const pp = payPeriodCfg || {};
+  const type = pp.type || 'weekly';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (type === 'bimonthly') {
+    if (today.getDate() <= 15) return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(today.getFullYear(), today.getMonth(), 15, 23, 59, 59) };
+    return { from: new Date(today.getFullYear(), today.getMonth(), 16), to: new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59) };
+  }
+  const len = type === 'biweekly' ? 14 : 7;
+  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date(2024, 0, 7);
+  const utcMid = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const daysSince = Math.round((utcMid(today) - utcMid(anchor)) / 86400000);
+  const mod = ((daysSince % len) + len) % len;
+  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mod);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + (len - 1), 23, 59, 59, 999);
+  return { from, to };
+}
+
 // Pay-period start dates that fall within [fromStr, toStr], for drawing boundary markers.
 // `periodForDate(dateStr) -> { from: Date, to: Date }` is injected (so this stays pure/testable).
 export function payPeriodBoundariesInRange(periodForDate, fromStr, toStr) {

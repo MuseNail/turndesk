@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { localDateStr, showToast } from '../utils.js';
-import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges, repeatForwardDates, cellChangeKind } from '../fd-schedule-util.js';
+import { resolveFdShift, SCHED_NONE, structuralChangeCount, hasUnpublishedChanges, repeatForwardDates, cellChangeKind, payPeriodForDate, payPeriodBoundariesInRange } from '../fd-schedule-util.js';
 
 const cfg = () => getState().config;
 let fdWeekStart = _weekStart(new Date());
@@ -76,21 +76,67 @@ export function renderFdSchedule() {
   const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const windowEnd = new Date(fdWeekStart); windowEnd.setDate(windowEnd.getDate() + 13);
   if (label) label.textContent = `${fmtShort(fdWeekStart)} – ${fmtShort(windowEnd)}`;
+  _renderDraftBar();
+  _renderPayPeriod(today, windowEnd);
+  const ppType = (cfg().pay_period || {}).type || 'weekly';
+  const boundaries = ppType === 'weekly' ? [] : payPeriodBoundariesInRange(_periodForDate, localDateStr(fdWeekStart), localDateStr(windowEnd));
   const users = cfg().fd_users || [];
   if (!users.length) { grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No front-desk users yet — add one above.</div>'; return; }
   const week1 = new Date(fdWeekStart); week1.setDate(week1.getDate() + 7);
-  grid.innerHTML = _renderWeekBand(new Date(fdWeekStart), sched, pub, draftRaw, showDiff, today, users)
-                 + _renderWeekBand(week1, sched, pub, draftRaw, showDiff, today, users);
+  grid.innerHTML = _renderWeekBand(new Date(fdWeekStart), sched, pub, draftRaw, showDiff, today, users, boundaries)
+                 + _renderWeekBand(week1, sched, pub, draftRaw, showDiff, today, users, boundaries);
+}
+
+const _periodForDate = (dateStr) => payPeriodForDate(cfg().pay_period, new Date(dateStr + 'T12:00:00'));
+
+// The draft status bar: "N unpublished changes" pill + Draft/"What staff see" toggle + Discard/Publish.
+// Hidden (replaced by an "all published" note) when there are no unpublished changes.
+function _renderDraftBar() {
+  const el = document.getElementById('fd-sched-draftbar'); if (!el) return;
+  const n = structuralChangeCount(_publishedSched(), cfg().fd_schedule_draft);
+  if (n === 0) {
+    el.innerHTML = `<div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px;color:#2a7a4f">check_circle</span>All changes published — staff see this schedule.</div>`;
+    return;
+  }
+  const draftOn = _schedView === 'draft';
+  const tab = (on) => on ? 'bg-surface text-on-surface shadow-sm' : 'text-on-surface-variant';
+  el.innerHTML = `
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="inline-flex items-center gap-1.5 text-xs font-body font-bold px-3 py-1.5 rounded-full" style="background:#fff5e2;color:#8a5200;border:1px solid #f0cd88"><span style="width:8px;height:8px;border-radius:50%;background:#e08a00;display:inline-block"></span>${n} unpublished change${n === 1 ? '' : 's'}</span>
+      <div class="inline-flex rounded-xl p-0.5" style="background:var(--surface-container)">
+        <button onclick="fdSchedViewMode('draft')" class="px-3 py-1.5 rounded-lg text-xs font-body font-semibold ${tab(draftOn)}">✎ Draft</button>
+        <button onclick="fdSchedViewMode('published')" class="px-3 py-1.5 rounded-lg text-xs font-body font-semibold ${tab(!draftOn)}">What staff see</button>
+      </div>
+      <div class="flex-1"></div>
+      <button onclick="discardFdSchedule()" class="px-3 py-1.5 rounded-xl text-xs font-body font-semibold border border-surface-container-high text-on-surface-variant hover:bg-surface-container">Discard</button>
+      <button onclick="publishFdSchedule()" class="px-4 py-1.5 rounded-xl text-xs font-body font-bold bg-primary text-on-primary hover:bg-primary-dim">Publish changes</button>
+    </div>`;
+}
+
+// The pay-period chip: names the period containing today, or (if today is off-screen) the one at the window start.
+function _renderPayPeriod(today, windowEnd) {
+  const el = document.getElementById('fd-sched-payperiod'); if (!el) return;
+  const pp = cfg().pay_period || {};
+  const todayIso = localDateStr(today), winStart = localDateStr(fdWeekStart), winEnd = localDateStr(windowEnd);
+  const anchor = (todayIso >= winStart && todayIso <= winEnd) ? today : new Date(fdWeekStart);
+  const per = payPeriodForDate(pp, anchor);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const typeLabel = pp.type === 'biweekly' ? 'bi-weekly' : pp.type === 'bimonthly' ? 'bi-monthly' : 'weekly';
+  el.innerHTML = `<span class="inline-flex items-center gap-1 text-xs font-body font-semibold px-2.5 py-1 rounded-lg" style="background:rgba(42,122,79,.08);color:var(--primary);border:1px solid rgba(42,122,79,.22)"><span class="material-symbols-outlined" style="font-size:15px">event</span>Pay period ${fmt(per.from)}–${fmt(per.to)} · ${typeLabel}</span>`;
 }
 
 // One stacked week band: a "Week of …" label, the Sun–Sat day header, then a row per FD user.
-function _renderWeekBand(weekStart, sched, pub, draftRaw, showDiff, today, users) {
+function _renderWeekBand(weekStart, sched, pub, draftRaw, showDiff, today, users, boundaries) {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dates = days.map((_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
   const isToday = d => d.toDateString() === today.toDateString();
   const stickyBg = 'background:var(--surface-container-lowest, #f5f7f8)';
   const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const headerCols = dates.map((d, i) => `<div class="text-center px-2 py-1.5 min-w-[92px]${isToday(d) ? ' bg-primary/5' : ''}"><div class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">${days[i]}</div><div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div></div>`).join('');
+  const headerCols = dates.map((d, i) => {
+    const bound = (boundaries || []).includes(localDateStr(d));   // pay-period start falls on this day (bi-weekly/bi-monthly only)
+    const mark = bound ? '<div class="text-[8px] font-bold text-primary leading-none uppercase tracking-wide" style="margin-top:1px">● pay start</div>' : '';
+    return `<div class="text-center px-2 py-1.5 min-w-[92px]${isToday(d) ? ' bg-primary/5' : ''}${bound ? ' border-l-2 border-primary' : ''}"><div class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">${days[i]}</div><div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div>${mark}</div>`;
+  }).join('');
   const rows = users.map(u => {
     let weekHours = 0;
     const cells = dates.map(d => {
