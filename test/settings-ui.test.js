@@ -5,6 +5,51 @@ import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { segControl, switchRow, styledSelect } from '../js/app/settings-ui.js';
+import { settingsRailGroups } from '../js/app/features/settings.js';
+
+// ── settingsRailGroups (desktop rail model, pure; predicate injected) ─────────
+const RAIL_NAV = [
+  { id: 'wf', title: 'Workflow', items: [
+    { label: 'Turn Rules', sub: 'Half / bonus', content: 'turns-thresh-section', icon: 'swap_vert' },
+    { label: 'Pay Period', sub: 'Weekly / bi-weekly', content: 'settings-payperiod-section', adminOnly: true, icon: 'event_repeat' },
+  ] },
+  { id: 'biz', title: 'Business', items: [
+    { label: 'Receipt', sub: 'Review QR', content: 'receipt-section', icon: 'reviews' },
+    { label: 'Customer Directory', sub: 'Browse', action: 'showCustomerDir', icon: 'contacts' },
+  ] },
+  { id: 'empty', title: 'All Hidden', items: [
+    { label: 'Secret', sub: 'x', content: 'secret-section', adminOnly: true, icon: 'lock' },
+  ] },
+];
+const seeAll = () => true;
+const noAdmin = it => !it.adminOnly;
+
+test('settingsRailGroups preserves group order and projects item shape', () => {
+  const groups = settingsRailGroups(RAIL_NAV, seeAll);
+  assert.deepEqual(groups.map(g => g.title), ['Workflow', 'Business', 'All Hidden']);
+  const pp = groups[0].items[1];
+  assert.deepEqual(pp, { label: 'Pay Period', content: 'settings-payperiod-section', action: null, icon: 'event_repeat' });
+  const dir = groups[1].items[1];
+  assert.deepEqual(dir, { label: 'Customer Directory', content: null, action: 'showCustomerDir', icon: 'contacts' });
+});
+
+test('settingsRailGroups drops items the predicate hides and omits emptied groups', () => {
+  const groups = settingsRailGroups(RAIL_NAV, noAdmin);
+  assert.deepEqual(groups.map(g => g.title), ['Workflow', 'Business']); // 'All Hidden' omitted
+  assert.deepEqual(groups[0].items.map(i => i.label), ['Turn Rules']);  // Pay Period (adminOnly) gone
+});
+
+test('settingsRailGroups filters items by query across label and sub, omitting non-matching groups', () => {
+  const groups = settingsRailGroups(RAIL_NAV, seeAll, 'bonus'); // matches Turn Rules' sub only
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].title, 'Workflow');
+  assert.deepEqual(groups[0].items.map(i => i.label), ['Turn Rules']);
+});
+
+test('settingsRailGroups with a blank query returns all visible groups', () => {
+  const groups = settingsRailGroups(RAIL_NAV, seeAll, '   ');
+  assert.equal(groups.length, 3);
+});
 
 // ── segControl ──────────────────────────────────────────────────────────────
 test('segControl renders a button for every item', () => {

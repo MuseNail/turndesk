@@ -504,13 +504,14 @@ const SETTINGS_NAV = [
     { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo', icon:'info' },
   ]},
 ];
-let _settingsView = 'root', _settingsCat = null;
+let _settingsView = 'root', _settingsCat = null, _settingsActiveLeaf = null;
 
 function _hideAllSettingsSections() {
   const panel = document.getElementById('panel-settings');
   if (!panel) return;
   [...panel.children].forEach(ch => {
-    if (ch.classList.contains('settings-nav-header') || ch.id === 'settings-root' || ch.id === 'settings-category') return;
+    if (ch.classList.contains('settings-nav-header') || ch.id === 'settings-root' || ch.id === 'settings-category'
+        || ch.id === 'settings-rail' || ch.id === 'settings-empty') return;
     ch.classList.add('hidden');
   });
 }
@@ -532,7 +533,7 @@ function _settingsItemRow(it, subText) {
 export function settingsNavRoot() {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsNavRoot()); return; }
   if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsNavRoot()); return; }
-  _settingsView = 'root'; _settingsCat = null;
+  _settingsView = 'root'; _settingsCat = null; _settingsActiveLeaf = null;
   window.refreshBillingFlags?.();   // fire-and-forget — the Billing entry appears on the next nav render once the flag is on
   _hideAllSettingsSections();
   document.getElementById('settings-category')?.classList.add('hidden');
@@ -570,6 +571,22 @@ export function _settingsSearchRows(nav, query, visible) {
 // Consumed by the header global search (search.js) to surface Settings as results (same perm filter).
 export function searchSettings(query) { return _settingsSearchRows(SETTINGS_NAV, query, settingsLeafVisible); }
 
+// Pure: project the settings nav into the desktop rail model — visible groups (each with ≥1 visible,
+// query-matching item), items projected to just what a rail row renders. Predicate injected so it's
+// unit-testable without app state; optional query filters items by label/sub (mirrors the search).
+export function settingsRailGroups(nav, visible, query) {
+  const q = (query || '').trim().toLowerCase();
+  const out = [];
+  (nav || []).forEach(g => {
+    const items = (g.items || [])
+      .filter(it => visible(it))
+      .filter(it => !q || (it.label + ' ' + (it.sub || '')).toLowerCase().includes(q))
+      .map(it => ({ label: it.label, content: it.content || null, action: it.action || null, icon: it.icon || 'settings' }));
+    if (items.length) out.push({ title: g.title, items });
+  });
+  return out;
+}
+
 // Live filter across the whole settings tree → jump straight to any leaf.
 export function filterSettings(q) {
   // Switching views via the search box with an unsaved inline-catalog row open → guard it (parity with the
@@ -595,7 +612,7 @@ export function settingsOpenCategory(catId) {
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenCategory(catId)); return; }   // defense-in-depth (unreachable from a leaf view today)
   if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => settingsOpenCategory(catId)); return; }
   const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
-  _settingsView = 'cat'; _settingsCat = catId;
+  _settingsView = 'cat'; _settingsCat = catId; _settingsActiveLeaf = null;
   _hideAllSettingsSections();
   document.getElementById('settings-root')?.classList.add('hidden');
   const list = document.getElementById('settings-category');
@@ -633,6 +650,7 @@ export function settingsOpenLeaf(contentId) {
   // The price-menu editor renders while its section is still display:none (clientWidth 0), so its
   // fraction-based list-column width can't be computed until now — re-apply once it's visible.
   if (contentId === 'settings-pricemenu-section') window._applyPmListColW?.();
+  _settingsActiveLeaf = contentId;
   _setSettingsHeader(item?.label || 'Settings', '', true);
 }
 export function settingsBack() {
@@ -646,6 +664,76 @@ export function settingsBack() {
 export function settingsRefreshOpenCategory() {
   if (_settingsView === 'cat' && _settingsCat) settingsOpenCategory(_settingsCat);
 }
+
+// ── Desktop two-pane rail ────────────────────────────────────────────────────
+const _settingsIsDesktop = () => !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width:1195px)').matches);
+
+function _railHighlight(contentId) {
+  document.querySelectorAll('#settings-rail-list .set-rail-item').forEach(b =>
+    b.classList.toggle('set-rail-item-on', !!contentId && b.dataset.content === contentId));
+}
+
+// Build the desktop rail from the nav (same perm filter as everything else); optional query filters it.
+export function renderSettingsRail(query = '') {
+  const list = document.getElementById('settings-rail-list');
+  if (!list) return;
+  window.refreshBillingFlags?.();   // keep the rail's Billing entry in sync with the flag (fire-and-forget)
+  const groups = settingsRailGroups(SETTINGS_NAV, settingsLeafVisible, query);
+  list.innerHTML = groups.length === 0
+    ? `<p class="set-rail-noresult">No settings match.</p>`
+    : groups.map(g => `<div class="set-rail-group"><div class="set-rail-gh">${escHtml(g.title)}</div>${
+        g.items.map(it => {
+          const onclick = it.action ? `${it.action}()` : `railOpenLeaf('${it.content}')`;
+          return `<button type="button" class="set-rail-item" data-content="${escHtml(it.content || '')}" onclick="${onclick}">`
+            + `<span class="material-symbols-outlined">${escHtml(it.icon)}</span>`
+            + `<span class="set-rail-label">${escHtml(it.label)}</span></button>`;
+        }).join('')
+      }</div>`).join('');
+  _railHighlight(_settingsActiveLeaf);
+}
+export function filterSettingsRail(q) { renderSettingsRail(q); }
+
+// Open a leaf from the rail: reuse settingsOpenLeaf (access guard + render + reveal), then highlight
+// it, hide the empty state, and drop the Back button (no drilling on desktop).
+export function railOpenLeaf(contentId) {
+  settingsOpenLeaf(contentId);
+  const content = document.getElementById(contentId);
+  if (!content || content.classList.contains('hidden')) return;  // access denied / guarded → no highlight
+  _settingsActiveLeaf = contentId;
+  _railHighlight(contentId);
+  document.getElementById('settings-empty')?.classList.add('hidden');
+  document.getElementById('settings-back-btn')?.classList.add('hidden');
+}
+
+// Neutral "pick a setting" state (desktop, no leaf open).
+function _showSettingsEmpty() {
+  _settingsActiveLeaf = null;
+  _hideAllSettingsSections();
+  document.getElementById('settings-empty')?.classList.remove('hidden');
+  _railHighlight(null);
+  _setSettingsHeader('Settings', 'Configure app behavior and customer options', false);
+}
+
+// One module-scope listener reconciles the two layouts across the 1195px line.
+(function _wireSettingsResize() {
+  const mq = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(min-width:1195px)') : null;
+  mq?.addEventListener?.('change', () => {
+    const panel = document.getElementById('panel-settings');
+    if (!panel || !panel.classList.contains('active')) return;   // only when Settings is on screen
+    if (mq.matches) {                                            // → desktop
+      renderSettingsRail();
+      if (_settingsActiveLeaf) {
+        _railHighlight(_settingsActiveLeaf);
+        document.getElementById('settings-empty')?.classList.add('hidden');
+        document.getElementById('settings-back-btn')?.classList.add('hidden');
+      } else { _showSettingsEmpty(); }
+    } else {                                                     // → tablet/phone
+      document.getElementById('settings-empty')?.classList.add('hidden');
+      if (_settingsActiveLeaf) document.getElementById('settings-back-btn')?.classList.remove('hidden');
+      else settingsNavRoot();
+    }
+  });
+})();
 
 export function renderSettingsPanel() {
   renderServicesMerged();
@@ -663,5 +751,10 @@ export function renderSettingsPanel() {
   if (sqAppInput && cfg().square_config?.applicationId) sqAppInput.value = cfg().square_config.applicationId;
   window.renderTerminalStatus?.();
   // Turn Rules is a render-leaf now (renderTurnsSettings builds it on open) — no static seeding here.
-  settingsNavRoot();
+  if (_settingsIsDesktop()) {           // two-pane: rail + neutral empty state (no auto-opened leaf)
+    renderSettingsRail();
+    _showSettingsEmpty();
+  } else {                              // tablet/phone: the existing drill-down
+    settingsNavRoot();
+  }
 }
