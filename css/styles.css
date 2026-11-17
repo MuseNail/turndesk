@@ -933,3 +933,73 @@
   .snote-v { font-size:16px; color:var(--on-surface); line-height:1.35; white-space:pre-line; overflow-wrap:anywhere; }
   .snote-v.snote-empty { color:var(--outline-variant); }
   .snote-pen, .snote-lock { font-size:18px; color:var(--outline-variant); flex-shrink:0; margin-top:1px; }
+
+  /* ── Settings control kit (Option A) ─────────────────────────────────────────
+     Modern, tactile controls for the redesigned Settings screen, built on the app's
+     own theme tokens so dark mode (html[data-appearance="dark"]) and per-login accent
+     follow automatically. Markup comes from js/app/settings-ui.js (.set-* classes).
+     Touch-friendly for the front-desk iPad. Behavior is unchanged — look only. */
+
+  /* Labels + helper text */
+  .set-label { font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13px; color:var(--on-surface); }
+  .set-help  { font-size:12px; color:var(--on-surface-variant); line-height:1.45; margin-top:4px; }
+
+  /* Tactile button (solid accent + soft lift + press-down). Soft + ghost variants. */
+  .set-btn {
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    min-height:44px; padding:0 18px; border:none; border-radius:12px; cursor:pointer;
+    background:var(--primary); color:var(--on-primary);
+    box-shadow:0 2px 8px rgba(16,24,40,.18), inset 0 1px 0 rgba(255,255,255,.16);
+    transition:transform .08s ease, box-shadow .12s ease, background .12s ease;
+  }
+  .set-btn:active { transform:translateY(1px); box-shadow:0 1px 4px rgba(16,24,40,.18); }
+  .set-btn .msym, .set-btn .material-symbols-outlined { font-size:18px; }
+  .set-btn-soft  { background:var(--primary-container); color:var(--on-primary-container); box-shadow:none; }
+  .set-btn-ghost { background:transparent; color:var(--primary); box-shadow:none; }
+  html[data-appearance="dark"] .set-btn { box-shadow:inset 0 1px 0 rgba(255,255,255,.10); }
+  html[data-appearance="dark"] .set-btn-soft { background:var(--surface-container-high); color:var(--on-surface); }
+
+  /* Segmented control — 2–4 exclusive choices (replaces a short native <select>) */
+  .set-seg { display:inline-flex; background:var(--surface-container-low); border:1px solid var(--outline-variant);
+    border-radius:13px; padding:4px; gap:3px; max-width:100%; flex-wrap:wrap; }
+  .set-seg-btn {
+    font-family:Inter,sans-serif; font-weight:600; font-size:13px; color:var(--on-surface-variant);
+    background:transparent; border:none; border-radius:9px; padding:0 14px; min-height:38px; cursor:pointer;
+    white-space:nowrap; transition:background .12s ease, color .12s ease;
+  }
+  .set-seg-btn:hover { color:var(--on-surface); }
+  .set-seg-btn.set-seg-on { background:var(--primary); color:var(--on-primary); box-shadow:0 1px 3px rgba(16,24,40,.22); }
+  html[data-appearance="dark"] .set-seg-btn.set-seg-on { box-shadow:none; }
+
+  /* Switch — on/off (replaces a native checkbox). The whole row is a comfortable tap target. */
+  .set-switch-row { display:flex; align-items:center; gap:16px; padding:6px 0; }
+  .set-switch-text { flex:1; min-width:0; }
+  .set-switch {
+    position:relative; flex-shrink:0; width:46px; height:28px; border-radius:999px; border:none; cursor:pointer;
+    background:var(--surface-container-highest); padding:0; transition:background .15s ease;
+  }
+  .set-switch-knob {
+    position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.28); transition:left .15s ease;
+  }
+  .set-switch.set-switch-on { background:var(--primary); }
+  .set-switch.set-switch-on .set-switch-knob { left:21px; }
+  .set-switch:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+
+  /* Field — styled wrapper around a real native input/select (OS owns the picker/dropdown) */
+  .set-field {
+    display:inline-flex; align-items:center; gap:9px; background:var(--surface-container-lowest);
+    border:1px solid var(--outline-variant); border-radius:12px; padding:0 12px; min-height:44px; max-width:100%;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .set-field:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px rgba(26,82,82,.18); }
+  html[data-appearance="dark"] .set-field:focus-within { box-shadow:0 0 0 3px rgba(143,212,211,.20); }
+  .set-field > input, .set-field > select {
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; color:var(--on-surface);
+    background:transparent; border:none; outline:none; padding:11px 0; width:100%;
+  }
+  .set-field-select { padding-right:4px; }
+  .set-field > select { cursor:pointer; padding-right:8px; }
+  .set-field > input[type="date"] { color-scheme:light; }
+  html[data-appearance="dark"] .set-field > input[type="date"] { color-scheme:dark; }
