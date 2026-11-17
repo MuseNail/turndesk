@@ -158,6 +158,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'td-v0.85', items: [
+    { icon: 'tune', t: 'A cleaner, more modern Settings', d: 'Settings got a refresh. On a desktop or laptop there’s now a side menu — pick any setting on the left and it opens on the right, with no more drilling in and tapping Back. The controls look modern too: on/off settings are real switches, and “pick one” choices (like the numpad mode or your pay schedule) are tap-to-choose buttons instead of grey dropdowns. On the iPad the familiar tap-through layout stays. And the time-clock station setting now has its own screen under Workflow instead of sharing the Pay Period page.' },
+  ] },
   { v: 'td-v0.84', items: [
     { icon: 'event_available', t: 'Publish-when-ready staff schedule', d: 'The front-desk schedule now works in two steps: build it as a draft, then Publish when it’s ready. Your staff only ever see the published schedule, so they never catch a half-finished week — and a banner shows how many unpublished changes you have, with a toggle to preview exactly “what staff see” and a Discard button to throw a draft away. Changed cells are highlighted so you can see at a glance what’s different from what’s live.' },
     { icon: 'calendar_view_month', t: 'Staff see the next month; build two weeks at a time', d: 'On the staff app, each person now sees a rolling month — this week plus the next three — so even on a Friday they already know next week’s hours. On the admin side you build two weeks at a time with your pay-period dates drawn right in. And “Every week” is now “Repeat next 4 weeks”: set a shift and stamp it across the next four weeks in one tap — with no more accidentally changing weeks that already happened.' },
