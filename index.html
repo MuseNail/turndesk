@@ -1200,19 +1200,19 @@ tailwind.config = {
           </div>
           <nav id="settings-rail-list" class="set-rail-list" aria-label="Settings sections"></nav>
         </div>
-        <!-- Desktop empty state (shown until a setting is picked) -->
-        <div id="settings-empty" class="hidden">
-          <div class="set-empty-inner">
-            <span class="material-symbols-outlined">tune</span>
-            <p class="set-empty-title">Select a setting</p>
-            <p class="set-empty-sub">Choose a setting from the menu to view and edit it.</p>
-          </div>
-        </div>
         <div class="settings-nav-header mb-5 flex items-center gap-3">
           <button id="settings-back-btn" onclick="settingsBack()" class="hidden w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined">arrow_back</span></button>
           <div>
             <h2 id="settings-nav-title" class="text-xl font-headline font-bold text-on-surface">Settings</h2>
             <p id="settings-nav-desc" class="text-xs font-body text-on-surface-variant mt-0.5"></p>
+          </div>
+        </div>
+        <!-- Desktop empty state (shown until a setting is picked) — after the header so auto-flow puts it in row 2 -->
+        <div id="settings-empty" class="hidden">
+          <div class="set-empty-inner">
+            <span class="material-symbols-outlined">tune</span>
+            <p class="set-empty-title">Select a setting</p>
+            <p class="set-empty-sub">Choose a setting from the menu to view and edit it.</p>
           </div>
         </div>
 

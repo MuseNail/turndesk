@@ -7,23 +7,26 @@
 import { escHtml } from './utils.js';
 
 // Segmented control — 2–4 mutually-exclusive choices. items:[{value,label,onclick}];
-// the item whose value===value is the active chip.
-export function segControl({ value, items = [] } = {}) {
+// the item whose value===value is the active chip. `label` names the group for assistive tech.
+export function segControl({ value, items = [], label } = {}) {
   const buttons = items.map(it => {
-    const on = it.value === value ? ' set-seg-on' : '';
-    return `<button type="button" class="set-seg-btn${on}" onclick="${it.onclick}">${escHtml(it.label)}</button>`;
+    const active = it.value === value;
+    return `<button type="button" class="set-seg-btn${active ? ' set-seg-on' : ''}" aria-pressed="${active ? 'true' : 'false'}" onclick="${it.onclick}">${escHtml(it.label)}</button>`;
   }).join('');
-  return `<div class="set-seg" role="group">${buttons}</div>`;
+  const named = label ? ` aria-label="${escHtml(label)}"` : '';
+  return `<div class="set-seg" role="group"${named}>${buttons}</div>`;
 }
 
-// On/off switch with a label and optional help text. Replaces a native checkbox.
+// On/off switch with a label and optional help text. Replaces a native checkbox. The WHOLE row is
+// the control (a button with role=switch), so tapping the label toggles it — important on the
+// front-desk iPad. The pill/knob is presentational (aria-hidden).
 export function switchRow({ label, help = '', on = false, onclick } = {}) {
   const onCls = on ? ' set-switch-on' : '';
-  const helpHtml = help ? `<div class="set-help">${escHtml(help)}</div>` : '';
-  return `<div class="set-switch-row">`
-    + `<div class="set-switch-text"><div class="set-label">${escHtml(label)}</div>${helpHtml}</div>`
-    + `<button type="button" class="set-switch${onCls}" role="switch" aria-checked="${on ? 'true' : 'false'}" onclick="${onclick}"><span class="set-switch-knob"></span></button>`
-    + `</div>`;
+  const helpHtml = help ? `<span class="set-help">${escHtml(help)}</span>` : '';
+  return `<button type="button" class="set-switch-row" role="switch" aria-checked="${on ? 'true' : 'false'}" onclick="${onclick}">`
+    + `<span class="set-switch-text"><span class="set-label">${escHtml(label)}</span>${helpHtml}</span>`
+    + `<span class="set-switch${onCls}" aria-hidden="true"><span class="set-switch-knob"></span></span>`
+    + `</button>`;
 }
 
 // Styled native <select> for long/many option sets. items:[{value,label}]; the matching

@@ -965,19 +965,23 @@
     border-radius:13px; padding:4px; gap:3px; max-width:100%; flex-wrap:wrap; }
   .set-seg-btn {
     font-family:Inter,sans-serif; font-weight:600; font-size:13px; color:var(--on-surface-variant);
-    background:transparent; border:none; border-radius:9px; padding:0 14px; min-height:38px; cursor:pointer;
+    background:transparent; border:none; border-radius:9px; padding:0 14px; min-height:44px; cursor:pointer;
     white-space:nowrap; transition:background .12s ease, color .12s ease;
   }
   .set-seg-btn:hover { color:var(--on-surface); }
   .set-seg-btn.set-seg-on { background:var(--primary); color:var(--on-primary); box-shadow:0 1px 3px rgba(16,24,40,.22); }
   html[data-appearance="dark"] .set-seg-btn.set-seg-on { box-shadow:none; }
 
-  /* Switch — on/off (replaces a native checkbox). The whole row is a comfortable tap target. */
-  .set-switch-row { display:flex; align-items:center; gap:16px; padding:6px 0; }
-  .set-switch-text { flex:1; min-width:0; }
+  /* Switch — on/off (replaces a native checkbox). The WHOLE row is the control (a role=switch
+     button), so tapping the label toggles it — a comfortable target on the front-desk iPad. */
+  .set-switch-row {
+    display:flex; align-items:center; gap:16px; width:100%; padding:8px 0; cursor:pointer;
+    background:transparent; border:none; text-align:left; color:inherit; font:inherit;
+  }
+  .set-switch-text { flex:1; min-width:0; display:block; }
   .set-switch {
-    position:relative; flex-shrink:0; width:46px; height:28px; border-radius:999px; border:none; cursor:pointer;
-    background:var(--surface-container-highest); padding:0; transition:background .15s ease;
+    position:relative; flex-shrink:0; width:46px; height:28px; border-radius:999px;
+    background:var(--surface-container-highest); display:block; transition:background .15s ease;
   }
   .set-switch-knob {
     position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%;
@@ -985,7 +989,12 @@
   }
   .set-switch.set-switch-on { background:var(--primary); }
   .set-switch.set-switch-on .set-switch-knob { left:21px; }
-  .set-switch:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+
+  /* Shared branded focus ring across the kit's interactive controls */
+  .set-btn:focus-visible, .set-seg-btn:focus-visible,
+  .set-switch-row:focus-visible, .set-rail-item:focus-visible {
+    outline:2px solid var(--primary); outline-offset:2px;
+  }
 
   /* Field — styled wrapper around a real native input/select (OS owns the picker/dropdown) */
   .set-field {
@@ -1057,6 +1066,8 @@
     /* Empty state (JS toggles .hidden; .hidden must still win when set) */
     #settings-empty { display:block; }
     #settings-empty.hidden { display:none; }
+    /* On the empty state the rail already shows "Settings" — hide the duplicate pane title. */
+    #panel-settings.active.settings-empty-on .settings-nav-header { display:none; }
     .set-empty-inner {
       display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
       min-height:340px; color:var(--on-surface-variant);

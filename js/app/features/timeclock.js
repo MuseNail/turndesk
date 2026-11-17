@@ -187,11 +187,11 @@ export function renderClockStationSetting() {
   const isThis = isClockStation(), isSet = !!clockStationDeviceId();
   let row;
   if (isThis) {
-    row = `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style="background:rgba(42,122,79,.12)"><span class="text-sm font-body" style="color:#1b5e20"><strong>This device</strong> is the time-clock station ✓</span><button onclick="clearClockStation()" class="text-xs font-body text-error underline flex-shrink-0">Remove</button></div>`;
+    row = `<div class="flex items-center justify-between gap-3 flex-wrap" style="background:var(--primary-container);color:var(--on-primary-container);border-radius:12px;padding:12px 14px"><span class="text-sm font-body"><strong>This device</strong> is the time-clock station ✓</span><button onclick="clearClockStation()" class="text-xs font-body underline flex-shrink-0" style="color:var(--error)">Remove</button></div>`;
   } else if (isSet) {
-    row = `<div class="flex items-center justify-between gap-2 flex-wrap px-3 py-2 rounded-lg" style="background:#fef3c7"><span class="text-sm font-body" style="color:#7c4a03">⚠️ A station is saved, but it’s <strong>not this device</strong>. If this should be the station (e.g. the ID changed after a reinstall), make it the station again.</span><button onclick="setThisClockStation()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the station</button></div>`;
+    row = `<div style="background:var(--secondary-container);color:var(--on-secondary-container);border-radius:12px;padding:12px 14px"><p class="text-sm font-body" style="margin-bottom:10px">⚠️ A station is saved, but it’s <strong>not this device</strong>. If this should be the station (e.g. the ID changed after a reinstall), make it the station again.</p><button onclick="setThisClockStation()" class="set-btn">Make this device the station</button></div>`;
   } else {
-    row = `<div class="flex items-center justify-between gap-2 flex-wrap"><span class="text-sm font-body text-on-surface-variant">No station set yet — staff can’t clock in until one is set.</span><button onclick="setThisClockStation()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the station</button></div>`;
+    row = `<p class="set-help" style="margin-bottom:12px">No station set yet — staff can’t clock in until one is set.</p><button onclick="setThisClockStation()" class="set-btn">Make this device the station</button>`;
   }
   el.innerHTML = row;
 }

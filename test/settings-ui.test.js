@@ -82,6 +82,23 @@ test('segControl wires each item onclick', () => {
   assert.match(html, /onclick="pick\("b"\)"/);
 });
 
+test('segControl sets aria-pressed true on the active chip and false on the rest', () => {
+  const html = segControl({ value: 'b', items: [
+    { value: 'a', label: 'Apple', onclick: 'x' },
+    { value: 'b', label: 'Banana', onclick: 'y' },
+  ] });
+  assert.equal((html.match(/aria-pressed="true"/g) || []).length, 1);
+  assert.equal((html.match(/aria-pressed="false"/g) || []).length, 1);
+  assert.match(html, /aria-pressed="true"[^>]*>Banana</);
+});
+
+test('segControl gives the group an accessible name when label is provided', () => {
+  const html = segControl({ value: 'a', label: 'Pay schedule', items: [
+    { value: 'a', label: 'Apple', onclick: 'x' },
+  ] });
+  assert.match(html, /class="set-seg"[^>]*aria-label="Pay schedule"/);
+});
+
 test('segControl escapes the label text', () => {
   const html = segControl({ value: 'a', items: [
     { value: 'a', label: '<b>A&B</b>', onclick: 'x' },
@@ -109,6 +126,16 @@ test('switchRow wires onclick and shows label + help', () => {
   assert.match(html, /onclick="tgl\(\)"/);
   assert.match(html, />Offer rebooking</);
   assert.match(html, />At checkout</);
+});
+
+test('switchRow makes the whole row the control (onclick on set-switch-row, role=switch), not just the knob', () => {
+  const html = switchRow({ label: 'Offer rebooking', help: 'At checkout', on: true, onclick: 'tgl()' });
+  // the clickable element is the row itself, carrying role=switch + aria-checked + onclick
+  assert.match(html, /class="set-switch-row[^"]*"[^>]*role="switch"[^>]*aria-checked="true"[^>]*onclick="tgl\(\)"/);
+  // exactly one onclick (not duplicated on an inner button)
+  assert.equal((html.match(/onclick=/g) || []).length, 1);
+  // the visual switch is presentational (aria-hidden), not a second interactive control
+  assert.match(html, /class="set-switch set-switch-on"[^>]*aria-hidden="true"/);
 });
 
 test('switchRow escapes label and help', () => {

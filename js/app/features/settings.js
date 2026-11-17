@@ -8,7 +8,7 @@ import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices, isHalfService, saveHalfServices, getDedicatedBonusServices } from './turns.js';
-import { segControl, switchRow, styledSelect } from '../settings-ui.js';
+import { segControl, switchRow } from '../settings-ui.js';   // styledSelect: exported for Phase 2, not used yet
 
 const cfg = () => getState().config;
 
@@ -374,7 +374,7 @@ export function renderPayPeriodSettings() {
   el.innerHTML = `
     <p class="set-help" style="margin-bottom:14px">Sets the <strong>Pay Period</strong> quick button in Reports &amp; Transactions (and the pay-period option for scheduled report emails).</p>
     <div class="set-label">Pay schedule</div>
-    <div style="margin:8px 0 8px">${segControl({ value: type, items: [
+    <div style="margin:8px 0 8px">${segControl({ value: type, label: 'Pay schedule', items: [
       { value: 'weekly',    label: 'Weekly',    onclick: "setPayPeriodType('weekly')" },
       { value: 'biweekly',  label: 'Bi-weekly', onclick: "setPayPeriodType('biweekly')" },
       { value: 'bimonthly', label: 'Bi-monthly', onclick: "setPayPeriodType('bimonthly')" },
@@ -442,7 +442,7 @@ export function renderNumpadSettings() {
   el.innerHTML = `
     <div class="set-label">Numpad entry</div>
     <p class="set-help" style="margin:4px 0 14px">How the on-screen number pad enters prices (services, items, fees).</p>
-    ${segControl({ value: whole ? 'whole' : 'cents', items: [
+    ${segControl({ value: whole ? 'whole' : 'cents', label: 'Numpad entry', items: [
       { value: 'cents', label: 'Cents', onclick: 'setNumpadWholeDollars(false)' },
       { value: 'whole', label: 'Whole dollars', onclick: 'setNumpadWholeDollars(true)' },
     ] })}
@@ -688,15 +688,17 @@ export function settingsRefreshOpenCategory() {
 const _settingsIsDesktop = () => !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width:1195px)').matches);
 
 function _railHighlight(contentId) {
-  document.querySelectorAll('#settings-rail-list .set-rail-item').forEach(b =>
-    b.classList.toggle('set-rail-item-on', !!contentId && b.dataset.content === contentId));
+  document.querySelectorAll('#settings-rail-list .set-rail-item').forEach(b => {
+    const on = !!contentId && b.dataset.content === contentId;
+    b.classList.toggle('set-rail-item-on', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
 }
 
 // Build the desktop rail from the nav (same perm filter as everything else); optional query filters it.
 export function renderSettingsRail(query = '') {
   const list = document.getElementById('settings-rail-list');
   if (!list) return;
-  window.refreshBillingFlags?.();   // keep the rail's Billing entry in sync with the flag (fire-and-forget)
   const groups = settingsRailGroups(SETTINGS_NAV, settingsLeafVisible, query);
   list.innerHTML = groups.length === 0
     ? `<p class="set-rail-noresult">No settings match.</p>`
@@ -722,13 +724,16 @@ export function railOpenLeaf(contentId) {
   _railHighlight(contentId);
   document.getElementById('settings-empty')?.classList.add('hidden');
   document.getElementById('settings-back-btn')?.classList.add('hidden');
+  document.getElementById('panel-settings')?.classList.remove('settings-empty-on');  // show the pane title (leaf name)
 }
 
-// Neutral "pick a setting" state (desktop, no leaf open).
+// Neutral "pick a setting" state (desktop, no leaf open). The rail already says "Settings", so the
+// panel gets `settings-empty-on` → the duplicate nav-header title is hidden on desktop (CSS).
 function _showSettingsEmpty() {
   _settingsActiveLeaf = null;
   _hideAllSettingsSections();
   document.getElementById('settings-empty')?.classList.remove('hidden');
+  document.getElementById('panel-settings')?.classList.add('settings-empty-on');
   _railHighlight(null);
   _setSettingsHeader('Settings', 'Configure app behavior and customer options', false);
 }
@@ -740,11 +745,13 @@ function _showSettingsEmpty() {
     const panel = document.getElementById('panel-settings');
     if (!panel || !panel.classList.contains('active')) return;   // only when Settings is on screen
     if (mq.matches) {                                            // → desktop
+      window.refreshBillingFlags?.();
       renderSettingsRail();
       if (_settingsActiveLeaf) {
         _railHighlight(_settingsActiveLeaf);
         document.getElementById('settings-empty')?.classList.add('hidden');
         document.getElementById('settings-back-btn')?.classList.add('hidden');
+        panel.classList.remove('settings-empty-on');
       } else { _showSettingsEmpty(); }
     } else {                                                     // → tablet/phone
       document.getElementById('settings-empty')?.classList.add('hidden');
@@ -771,6 +778,7 @@ export function renderSettingsPanel() {
   window.renderTerminalStatus?.();
   // Turn Rules is a render-leaf now (renderTurnsSettings builds it on open) — no static seeding here.
   if (_settingsIsDesktop()) {           // two-pane: rail + neutral empty state (no auto-opened leaf)
+    window.refreshBillingFlags?.();     // sync the rail's Billing entry once (not per keystroke)
     renderSettingsRail();
     _showSettingsEmpty();
   } else {                              // tablet/phone: the existing drill-down
