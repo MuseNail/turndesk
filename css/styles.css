@@ -1014,13 +1014,17 @@
 
   @media (min-width:1195px) {
     #panel-settings.active {
-      display:grid; grid-template-columns:248px minmax(0,1fr); gap:28px; align-items:start;
+      display:grid; grid-template-columns:248px minmax(0,1fr); grid-template-rows:min-content 1fr;
+      gap:28px 28px; align-items:start;
     }
+    /* Everything but the rail lives in column 2. Auto-flow places the header into row 1 and the
+       active leaf (or empty state) into row 2 — only those two col-2 items are ever visible on desktop. */
     #panel-settings.active > :not(#settings-rail) { grid-column:2; min-width:0; }
 
-    /* Rail: a sticky sidebar card (id selector → survives .hidden from _hideAllSettingsSections) */
+    /* Rail: a sticky sidebar card spanning both rows (id selector → survives .hidden from
+       _hideAllSettingsSections). grid-row:1/-1 keeps row 1 at header height instead of rail height. */
     #settings-rail {
-      grid-column:1; display:flex; flex-direction:column;
+      grid-column:1; grid-row:1 / -1; display:flex; flex-direction:column;
       position:sticky; top:12px; align-self:start;
       max-height:calc(100vh - 150px); overflow-y:auto;
       background:var(--surface-container-low); border:1px solid var(--outline-variant);

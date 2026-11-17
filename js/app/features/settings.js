@@ -8,6 +8,7 @@ import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices, isHalfService, saveHalfServices, getDedicatedBonusServices } from './turns.js';
+import { segControl, switchRow, styledSelect } from '../settings-ui.js';
 
 const cfg = () => getState().config;
 
@@ -420,15 +421,16 @@ export function setCommissionIncludesRefunds(checked) {
 export function renderNumpadSettings() {
   const el = document.getElementById('settings-numpad-section'); if (!el) return;
   const whole = !!cfg().numpad_whole_dollars;
-  const opt = (on, title, desc, val) => `<label class="flex items-center justify-between gap-4 cursor-pointer bg-surface-container-low rounded-xl px-4 py-3 border ${on ? 'border-primary' : 'border-surface-container-high'}">
-      <span class="min-w-0"><span class="text-sm font-body font-semibold text-on-surface">${title}</span><span class="block text-[11px] font-body text-on-surface-variant">${desc}</span></span>
-      <input type="radio" name="numpad-mode" ${on ? 'checked' : ''} onchange="setNumpadWholeDollars(${val})" class="w-5 h-5 accent-primary cursor-pointer flex-shrink-0"></label>`;
   el.innerHTML = `
-    <p class="text-xs font-body text-on-surface-variant mb-4">How the on-screen number pad enters prices (services, items, fees).</p>
-    <div class="space-y-2">
-      ${opt(!whole, 'Cents', 'Every digit is a cent — type 4 5 0 0 for $45.00.', false)}
-      ${opt(whole, 'Whole dollars', 'Digits build whole dollars — type 4 5 for $45.00. Use the dot for cents (e.g. $45.50).', true)}
-    </div>`;
+    <div class="set-label">Numpad entry</div>
+    <p class="set-help" style="margin:4px 0 14px">How the on-screen number pad enters prices (services, items, fees).</p>
+    ${segControl({ value: whole ? 'whole' : 'cents', items: [
+      { value: 'cents', label: 'Cents', onclick: 'setNumpadWholeDollars(false)' },
+      { value: 'whole', label: 'Whole dollars', onclick: 'setNumpadWholeDollars(true)' },
+    ] })}
+    <p class="set-help" style="margin-top:12px">${whole
+      ? 'Digits build whole dollars — type 4 5 for $45.00. Use the dot for cents (e.g. 45.50).'
+      : 'Every digit is a cent — type 4 5 0 0 for $45.00.'}</p>`;
 }
 export function setNumpadWholeDollars(val) {
   dispatch('config.set', { key: 'numpad_whole_dollars', value: !!val });
@@ -441,10 +443,8 @@ export function renderRebookSettings() {
   const el = document.getElementById('settings-rebook-section'); if (!el) return;
   const on = cfg().rebook_prompt !== false;   // default ON
   el.innerHTML = `
-    <p class="text-xs font-body text-on-surface-variant mb-4">After a <strong>service</strong> is paid, show a prompt to book the customer’s next visit. Tapping it jumps to the Calendar with their name &amp; phone ready — you pick the service and time. (Gift-card, retail &amp; Quick Sales never prompt.)</p>
-    <label class="flex items-center justify-between gap-4 cursor-pointer bg-surface-container-low rounded-xl px-4 py-3 border ${on ? 'border-primary' : 'border-surface-container-high'}">
-      <span class="min-w-0"><span class="text-sm font-body font-semibold text-on-surface">Offer to book the next appointment</span><span class="block text-[11px] font-body text-on-surface-variant">Shows after each paid service sale.</span></span>
-      <input type="checkbox" ${on ? 'checked' : ''} onchange="setRebookPrompt(this.checked)" class="w-5 h-5 accent-primary cursor-pointer flex-shrink-0"></label>`;
+    <p class="set-help" style="margin-bottom:14px">After a <strong>service</strong> is paid, show a prompt to book the customer’s next visit. Tapping it jumps to the Calendar with their name &amp; phone ready — you pick the service and time. (Gift-card, retail &amp; Quick Sales never prompt.)</p>
+    ${switchRow({ label: 'Offer to book the next appointment', help: 'Shows after each paid service sale.', on, onclick: `setRebookPrompt(${!on})` })}`;
 }
 export function setRebookPrompt(on) {
   dispatch('config.set', { key: 'rebook_prompt', value: !!on });
