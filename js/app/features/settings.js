@@ -368,32 +368,50 @@ export function renderPayPeriodSettings() {
   const el = document.getElementById('settings-payperiod-section'); if (!el) return;
   const pp = cfg().pay_period || {}; const type = pp.type || 'weekly';
   const needsStart = type === 'weekly' || type === 'biweekly';
-  const lbl = 'text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1';
-  const inp = 'w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary';
+  const schedHelp = type === 'weekly' ? 'One-week periods.'
+    : type === 'biweekly' ? 'Two-week periods.'
+    : 'Twice a month — the 1st–15th and the 16th–end of month.';
   el.innerHTML = `
-    <p class="text-xs font-body text-on-surface-variant mb-4">Sets the <strong>Pay Period</strong> quick button in Reports &amp; Transactions (and the pay-period option for scheduled report emails).</p>
-    <label class="${lbl}">Period</label>
-    <select id="pp-type" onchange="savePayPeriod(); renderPayPeriodSettings()" class="${inp} mb-3">
-      <option value="weekly" ${type==='weekly'?'selected':''}>Weekly</option>
-      <option value="biweekly" ${type==='biweekly'?'selected':''}>Bi-weekly (every 2 weeks)</option>
-      <option value="bimonthly" ${type==='bimonthly'?'selected':''}>Bi-monthly (1st–15th, 16th–end of month)</option>
-    </select>
-    ${needsStart ? `<label class="${lbl}">Period start date</label>
-      <input type="date" id="pp-start" value="${pp.startDate||''}" onchange="savePayPeriod()" class="${inp}">
-      <p class="text-[11px] font-body text-on-surface-variant mt-1">Repeats every ${type==='biweekly'?'14':'7'} days from this date — e.g., a Monday start runs Mon–Sun.</p>` : ''}
-    <div class="mt-5 pt-4 border-t border-surface-container-high">
-      <label class="${lbl}">Time-Clock Station</label>
-      <p class="text-xs font-body text-on-surface-variant mb-2">Front-desk staff can clock in/out <strong>only on the designated station device</strong> — so nobody can clock in from a personal phone. Set this on the salon's front-desk device.</p>
-      <div id="timeclock-station-status"></div>
-    </div>`;
-  window.renderClockStationSetting?.();
+    <p class="set-help" style="margin-bottom:14px">Sets the <strong>Pay Period</strong> quick button in Reports &amp; Transactions (and the pay-period option for scheduled report emails).</p>
+    <div class="set-label">Pay schedule</div>
+    <div style="margin:8px 0 8px">${segControl({ value: type, items: [
+      { value: 'weekly',    label: 'Weekly',    onclick: "setPayPeriodType('weekly')" },
+      { value: 'biweekly',  label: 'Bi-weekly', onclick: "setPayPeriodType('biweekly')" },
+      { value: 'bimonthly', label: 'Bi-monthly', onclick: "setPayPeriodType('bimonthly')" },
+    ] })}</div>
+    <p class="set-help" style="margin-bottom:${needsStart ? '18' : '0'}px">${schedHelp}${needsStart ? ' Pick the date the first one starts.' : ''}</p>
+    ${needsStart ? `
+      <div class="set-label">First period starts</div>
+      <span class="set-field" style="margin:8px 0 6px;max-width:260px">
+        <span class="material-symbols-outlined" style="font-size:19px;color:var(--on-surface-variant)">calendar_today</span>
+        <input type="date" value="${escHtml(pp.startDate || '')}" onchange="setPayPeriodStart(this.value)">
+      </span>
+      <p class="set-help">Each period runs ${type === 'biweekly' ? '14' : '7'} days from here — e.g. a Monday start runs Mon–Sun.</p>` : ''}`;
 }
-export function savePayPeriod() {
-  const type = document.getElementById('pp-type')?.value || 'weekly';
-  const startDate = document.getElementById('pp-start')?.value || (cfg().pay_period||{}).startDate || '';
+// Auto-save setters — the control passes its value EXPLICITLY (no #pp-type DOM read), preserving
+// the other field. Changing the type re-renders (to show/hide the start-date field).
+export function setPayPeriodType(type) {
+  const startDate = (cfg().pay_period || {}).startDate || '';
+  dispatch('config.set', { key: 'pay_period', value: { type, startDate } });
+  showToast('Pay period saved');
+  renderPayPeriodSettings();
+  window.renderTransactions?.(); window.runReport?.();
+}
+export function setPayPeriodStart(startDate) {
+  const type = (cfg().pay_period || {}).type || 'weekly';
   dispatch('config.set', { key: 'pay_period', value: { type, startDate } });
   showToast('Pay period saved');
   window.renderTransactions?.(); window.runReport?.();
+}
+
+// ── Time-clock station (its own Workflow leaf — one concern, split out of Pay Period) ─
+export function renderClockStationLeaf() {
+  const el = document.getElementById('settings-clockstation-section'); if (!el) return;
+  el.innerHTML = `
+    <div class="set-label">Time-clock station</div>
+    <p class="set-help" style="margin:4px 0 14px">Front-desk staff can clock in/out <strong>only on the designated station device</strong> — so nobody can clock in from a personal phone. Set this on the salon's front-desk device.</p>
+    <div id="timeclock-station-status"></div>`;
+  window.renderClockStationSetting?.();
 }
 
 // ── Commission & refunds policy (config.commission_includes_refunds) ─────────────
@@ -471,6 +489,7 @@ const SETTINGS_NAV = [
     { label:'Turn Rules', sub:'Half / bonus on-off, by cost or service, cutoffs & precedence', content:'turns-thresh-section', render:'renderTurnsSettings', icon:'swap_vert' },
     { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings', icon:'event_seat' },
     { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true, icon:'event_repeat' },
+    { label:'Time-clock station', sub:'Which device staff clock in/out on', content:'settings-clockstation-section', render:'renderClockStationLeaf', adminOnly:true, icon:'punch_clock' },
     { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true, icon:'paid' },
     { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings', icon:'dialpad' },
     { label:'Checkout Rebooking', sub:'Offer to book the next appointment after each sale', content:'settings-rebook-section', render:'renderRebookSettings', adminOrManager:true, icon:'event_upcoming' },

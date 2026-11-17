@@ -180,12 +180,11 @@ export function clearClockStation() {
   showToast('Time-clock station cleared');
   renderClockButton(); renderClockStationSetting();
 }
-// Fills #timeclock-station-status inside the Pay Period settings section. Diagnostic: shows
-// the state + both device ids so a station-id mismatch (the cause of a vanished clock button)
-// is obvious at a glance.
+// Fills #timeclock-station-status inside the Time-clock station settings leaf (Workflow). Shows
+// the current state with the actionable set/clear button — no developer device-id strings in the UI.
 export function renderClockStationSetting() {
   const el = document.getElementById('timeclock-station-status'); if (!el) return;
-  const setId = clockStationDeviceId(), thisId = _myDeviceId(), isThis = isClockStation(), isSet = !!setId;
+  const isThis = isClockStation(), isSet = !!clockStationDeviceId();
   let row;
   if (isThis) {
     row = `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style="background:rgba(42,122,79,.12)"><span class="text-sm font-body" style="color:#1b5e20"><strong>This device</strong> is the time-clock station ✓</span><button onclick="clearClockStation()" class="text-xs font-body text-error underline flex-shrink-0">Remove</button></div>`;
@@ -194,8 +193,7 @@ export function renderClockStationSetting() {
   } else {
     row = `<div class="flex items-center justify-between gap-2 flex-wrap"><span class="text-sm font-body text-on-surface-variant">No station set yet — staff can’t clock in until one is set.</span><button onclick="setThisClockStation()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the station</button></div>`;
   }
-  const ids = `<div class="text-[11px] font-body text-on-surface-variant mt-2" style="font-family:ui-monospace,Menlo,Consolas,monospace"><strong>This device:</strong> ${escHtml(thisId || '—')} &nbsp;·&nbsp; <strong>Saved station:</strong> ${isSet ? escHtml(setId) + (isThis ? '' : ' (not this device)') : '— none —'}</div>`;
-  el.innerHTML = row + ids;
+  el.innerHTML = row;
 }
 
 // ── "Clocked in now" (live) — front-desk users with an open punch ─────────────
